@@ -49,6 +49,7 @@ const APP_LABEL: Record<MemonWindowState["app"], string> = {
 	connections: "Connections",
 	visualize: "Visualize",
 	pi: "pi code",
+	fx: "fx",
 	...(Object.fromEntries(
 		HOSTED_APP_IDS.map((id) => [id, HOSTED_APPS[id].name]),
 	) as Record<HostedAppId, string>),
@@ -586,8 +587,43 @@ const briefLine = (
 			return terminalBrief(window.id, min, snapshot.terminal, snapshot.home);
 		case "pi":
 			return piCodeBrief(snapshot, window.id, min);
+		case "fx":
+			return fxBrief(snapshot, window.id, min);
 	}
 };
+
+/** What fx is doing, in a few words: the user drives it in its terminal. */
+const fxStatus = (fx: MemonMachineSnapshot["fx"]): string => {
+	if (!fx) return "not started";
+	if (fx.status === "error")
+		return `failed: ${truncateLine(fx.error ?? "unknown error", 120)}`;
+	if (fx.status === "starting") return "starting";
+	if (fx.status === "choosing") return "the user picks a folder to open";
+	return fx.working ? "working" : "waiting for the user";
+};
+
+const fxBrief = (
+	snapshot: MemonMachineSnapshot,
+	windowId: string,
+	min: string,
+): string => {
+	const { fx } = snapshot;
+	const where = fx?.cwd ? ` · ${memonDisplayPath(fx.cwd, snapshot.home)}` : "";
+	return `── ${windowId} fx${min}${where} · ${fxStatus(fx)}`;
+};
+
+const fxLines = (
+	snapshot: MemonMachineSnapshot,
+	windowId: string,
+): string[] => [
+	fxBrief(snapshot, windowId, ""),
+	"fx is Vercel's coding agent, in its own terminal on the chat's model; the user drives it there and its conversation is not on this screen.",
+	...(snapshot.fx?.status === "choosing"
+		? [
+				"(fx starts once the user picks a folder; `fx <path>` in the Terminal starts it in the one you name)",
+			]
+		: []),
+];
 
 const fullLines = (
 	snapshot: MemonMachineSnapshot,
@@ -727,6 +763,8 @@ const fullLines = (
 			return terminalLines(window.id, snapshot.terminal, snapshot.home, scroll);
 		case "pi":
 			return piCodeLines(snapshot, window.id, scroll);
+		case "fx":
+			return fxLines(snapshot, window.id);
 		default:
 			return [];
 	}

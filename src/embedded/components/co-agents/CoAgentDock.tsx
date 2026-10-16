@@ -1,4 +1,5 @@
 import {
+	ChevronDown,
 	Crop,
 	LogOut,
 	Maximize2,
@@ -10,6 +11,7 @@ import {
 import React from "react";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AssistantMessageContent } from "@/embedded/components/messages/AssistantMessageContent";
+import { CO_AGENT_DEFAULT_FLOW } from "@/embedded/hooks/selected-agent-flow";
 import { useEmbeddedTranslation } from "@/embedded/hooks/use-embedded-language";
 import type { CoAgentContextAnchor } from "@/co-agent/dom/context-anchor";
 import type { MessageActionRequest } from "@/main/modules/chat/components/artifacts/ArtifactActionsMenu";
@@ -112,6 +114,13 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 	// A run in flight always shows the bubble, so there is never a silent gap
 	// between submitting and the first streamed token.
 	const showBubble = isSubmitting || Boolean(visibleDockMessage);
+	// The built-in entry is always offered, even before the list has loaded.
+	const agentOptions =
+		agentFlows.length > 0 ? agentFlows : [CO_AGENT_DEFAULT_FLOW];
+	// Unknown only while a saved agent's list is still loading.
+	const selectedAgent = agentOptions.find(
+		(flow) => flow.id === selectedAgentFlowId,
+	);
 	const activateIcon = () => {
 		if (collapsed) {
 			onExpand();
@@ -248,6 +257,35 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 					/>
 				</div>
 			</div>
+			{!collapsed && !showAuthAction && selectedAgent ? (
+				<div
+					className="memorall-co-agent-agent-tag"
+					data-disabled={isSubmitting ? "true" : undefined}
+				>
+					<span className="memorall-co-agent-agent-tag-name">
+						{selectedAgent.name}
+					</span>
+					<ChevronDown size={13} strokeWidth={2.25} aria-hidden="true" />
+					{/* Invisible over the whole tag, so the tag is as wide as the
+					    selected name while a click anywhere on it opens the list. */}
+					<select
+						className="memorall-co-agent-agent-select"
+						value={selectedAgent.id}
+						onChange={(event) => onSelectAgentFlow(event.currentTarget.value)}
+						disabled={isSubmitting}
+						aria-label={t("selectAgent")}
+						title={t("workingWith", { agent: selectedAgent.name })}
+						onKeyDown={(event) => event.stopPropagation()}
+						onKeyUp={(event) => event.stopPropagation()}
+					>
+						{agentOptions.map((flow) => (
+							<option key={flow.id} value={flow.id}>
+								{flow.name}
+							</option>
+						))}
+					</select>
+				</div>
+			) : null}
 			{!collapsed && !showAuthAction ? (
 				<div
 					className="memorall-co-agent-actions"
@@ -360,23 +398,6 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 						rows={1}
 					/>
 					<div className="memorall-co-agent-prompt-tools">
-						<select
-							className="memorall-co-agent-agent-select"
-							value={selectedAgentFlowId}
-							onChange={(event) => onSelectAgentFlow(event.currentTarget.value)}
-							disabled={isSubmitting}
-							aria-label={t("selectAgent")}
-							title={t("selectAgent")}
-							onKeyDown={(event) => event.stopPropagation()}
-							onKeyUp={(event) => event.stopPropagation()}
-						>
-							<option value="chat">{t("defaultAgent")}</option>
-							{agentFlows.map((flow) => (
-								<option key={flow.id} value={flow.id}>
-									{flow.name}
-								</option>
-							))}
-						</select>
 						{/* Reachable while composing, not only from the collapsed dock:
 						    attaching a region is part of writing the question. */}
 						<button

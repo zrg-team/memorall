@@ -137,8 +137,11 @@ export interface MemonOperationPayloadMap {
 	"piCode.stop": Keyed;
 	/** The folders pi worked in, for its folder picker. Changes nothing. */
 	"piCode.folders": Keyed;
-	/** The folders in a folder (the home by default). Changes nothing. */
-	"piCode.browse": Keyed<{ dir?: string }>;
+	/**
+	 * The folders in a folder (the home by default), for the folder picker
+	 * of pi code and fx. Changes nothing.
+	 */
+	"folders.browse": Keyed<{ dir?: string }>;
 	/**
 	 * Opens pi code in a folder: `continueLast` opens its last session,
 	 * `create` makes it.
@@ -173,6 +176,27 @@ export interface MemonOperationPayloadMap {
 	 */
 	"piCode.pasteImage": Keyed<{ data: string; mimeType: string }>;
 	"piCode.resize": Keyed<{ columns: number; rows: number }>;
+	/** The folders fx kept conversations in, the one used last first. */
+	"fx.folders": Keyed;
+	/**
+	 * Opens fx in a folder: `continueLast` opens its last conversation there,
+	 * `create` makes the folder.
+	 */
+	"fx.open": Keyed<{
+		cwd: string;
+		continueLast?: boolean;
+		create?: boolean;
+	}>;
+	/**
+	 * An fx view connects: fx takes its size, and the view replays fx's
+	 * output from the returned cursor. Null when fx is not running.
+	 */
+	"fx.attach": Keyed<{ columns: number; rows: number }>;
+	/** fx's terminal output after `cursor`, waiting up to `waitMs` for some. */
+	"fx.read": Keyed<{ cursor: number; waitMs: number }>;
+	/** Raw key data from the view (escape sequences, pastes). */
+	"fx.input": Keyed<{ data: string }>;
+	"fx.resize": Keyed<{ columns: number; rows: number }>;
 }
 
 export type MemonOperation = keyof MemonOperationPayloadMap;
@@ -184,20 +208,24 @@ export type MemonOperationResultMap = {
 			? string
 			: K extends "terminal.complete"
 				? MemonTerminalCompletion
-				: K extends "piCode.folders"
+				: K extends "piCode.folders" | "fx.folders"
 					? MemonPiCodeFolder[]
-					: K extends "piCode.browse"
+					: K extends "folders.browse"
 						? MemonPiCodeBrowse | null
-						: K extends "piCode.attach"
+						: K extends "piCode.attach" | "fx.attach"
 							? { cursor: number } | null
 							: K extends "piCode.read"
 								? MemonPiCodeOutput
-								: K extends
-											| "piCode.input"
-											| "piCode.pasteImage"
-											| "piCode.resize"
-									? null
-									: MemonMachineSnapshot | null;
+								: K extends "fx.read"
+									? MemonFxOutput
+									: K extends
+												| "piCode.input"
+												| "piCode.pasteImage"
+												| "piCode.resize"
+												| "fx.input"
+												| "fx.resize"
+										? null
+										: MemonMachineSnapshot | null;
 };
 
 /** A read of pi code's terminal output. */
@@ -207,6 +235,16 @@ export interface MemonPiCodeOutput {
 	/** The cursor was out of date: clear the view and write `data`. */
 	reset: boolean;
 	/** pi is not running: stop reading. */
+	closed: boolean;
+}
+
+/** A read of fx's terminal output. */
+export interface MemonFxOutput {
+	data: string;
+	cursor: number;
+	/** The cursor was out of date: clear the view and replay `data`. */
+	reset: boolean;
+	/** fx is not running: stop reading. */
 	closed: boolean;
 }
 

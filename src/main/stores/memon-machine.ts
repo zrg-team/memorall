@@ -23,12 +23,17 @@ type InputOperation = Exclude<
 	| "agent.renamed"
 	| "terminal.complete"
 	| "piCode.folders"
-	| "piCode.browse"
+	| "folders.browse"
 	| "piCode.attach"
 	| "piCode.read"
 	| "piCode.input"
 	| "piCode.pasteImage"
 	| "piCode.resize"
+	| "fx.folders"
+	| "fx.attach"
+	| "fx.read"
+	| "fx.input"
+	| "fx.resize"
 >;
 
 /** The open chat's agent, when it is a MemonOS Bot. */

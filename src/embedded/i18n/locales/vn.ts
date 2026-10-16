@@ -139,7 +139,7 @@ export const vnEmbeddedLocale = {
 		thinking: "Đang suy nghĩ",
 		anchorAsk: "Hỏi",
 		selectAgent: "Chọn tác nhân",
-		defaultAgent: "Tác nhân mặc định",
+		workingWith: "Đang làm việc với {agent} — bấm để đổi",
 		finishedNoAnswer: "Đã xong — không có nội dung trả lời.",
 		smartSelect: "Chọn thông minh",
 		canvasSelect: "Chọn vùng",

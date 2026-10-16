@@ -88,6 +88,7 @@ import {
 	type MemonPiCodePort,
 	type PiCodeOpened,
 } from "./apps/pi-code/pi-code-app";
+import { type FxOpened, MemonFx, type MemonFxPort } from "./apps/fx/fx-app";
 import type { MemonEmbeddedPort } from "./embedded-browser";
 import type { MemonModelsPort } from "./models-port";
 import type { MemonCaptureRequest, MemonPageCapture } from "./page-capture";
@@ -289,6 +290,8 @@ export interface MemonPorts {
 	homes?: MemonHomePort;
 	/** Without it pi code is not available. */
 	piCode?: MemonPiCodePort;
+	/** Without it fx is not available. */
+	fx?: MemonFxPort;
 	/** Without it Office files open in the Viewer, to read only. */
 	hosted?: MemonHostedAppsPort;
 	/** Without it the agent gets pictures of pages as files, never to look at. */
@@ -322,6 +325,7 @@ const DEFAULT_LAYOUT: Record<
 	connections: { x: 0.24, y: 0.06, w: 0.56, h: 0.8 },
 	visualize: { x: 0.12, y: 0.04, w: 0.7, h: 0.88 },
 	pi: { x: 0.1, y: 0.04, w: 0.74, h: 0.88 },
+	fx: { x: 0.12, y: 0.05, w: 0.74, h: 0.86 },
 	// Office apps need room: a ribbon above the sheet, deck or page.
 	...forHostedApps({ x: 0.05, y: 0.03, w: 0.84, h: 0.9 }),
 };
@@ -340,7 +344,10 @@ const APP_OF_WINDOW: Record<MemonWindowApp, MemonAppId | null> = {
 	skills: null,
 	connections: null,
 	pi: null,
+	fx: null,
 };
+const FX_TURNED_OFF =
+	"fx is turned off for this agent. The user can turn it on in MemonOS Bot settings.";
 /** Extracted text kept for the agent; a very long PDF is cut here. */
 const MAX_VIEWER_TEXT_CHARS = 60_000;
 const MAX_USER_CHANGES = 12;
@@ -501,6 +508,8 @@ export class MemonMachine {
 	readonly terminal: MemonTerminal;
 	/** pi code: runs while its window is open, with or without a view. */
 	readonly piCode: MemonPiCode;
+	/** fx: runs while its window is open, with or without a view. */
+	readonly fx: MemonFx;
 	/** Spreadsheet, Documents, Presentation, Whiteboard and PDF. */
 	readonly hosted: MemonHostedApps;
 	private disposed = false;
@@ -569,6 +578,7 @@ export class MemonMachine {
 						serializeTerminalHistory(this.terminal.history),
 					),
 				openPiCode: (cwd, options) => this.openPiCode(cwd, options),
+				openFx: (cwd, options) => this.openFx(cwd, options),
 			},
 			ports,
 		);
@@ -601,6 +611,24 @@ export class MemonMachine {
 			},
 			ports.piCode,
 		);
+		this.fx = new MemonFx(
+			{
+				sessionKey: key,
+				home: () => this.home,
+				agentId: () => this.agentId,
+				changed: () => this.changed(),
+				quit: () => {
+					const window = this.windowFor("fx");
+					if (window) void this.closeWindow(window.id);
+				},
+				show: () => {
+					const opened = !this.windowFor("fx");
+					this.openWindow("fx");
+					return opened;
+				},
+			},
+			ports.fx,
+		);
 		this.hosted = new MemonHostedApps(
 			{
 				showWindow: (app) => {
@@ -620,9 +648,11 @@ export class MemonMachine {
 
 	configure(config: MemonFeatureConfig): void {
 		this.config = config;
-		// Turned off: pi code leaves the desktop, and quits if it runs.
+		// Turned off: pi code or fx leaves the desktop, and quits if it runs.
 		const pi = config.piCode ? undefined : this.windowFor("pi");
 		if (pi) void this.closeWindow(pi.id);
+		const fx = config.fx ? undefined : this.windowFor("fx");
+		if (fx) void this.closeWindow(fx.id);
 		this.changed();
 	}
 
@@ -657,6 +687,7 @@ export class MemonMachine {
 		await this.flushWrites();
 		this.terminal.dispose();
 		await this.piCode.stop();
+		await this.fx.stop();
 		this.cancelWaits();
 		this.unsubscribeFiles?.();
 		this.unsubscribeDesktop?.();
@@ -950,6 +981,9 @@ export class MemonMachine {
 				"pi code is turned off for this agent. The user can turn it on in MemonOS Bot settings.",
 			);
 		}
+		if (app === "fx" && !this.config.fx) {
+			throw new Error(FX_TURNED_OFF);
+		}
 		let window = this.windowFor(app);
 		if (!window) {
 			this.windowSeq += 1;
@@ -971,6 +1005,8 @@ export class MemonMachine {
 		// pi runs while its window is open. Opened by the user, the window
 		// asks for a folder; the agent starts pi in the folder it names.
 		if (app === "pi") this.piCode.choose();
+		// fx too, and its window asks for a folder the same way.
+		if (app === "fx") this.fx.choose();
 		this.focusWindow(window.id);
 		return window;
 	}
@@ -1032,6 +1068,7 @@ export class MemonMachine {
 		if (isHostedAppId(window.app)) this.hosted.close(window.app);
 		// Closing pi's window quits pi, like closing an app.
 		if (window.app === "pi") await this.piCode.stop();
+		if (window.app === "fx") await this.fx.stop();
 		this.windows = this.windows.filter((candidate) => candidate !== window);
 		if (this.focusedWindowId === windowId)
 			this.focusedWindowId = this.topWindowId();
@@ -1060,11 +1097,35 @@ export class MemonMachine {
 				"pi code is turned off for this agent. The user can turn it on in MemonOS Bot settings.",
 			);
 		}
+		const cwd = await this.codeFolder(path, options.create);
+		return this.piCode.open(cwd, options);
+	}
+
+	// ── fx ──────────────────────────────────────────────────────────────────
+
+	/**
+	 * Opens fx in a folder (`~` is the home): the user's pick in its window,
+	 * or `fx` in the Terminal. `continueLast` opens the folder's last
+	 * conversation; `create` a new folder, which fx makes as it starts.
+	 */
+	async openFx(
+		path: string,
+		options: { continueLast?: boolean; create?: boolean } = {},
+	): Promise<FxOpened> {
+		if (!this.config.fx) throw new Error(FX_TURNED_OFF);
+		const cwd = await this.codeFolder(path, options.create);
+		return this.fx.open(cwd, options);
+	}
+
+	/**
+	 * The folder a coding app opens (`~` is the home): one that is there, or
+	 * with `create` one that is not yet, in a folder that is.
+	 */
+	private async codeFolder(path: string, create?: boolean): Promise<string> {
 		const cwd = this.resolvePath(path, this.home);
 		const shown = memonDisplayPath(cwd, this.home);
-		const isFolder = (folder: string) =>
-			this.ports.files.isDirectory(folder).catch(() => false);
-		if (options.create) {
+		const isFolder = (folder: string) => this.isFolderOrHome(folder);
+		if (create) {
 			if (await this.ports.files.exists(cwd).catch(() => false)) {
 				throw new Error(`${shown} is already there.`);
 			}
@@ -1077,16 +1138,29 @@ export class MemonMachine {
 		} else if (!(await isFolder(cwd))) {
 			throw new Error(`${shown} is not a folder.`);
 		}
-		return this.piCode.open(cwd, options);
+		return cwd;
 	}
 
-	/** The folders in a folder (the home by default), for pi's folder picker. */
+	/**
+	 * A folder that is there, or the home: a new agent's home is made when
+	 * something is first put in it, and pi code and fx make the folder they
+	 * open as they start.
+	 */
+	private async isFolderOrHome(folder: string): Promise<boolean> {
+		return (
+			folder === this.home ||
+			(await this.ports.files.isDirectory(folder).catch(() => false))
+		);
+	}
+
+	/** The folders in a folder (the home by default), for the folder picker. */
 	async browseFolders(path = "~"): Promise<MemonPiCodeBrowse> {
 		const dir = this.resolvePath(path, this.home);
-		if (!(await this.ports.files.isDirectory(dir).catch(() => false))) {
+		if (!(await this.isFolderOrHome(dir))) {
 			throw new Error(`${memonDisplayPath(dir, this.home)} is not a folder.`);
 		}
-		const entries = await this.ports.files.list(dir);
+		const there = await this.ports.files.isDirectory(dir).catch(() => false);
+		const entries = there ? await this.ports.files.list(dir) : [];
 		return {
 			dir,
 			parent: dir === "/" ? undefined : dir.replace(/\/[^/]*$/, "") || "/",
@@ -3106,10 +3180,12 @@ export class MemonMachine {
 
 	// ── Snapshot ────────────────────────────────────────────────────────────
 
-	/** The built-in apps on this computer: pi code only while it is on. */
+	/** The built-in apps on this computer: pi code and fx only while they are on. */
 	private builtInApps(): MemonBuiltinApp[] {
 		return MEMON_BUILTIN_APPS.filter(
-			(app) => app !== "pi" || this.config.piCode,
+			(app) =>
+				(app !== "pi" || this.config.piCode) &&
+				(app !== "fx" || this.config.fx),
 		);
 	}
 
@@ -3235,6 +3311,7 @@ export class MemonMachine {
 				error: this.visualError,
 			},
 			piCode: this.piCode.state(),
+			fx: this.fx.state(),
 			pendingUserChanges: [...this.userChanges],
 			drafts: Object.fromEntries(this.drafts),
 			updatedAt: this.lastActiveAt,

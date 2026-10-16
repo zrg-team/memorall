@@ -10,6 +10,7 @@ import {
 	Loader2,
 	Pi,
 	Search,
+	SquareFunction,
 	X,
 } from "lucide-react";
 import React from "react";
@@ -93,6 +94,27 @@ const useTimeAgo = (): ((time: number) => string) => {
 	}, [language]);
 };
 
+/** The coding apps that work in a folder: pi code and fx. */
+export type CodeFolderApp = "pi" | "fx";
+
+/** What differs between the apps: their requests, look and own wording. */
+const APP = {
+	pi: {
+		folders: "piCode.folders",
+		open: "piCode.open",
+		icon: Pi,
+		testId: "memon-pi-code",
+		text: "memonComputer.piCode.picker",
+	},
+	fx: {
+		folders: "fx.folders",
+		open: "fx.open",
+		icon: SquareFunction,
+		testId: "memon-fx",
+		text: "memonComputer.fx.picker",
+	},
+} as const;
+
 type PickerRow =
 	| { kind: "recent"; path: string; folder: MemonPiCodeFolder }
 	| { kind: "folder"; path: string; name: string };
@@ -107,28 +129,45 @@ const KBD =
 	"rounded border border-border bg-muted px-1 font-mono text-[10px] text-foreground/80";
 
 /**
- * pi code's folder picker: pi works and keeps its sessions in a folder, so
- * opening it starts by picking one. As editors do it: the folders used last
+ * The folder picker of pi code and fx: each works and keeps its sessions in a
+ * folder, so opening it starts by picking one. As editors do it: the folders used last
  * first (each can continue its last session), then the folders here to go
  * through, with a path bar. Typing filters both; typing a path (~/…, /…)
  * goes through folders as a shell completes them. Enter opens the
  * highlighted folder, → goes into it, ← or Backspace goes up, Ctrl+Enter
  * opens the folder being shown, and New folder makes one and opens it.
  */
-export const PiCodeFolderPicker: React.FC<{
+export const CodeFolderPicker: React.FC<{
+	app: CodeFolderApp;
 	machineKey: string;
 	home: string;
 	send: MemonSend;
 	/** Keys go to the picker while its window is in front. */
 	focused: boolean;
-	/** The folder pi works in, when the picker moves it to another one. */
+	/** The folder the app works in, when the picker moves it to another one. */
 	current?: string;
-	/** Closes the picker over a running pi. */
+	/** Closes the picker over the running app. */
 	onCancel?: () => void;
-	/** pi opened the picked folder. */
+	/** The app opened the picked folder. */
 	onOpened?: () => void;
-}> = ({ machineKey, home, send, focused, current, onCancel, onOpened }) => {
+}> = ({
+	app,
+	machineKey,
+	home,
+	send,
+	focused,
+	current,
+	onCancel,
+	onOpened,
+}) => {
 	const { t } = useTranslation("common");
+	const {
+		folders,
+		open: openOperation,
+		icon: AppIcon,
+		testId,
+		text,
+	} = APP[app];
 	const timeAgo = useTimeAgo();
 	const listId = React.useId();
 	const inputRef = React.useRef<HTMLInputElement>(null);
@@ -169,7 +208,7 @@ export const PiCodeFolderPicker: React.FC<{
 	React.useEffect(() => {
 		let live = true;
 		void loadClient()
-			.then((client) => client.request("piCode.folders", { key: machineKey }))
+			.then((client) => client.request(folders, { key: machineKey }))
 			.then((folders) => {
 				if (live) setRecent(folders ?? []);
 			})
@@ -179,7 +218,7 @@ export const PiCodeFolderPicker: React.FC<{
 		return () => {
 			live = false;
 		};
-	}, [machineKey]);
+	}, [machineKey, folders]);
 
 	// The folder being shown; a typed one once the keys pause.
 	const typing = typed !== null;
@@ -189,7 +228,7 @@ export const PiCodeFolderPicker: React.FC<{
 			() => {
 				void loadClient()
 					.then((client) =>
-						client.request("piCode.browse", { key: machineKey, dir }),
+						client.request("folders.browse", { key: machineKey, dir }),
 					)
 					.then((result) => {
 						if (!live) return;
@@ -279,7 +318,7 @@ export const PiCodeFolderPicker: React.FC<{
 		setOpenError(null);
 		try {
 			await send(
-				"piCode.open",
+				openOperation,
 				{ key: machineKey, cwd: memonDisplayPath(path, home), ...options },
 				{ rethrow: true },
 			);
@@ -431,7 +470,7 @@ export const PiCodeFolderPicker: React.FC<{
 					role="option"
 					tabIndex={-1}
 					aria-selected={isSelected}
-					data-testid="memon-pi-code-recent"
+					data-testid={`${testId}-recent`}
 					onMouseMove={() => selected !== index && setActive(index)}
 					onClick={() => void open(row.path)}
 					className={cn(ROW, isSelected && "bg-accent")}
@@ -439,7 +478,7 @@ export const PiCodeFolderPicker: React.FC<{
 					<span
 						className={cn(
 							"flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-							MEMON_APP_TINTS.pi,
+							MEMON_APP_TINTS[app],
 						)}
 					>
 						{busy ? (
@@ -472,7 +511,7 @@ export const PiCodeFolderPicker: React.FC<{
 						tabIndex={-1}
 						title={continueTitle}
 						aria-label={continueTitle}
-						data-testid="memon-pi-code-continue"
+						data-testid={`${testId}-continue`}
 						onClick={(event) => {
 							event.stopPropagation();
 							void open(row.path, { continueLast: true });
@@ -496,7 +535,7 @@ export const PiCodeFolderPicker: React.FC<{
 				role="option"
 				tabIndex={-1}
 				aria-selected={isSelected}
-				data-testid="memon-pi-code-folder"
+				data-testid={`${testId}-folder`}
 				onMouseMove={() => selected !== index && setActive(index)}
 				onClick={() => go(row.path)}
 				className={cn(ROW, "py-1", isSelected && "bg-accent")}
@@ -513,7 +552,7 @@ export const PiCodeFolderPicker: React.FC<{
 				<button
 					type="button"
 					tabIndex={-1}
-					data-testid="memon-pi-code-open-folder"
+					data-testid={`${testId}-open-folder`}
 					onClick={(event) => {
 						event.stopPropagation();
 						void open(row.path);
@@ -535,7 +574,7 @@ export const PiCodeFolderPicker: React.FC<{
 
 	return (
 		<div
-			data-testid="memon-pi-code-picker"
+			data-testid={`${testId}-picker`}
 			className="@container flex h-full min-h-0 flex-col bg-background text-foreground"
 		>
 			<div className="shrink-0 space-y-3 px-4 pb-2 pt-4">
@@ -543,21 +582,21 @@ export const PiCodeFolderPicker: React.FC<{
 					<span
 						className={cn(
 							"flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-							MEMON_APP_TINTS.pi,
+							MEMON_APP_TINTS[app],
 						)}
 					>
-						<Pi size={18} />
+						<AppIcon size={18} />
 					</span>
 					<div className="min-w-0 flex-1">
 						<h2 className="text-sm font-semibold">
 							{t(
 								current
 									? "memonComputer.piCode.picker.switchTitle"
-									: "memonComputer.piCode.picker.title",
+									: `${text}.title`,
 							)}
 						</h2>
 						<p className="text-xs leading-snug text-muted-foreground">
-							{t("memonComputer.piCode.picker.subtitle")}
+							{t(`${text}.subtitle`)}
 						</p>
 					</div>
 					{onCancel ? (
@@ -585,7 +624,7 @@ export const PiCodeFolderPicker: React.FC<{
 						aria-controls={listId}
 						aria-activedescendant={selected >= 0 ? rowId(selected) : undefined}
 						aria-label={t("memonComputer.piCode.picker.search")}
-						data-testid="memon-pi-code-search"
+						data-testid={`${testId}-search`}
 						autoComplete="off"
 						spellCheck={false}
 						placeholder={t("memonComputer.piCode.picker.search")}
@@ -608,7 +647,7 @@ export const PiCodeFolderPicker: React.FC<{
 			<div
 				id={listId}
 				role="listbox"
-				aria-label={t("memonComputer.piCode.picker.title")}
+				aria-label={t(`${text}.title`)}
 				className="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
 			>
 				{showRecent ? (
@@ -697,7 +736,7 @@ export const PiCodeFolderPicker: React.FC<{
 						type="button"
 						onClick={startNaming}
 						disabled={!here}
-						data-testid="memon-pi-code-new-folder"
+						data-testid={`${testId}-new-folder`}
 						className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
 					>
 						<FolderPlus size={12} />
@@ -717,7 +756,7 @@ export const PiCodeFolderPicker: React.FC<{
 								autoFocus
 								type="text"
 								aria-label={t("memonComputer.piCode.picker.newFolderName")}
-								data-testid="memon-pi-code-new-folder-name"
+								data-testid={`${testId}-new-folder-name`}
 								placeholder={t("memonComputer.piCode.picker.newFolderName")}
 								value={naming}
 								onChange={(event) => {
@@ -756,7 +795,7 @@ export const PiCodeFolderPicker: React.FC<{
 							)}
 						>
 							{nameError ??
-								t("memonComputer.piCode.picker.createHint", {
+								t(`${text}.createHint`, {
 									folder: memonDisplayPath(here.dir, home),
 								})}
 						</p>
@@ -780,7 +819,7 @@ export const PiCodeFolderPicker: React.FC<{
 					// What else the folder holds: seen, not picked.
 					<div
 						aria-hidden="true"
-						data-testid="memon-pi-code-files"
+						data-testid={`${testId}-files`}
 						className="mt-0.5 select-none"
 					>
 						{files.slice(0, MAX_FILES).map((name) => (
@@ -827,7 +866,7 @@ export const PiCodeFolderPicker: React.FC<{
 				<Button
 					type="button"
 					size="sm"
-					data-testid="memon-pi-code-open-here"
+					data-testid={`${testId}-open-here`}
 					className="h-7 max-w-[60%] gap-1.5 text-[11px]"
 					disabled={!here || Boolean(opening)}
 					title={here ? here.dir : undefined}

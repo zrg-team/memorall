@@ -10,6 +10,7 @@ import {
 	Plug,
 	Settings2,
 	Sparkles,
+	SquareFunction,
 	SquareTerminal,
 	WandSparkles,
 } from "lucide-react";
@@ -61,6 +62,15 @@ const BUILTIN_ICONS: Record<
 	skills: WandSparkles,
 	connections: Plug,
 	pi: Pi,
+	fx: SquareFunction,
+};
+
+/** The built-in apps the agent's settings can turn off, and their switches. */
+const SWITCHED_BUILTINS: Partial<
+	Record<MemonBuiltinApp, { flag: "piCode" | "fx"; hint: string }>
+> = {
+	pi: { flag: "piCode", hint: "agentSettings.memon.piCodeHint" },
+	fx: { flag: "fx", hint: "agentSettings.memon.fxHint" },
 };
 
 const isAvailableHere = (feature: AgentFeatureDefinition): boolean =>
@@ -193,9 +203,10 @@ export const MemonOSSection: React.FC = () => {
 					</span>
 					{MEMON_BUILTIN_APPS.map((app) => {
 						const Icon = BUILTIN_ICONS[app];
-						// pi code is the one built-in app that can be turned off.
-						if (app === "pi") {
-							const on = memonConfig.piCode;
+						// pi code and fx are the built-in apps that can be turned off.
+						const switched = SWITCHED_BUILTINS[app];
+						if (switched) {
+							const on = memonConfig[switched.flag];
 							return (
 								<button
 									type="button"
@@ -204,10 +215,10 @@ export const MemonOSSection: React.FC = () => {
 									onClick={() =>
 										patchStepConfig(MEMON_STEP_NAME, {
 											...memonConfig,
-											piCode: !on,
+											[switched.flag]: !on,
 										})
 									}
-									title={t("agentSettings.memon.piCodeHint")}
+									title={t(switched.hint)}
 									className={cn(
 										"inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[11px] font-medium transition-colors",
 										on

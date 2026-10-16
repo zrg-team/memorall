@@ -85,7 +85,7 @@ describe("buildMemonPrompt", () => {
 		});
 
 		expect(prompt).toContain(
-			"Apps: Browser. Built in: Scheduler, Skills, Connections, pi code.",
+			"Apps: Browser. Built in: Scheduler, Skills, Connections, pi code, fx.",
 		);
 		expect(prompt).toContain(
 			"### Built in — Scheduler, Skills and Connections; change them only when the user asks",

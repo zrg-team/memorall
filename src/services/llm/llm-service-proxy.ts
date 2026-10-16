@@ -191,6 +191,7 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 		if (request.stream) {
 			const self = this;
 			return (async function* () {
+				await self.ensureOnDemandService(name);
 				let llm = await self.get(name);
 				if (!llm) throw new Error(`LLM "${name}" not found`);
 				for await (const chunk of llm.chatCompletions(
@@ -201,6 +202,7 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 			})();
 		} else {
 			return (async () => {
+				await this.ensureOnDemandService(name);
 				let llm = await this.get(name);
 				if (!llm) throw new Error(`LLM "${name}" not found`);
 				return llm.chatCompletions(
@@ -293,6 +295,7 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 	}
 
 	async unloadFor(name: string, modelId: string): Promise<void> {
+		await this.ensureOnDemandService(name);
 		const llm = await this.get(name);
 		if (!llm) {
 			throw new Error(
@@ -304,6 +307,7 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 	}
 
 	async deleteModelFor(name: string, modelId: string): Promise<void> {
+		await this.ensureOnDemandService(name);
 		const llm = await this.get(name);
 		if (!llm) {
 			throw new Error(
@@ -336,67 +340,6 @@ export class LLMServiceProxy extends LLMServiceCore implements ILLMService {
 				serviceName,
 				"create service for current model",
 			);
-		}
-	}
-
-	async restoreLocalServices(): Promise<void> {
-		try {
-			// Use shared method from LLMServiceCore
-			const serviceConfigs = await this.loadLocalServiceConfigs();
-			if (serviceConfigs) {
-				await this.createLocalServicesFromConfigs(serviceConfigs);
-			}
-		} catch (error) {
-			logWarn("Failed to restore local services from database:", error);
-		}
-	}
-
-	private async createLocalServicesFromConfigs(
-		serviceConfigs: Record<
-			string,
-			{ type: string; baseURL: string; modelId?: string }
-		>,
-	): Promise<void> {
-		if (serviceConfigs.lmstudio) {
-			try {
-				const lmstudioConfig: LMStudioConfig = {
-					type: "lmstudio",
-					baseURL: serviceConfigs.lmstudio.baseURL,
-				};
-
-				if (this.has("lmstudio")) {
-					this.remove("lmstudio");
-				}
-
-				await this.create("lmstudio", lmstudioConfig);
-			} catch (error) {
-				logWarn("Failed to create/update LMStudio service:", error);
-			}
-		} else {
-			if (this.has("lmstudio")) {
-				this.remove("lmstudio");
-			}
-		}
-
-		if (serviceConfigs.ollama) {
-			try {
-				const ollamaConfig: OllamaConfig = {
-					type: "ollama",
-					baseURL: serviceConfigs.ollama.baseURL,
-				};
-
-				if (this.has("ollama")) {
-					this.remove("ollama");
-				}
-
-				await this.create("ollama", ollamaConfig);
-			} catch (error) {
-				logWarn("Failed to create/update Ollama service:", error);
-			}
-		} else {
-			if (this.has("ollama")) {
-				this.remove("ollama");
-			}
 		}
 	}
 }

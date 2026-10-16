@@ -610,11 +610,30 @@
 			"connections": "Kết nối",
 			"visualize": "Trực quan hóa",
 			"pi": "pi code",
+			"fx": "fx",
 			"spreadsheet": "Bảng tính",
 			"documents": "Tài liệu",
 			"presentation": "Trình chiếu",
 			"whiteboard": "Bảng trắng",
 			"pdf": "PDF"
+		},
+		"dock": {
+			"groups": {
+				"office": "Văn phòng",
+				"create": "Sáng tạo",
+				"agent": "Agent"
+			}
+		},
+		"fx": {
+			"starting": "Đang khởi động fx…",
+			"error": "Không khởi động được fx: {{error}}",
+			"openFolder": "Mở thư mục khác",
+			"chooseFolder": "Mở một thư mục",
+			"picker": {
+				"title": "Mở một thư mục trong fx",
+				"subtitle": "fx đọc, sửa và chạy mã trong thư mục bạn mở, và lưu các cuộc trò chuyện ở đó.",
+				"createHint": "Tạo trong {{folder}}, rồi fx mở trong đó."
+			}
 		},
 		"piCode": {
 			"starting": "Đang khởi động pi…",

@@ -256,7 +256,7 @@ describe("PiCodeWindow", () => {
 			request.mockImplementation(
 				async (operation: unknown, payload: unknown) => {
 					if (operation === "piCode.folders") return recent as never;
-					if (operation === "piCode.browse") {
+					if (operation === "folders.browse") {
 						const dir = resolve((payload as { dir?: string }).dir);
 						const listing = listings[dir];
 						if (!listing) throw new Error(`${dir} is not a folder.`);

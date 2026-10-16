@@ -69,6 +69,8 @@ export const memonWindowSource = (
 			return snapshot.piCode?.cwd
 				? `pi code · ${snapshot.piCode.cwd}`
 				: "pi code";
+		case "fx":
+			return snapshot.fx?.cwd ? `fx · ${snapshot.fx.cwd}` : "fx";
 	}
 };
 
@@ -206,6 +208,10 @@ export const memonWindowTarget = (
 		case "pi": {
 			// Its screen is a terminal; the folder it works in is what to ask about.
 			const cwd = snapshot.piCode?.cwd;
+			return cwd ? { kind: "folder", source, path: cwd } : null;
+		}
+		case "fx": {
+			const cwd = snapshot.fx?.cwd;
 			return cwd ? { kind: "folder", source, path: cwd } : null;
 		}
 	}

@@ -57,9 +57,11 @@ export const EmbeddedChatInput: React.FC<EmbeddedChatInputProps> = ({
 	const tInput = useEmbeddedTranslation("input");
 	const tMessageControl = useEmbeddedTranslation("messageControl");
 	const isCustomMode = selectedAgentFlowId !== "chat";
+	// The shared list already leads with the built-in entry; the panel names it
+	// its own way, so drop that one rather than offer "chat" twice.
 	const flowOptions = [
 		{ id: "chat", name: tInput("modeGeneral") },
-		...agentFlows,
+		...agentFlows.filter((flow) => flow.id !== "chat"),
 	];
 
 	return (

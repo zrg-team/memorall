@@ -3,13 +3,14 @@ import { HOST_COMMAND_NAMES } from "@/services/sandbox-container/host-commands";
 
 /**
  * Lines the Terminal runs itself: a tab's directory, screen and history, and
- * `picode`, which opens pi code in the tab's folder.
+ * `picode` and `fx`, which open pi code and fx in the tab's folder.
  */
 export const MEMON_TERMINAL_BUILTINS = [
 	"cd",
 	"clear",
 	"history",
 	"picode",
+	"fx",
 ] as const;
 
 /** What the sandbox runs besides the shell's tools. */

@@ -606,11 +606,30 @@
 			"connections": "Connections",
 			"visualize": "Visualize",
 			"pi": "pi code",
+			"fx": "fx",
 			"spreadsheet": "Spreadsheet",
 			"documents": "Documents",
 			"presentation": "Presentation",
 			"whiteboard": "Whiteboard",
 			"pdf": "PDF"
+		},
+		"dock": {
+			"groups": {
+				"office": "Office",
+				"create": "Create",
+				"agent": "Agent"
+			}
+		},
+		"fx": {
+			"starting": "Starting fx…",
+			"error": "fx could not start: {{error}}",
+			"openFolder": "Open another folder",
+			"chooseFolder": "Open a folder",
+			"picker": {
+				"title": "Open a folder in fx",
+				"subtitle": "fx reads, edits and runs code in the folder you open, and keeps its conversations there.",
+				"createHint": "Made in {{folder}}, then fx opens in it."
+			}
 		},
 		"piCode": {
 			"starting": "Starting pi…",

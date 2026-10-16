@@ -45,9 +45,9 @@ export const SECONDSKY_DEFAULT_SKILLS: DefaultSkillManifestEntry[] = [
 		collection: "tooling-skills",
 		repo: "secondsky/claude-skills",
 		sourceUrl:
-			"https://github.com/secondsky/claude-skills/blob/main/plugins/verification-before-completion/skills/verification-before-completion/SKILL.md",
+			"https://github.com/secondsky/claude-skills/blob/main/plugins/code-review/skills/code-review/references/verification-before-completion.md",
 		rawUrl:
-			"https://raw.githubusercontent.com/secondsky/claude-skills/main/plugins/verification-before-completion/skills/verification-before-completion/SKILL.md",
+			"https://raw.githubusercontent.com/secondsky/claude-skills/main/plugins/code-review/skills/code-review/references/verification-before-completion.md",
 	},
 	{
 		name: "feature-dev",

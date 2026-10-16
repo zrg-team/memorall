@@ -137,7 +137,7 @@ export const enEmbeddedLocale = {
 		thinking: "Thinking",
 		anchorAsk: "Ask",
 		selectAgent: "Select agent",
-		defaultAgent: "Default agent",
+		workingWith: "Working with {agent} — click to change",
 		finishedNoAnswer: "Finished — no answer text was returned.",
 		smartSelect: "Smart Select",
 		canvasSelect: "Canvas Select",

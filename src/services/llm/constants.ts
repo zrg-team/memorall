@@ -49,6 +49,25 @@ export const SERVICE_TO_PROVIDER = Object.fromEntries(
 	]),
 ) as Partial<Record<string, ServiceProvider>>;
 
+/** A model server the user runs and saves in settings: Ollama, LM Studio. */
+export const LOCAL_SERVER_SERVICES = [
+	DEFAULT_SERVICES.LMSTUDIO,
+	DEFAULT_SERVICES.OLLAMA,
+] as const;
+
+export type LocalServerServiceName = (typeof LOCAL_SERVER_SERVICES)[number];
+
+export const isLocalServerService = (
+	name: string,
+): name is LocalServerServiceName =>
+	(LOCAL_SERVER_SERVICES as readonly string[]).includes(name);
+
+/**
+ * Written when a local server's settings are saved or removed, so every
+ * context (pages, the offscreen document) re-reads them.
+ */
+export const LOCAL_SERVERS_CHANGED_KEY = "_LOCAL_SERVERS_CHANGED_";
+
 /** The chat model. Agents, cron jobs and knowledge extraction all read it. */
 export const CURRENT_MODEL_KEY = "_CURRENT_MODEL_KEY_";
 

@@ -520,19 +520,67 @@ ${coAgentAnchorStyles}
 		border-color: hsl(var(--foreground));
 		color: hsl(var(--background));
 	}
-	.memorall-co-agent-agent-select {
-		min-width: 0;
-		max-width: 100%;
-		border: 1px solid hsl(var(--border) / 0.95);
-		border-radius: 8px;
-		background: hsl(var(--popover));
+	/* Who the co-agent is: a name tag under the avatar that also switches it. */
+	.memorall-co-agent-agent-tag {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		max-width: min(220px, calc(100vw - 120px));
+		height: 30px;
+		box-sizing: border-box;
+		border: 1px solid hsl(var(--border) / 0.92);
+		border-radius: 999px;
+		background: hsl(var(--popover) / 0.92);
 		color: hsl(var(--foreground));
-		font: 650 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
-		padding: 3px 6px;
+		box-shadow: 0 10px 24px rgb(15 23 42 / 0.14);
+		backdrop-filter: blur(10px);
+		font: 650 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+		padding: 0 9px 0 12px;
 		cursor: pointer;
+		/* The root lets clicks through to the page; the tag has to take them. */
+		pointer-events: auto;
 	}
-	.memorall-co-agent-agent-select:disabled {
+	.memorall-co-agent-agent-tag:hover {
+		background: hsl(var(--accent));
+	}
+	.memorall-co-agent-agent-tag:has(select:focus-visible) {
+		outline: 2px solid hsl(var(--ring));
+		outline-offset: 2px;
+	}
+	.memorall-co-agent-agent-tag[data-disabled="true"] {
 		opacity: 0.55;
 		cursor: not-allowed;
+	}
+	.memorall-co-agent-agent-tag svg {
+		flex: none;
+		color: hsl(var(--muted-foreground));
+	}
+	.memorall-co-agent-agent-tag-name {
+		min-width: 0;
+		/* Room for descenders, which overflow: hidden would otherwise cut. */
+		line-height: 1.4;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.memorall-co-agent-agent-select {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		border: 0;
+		padding: 0;
+		opacity: 0;
+		font: inherit;
+		cursor: inherit;
+	}
+	.memorall-co-agent-agent-select option {
+		background: hsl(var(--popover));
+		color: hsl(var(--foreground));
+	}
+	.dark .memorall-co-agent-agent-select {
+		color-scheme: dark;
 	}
 `;

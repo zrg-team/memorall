@@ -1,5 +1,6 @@
 import { runsAlongside } from "@/services/sandbox-container/alongside-commands";
 import { resolvePath } from "@/services/sandbox-container/host-commands/command-line";
+import type { FxOpened } from "../apps/fx/fx-app";
 import type { PiCodeOpened } from "../apps/pi-code/pi-code-app";
 import { memonDisplayPath } from "../constants";
 import type { MemonEmbeddedPort } from "../embedded-browser";
@@ -75,6 +76,8 @@ export interface MemonTerminalHost extends CommandApprovalsHost {
 		cwd: string,
 		options: { continueLast: boolean },
 	): Promise<PiCodeOpened>;
+	/** Opens fx in a folder (`fx`); throws when it cannot. */
+	openFx(cwd: string, options: { continueLast: boolean }): Promise<FxOpened>;
 }
 
 /** The command that keeps running, and the tab it prints into. */
@@ -158,11 +161,19 @@ const BUILTIN = /^(clear|history)(?:\s+(-c))?\s*$/;
 const TRAILING_CD = /&&\s*cd\s+([^;&|]+)$/;
 /** `picode [-c] [folder]`: pi code, in the tab's folder by default. */
 const PICODE = /^picode(?:\s+(.*?))?\s*$/;
-const PICODE_OPTION = /^(-\S+)(?:\s+|$)/;
+/** An option before the folder, for `picode` and `fx`. */
+const OPEN_OPTION = /^(-\S+)(?:\s+|$)/;
 const PICODE_USAGE = [
 	"Usage: picode [-c] [folder]",
 	"Opens pi code in the folder (this one by default); this tab exits.",
 	"  -c, --continue  open the folder's last pi session",
+];
+/** `fx [-c] [folder]`: fx, in the tab's folder by default. */
+const FX = /^fx(?:\s+(.*?))?\s*$/;
+const FX_USAGE = [
+	"Usage: fx [-c] [folder]",
+	"Opens fx in the folder (this one by default); this tab exits.",
+	"  -c, --continue  open the folder's last fx conversation",
 ];
 
 /**
@@ -392,6 +403,7 @@ export class MemonTerminal {
 		const bareCd = BARE_CD.exec(trimmed);
 		const builtin = BUILTIN.exec(trimmed);
 		const picode = PICODE.exec(trimmed);
+		const fx = FX.exec(trimmed);
 		if (!options.byUser) await this.approvals.require(trimmed, tab.id);
 		const alongside = this.runningCommand !== null;
 		this.activeId = tab.id;
@@ -405,6 +417,7 @@ export class MemonTerminal {
 		if (builtin) return this.showHistory(tab, builtin[2] === "-c");
 		if (bareCd) return this.changeDirectory(tab, bareCd[1]?.trim());
 		if (picode) return this.openPiCode(tab, picode[1]?.trim() ?? "");
+		if (fx) return this.openFx(tab, fx[1]?.trim() ?? "");
 		// What runs has `~` expanded; the tab shows the line as it was typed.
 		const line = expandHome(trimmed, this.host.home());
 		if (alongside) return this.runAlongside(tab, trimmed, line, cwd);
@@ -554,26 +567,9 @@ export class MemonTerminal {
 		tab: TerminalTab,
 		args: string,
 	): Promise<MemonCommandOutcome> {
-		const usage = PICODE_USAGE.map(
-			(text): MemonTerminalLine => ({ kind: "stdout", text }),
-		);
-		let rest = args;
-		let continueLast = false;
-		let option = PICODE_OPTION.exec(rest);
-		while (option) {
-			const flag = option[1];
-			if (flag === "-h" || flag === "--help") return this.finish(tab, 0, usage);
-			if (flag !== "-c" && flag !== "--continue") {
-				return this.finish(tab, 2, [
-					{ kind: "stderr", text: `picode: unknown option ${flag}` },
-					...usage,
-				]);
-			}
-			continueLast = true;
-			rest = rest.slice(option[0].length);
-			option = PICODE_OPTION.exec(rest);
-		}
-		const cwd = rest ? this.resolveDir(tab.cwd, rest) : tab.cwd;
+		const parsed = this.openArgs(tab, args, "picode", PICODE_USAGE);
+		if ("running" in parsed) return parsed;
+		const { cwd, continueLast } = parsed;
 		let opened: PiCodeOpened;
 		try {
 			opened = await this.host.openPiCode(cwd, { continueLast });
@@ -583,13 +579,7 @@ export class MemonTerminal {
 				{ kind: "stderr", text: `picode: ${message}` },
 			]);
 		}
-		const running = this.runningCommand;
-		const keeps = running?.tabId === tab.id;
-		if (keeps) {
-			this.finish(tab, 0);
-		} else {
-			await this.closeTab(tab.id);
-		}
+		const { keeps, running } = await this.leaveTab(tab);
 		const home = this.host.home();
 		const where = memonDisplayPath(opened.cwd, home);
 		return {
@@ -614,6 +604,95 @@ export class MemonTerminal {
 				.filter(Boolean)
 				.join(" "),
 		};
+	}
+
+	/**
+	 * `fx [-c] [folder]`: fx opens in the folder (the tab's by default), on its
+	 * latest conversation with -c, and the tab exits, as for `picode`.
+	 */
+	private async openFx(
+		tab: TerminalTab,
+		args: string,
+	): Promise<MemonCommandOutcome> {
+		const parsed = this.openArgs(tab, args, "fx", FX_USAGE);
+		if ("running" in parsed) return parsed;
+		let opened: FxOpened;
+		try {
+			opened = await this.host.openFx(parsed.cwd, {
+				continueLast: parsed.continueLast,
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return this.finish(tab, 1, [{ kind: "stderr", text: `fx: ${message}` }]);
+		}
+		const { keeps, running } = await this.leaveTab(tab);
+		const where = memonDisplayPath(opened.cwd, this.host.home());
+		return {
+			running: false,
+			exitCode: 0,
+			output: [],
+			summary: [
+				opened.shown
+					? `fx was open in ${where} already; it is in front.`
+					: `Opened fx in ${where}.`,
+				keeps
+					? `Terminal tab ${tab.id} keeps running \`${running?.command}\`.`
+					: `Terminal tab ${tab.id} exited.`,
+			].join(" "),
+		};
+	}
+
+	/**
+	 * `[-c] [folder]` after `picode` or `fx`: the folder (the tab's by default)
+	 * and whether to continue, or the outcome that ends the line (help, an
+	 * unknown option).
+	 */
+	private openArgs(
+		tab: TerminalTab,
+		args: string,
+		command: string,
+		usageLines: readonly string[],
+	): { cwd: string; continueLast: boolean } | MemonCommandOutcome {
+		const usage = usageLines.map(
+			(text): MemonTerminalLine => ({ kind: "stdout", text }),
+		);
+		let rest = args;
+		let continueLast = false;
+		let option = OPEN_OPTION.exec(rest);
+		while (option) {
+			const flag = option[1];
+			if (flag === "-h" || flag === "--help") return this.finish(tab, 0, usage);
+			if (flag !== "-c" && flag !== "--continue") {
+				return this.finish(tab, 2, [
+					{ kind: "stderr", text: `${command}: unknown option ${flag}` },
+					...usage,
+				]);
+			}
+			continueLast = true;
+			rest = rest.slice(option[0].length);
+			option = OPEN_OPTION.exec(rest);
+		}
+		return {
+			cwd: rest ? this.resolveDir(tab.cwd, rest) : tab.cwd,
+			continueLast,
+		};
+	}
+
+	/**
+	 * A program took the tab's place: the tab exits, unless it runs the long
+	 * command, which it keeps.
+	 */
+	private async leaveTab(
+		tab: TerminalTab,
+	): Promise<{ keeps: boolean; running: { command: string } | null }> {
+		const running = this.runningCommand;
+		const keeps = running?.tabId === tab.id;
+		if (keeps) {
+			this.finish(tab, 0);
+		} else {
+			await this.closeTab(tab.id);
+		}
+		return { keeps, running };
 	}
 
 	private followTrailingCd(tab: TerminalTab, command: string, cwd: string) {

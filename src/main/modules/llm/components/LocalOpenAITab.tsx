@@ -7,6 +7,8 @@ import { Input } from "@/main/components/ui/input";
 import { Button } from "@/main/components/ui/button";
 import { serviceManager } from "@/services";
 import { LOCAL_SERVER_LLM_CONFIG_KEYS } from "@/config/local-server-llm";
+import { LOCAL_SERVERS_CHANGED_KEY } from "@/services/llm/constants";
+import { sharedStorageService } from "@/services/shared-storage";
 import { logWarn } from "@/utils/logger";
 import type { NewConfiguration } from "@/services/database/types";
 
@@ -75,6 +77,15 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 		}
 	}
 
+	// Every context (this page, the offscreen document that runs agents and
+	// MemonOS apps) holds its own copy of the service; this has them re-read
+	// the saved settings.
+	async function announceChange() {
+		if (sharedStorageService.isAvailable()) {
+			await sharedStorageService.set(LOCAL_SERVERS_CHANGED_KEY, Date.now());
+		}
+	}
+
 	async function save() {
 		if (!baseUrl.trim()) {
 			setError(t("localProvider.baseUrlRequired"));
@@ -109,6 +120,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 					} as unknown as NewConfiguration);
 				});
 			}
+			await announceChange();
 			setBaseUrl(defaultBase);
 			setModelId("");
 			await refresh();
@@ -184,6 +196,7 @@ export const LocalOpenAITab: React.FC<LocalOpenAITabProps> = ({
 			if (serviceManager.llmService.has(serviceName)) {
 				serviceManager.llmService.remove(serviceName);
 			}
+			await announceChange();
 
 			setView("no-config");
 		} catch (e) {
