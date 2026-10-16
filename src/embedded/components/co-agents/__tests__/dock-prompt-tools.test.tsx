@@ -117,14 +117,13 @@ describe("co-agent prompt tools", () => {
 		).toHaveLength(0);
 	});
 
-	it("puts the pickers between the agent picker and send", () => {
+	it("keeps the pickers in a row beside send", () => {
 		renderDock();
 
 		const row = document.querySelector(".memorall-co-agent-prompt-tools");
 		expect(row).not.toBeNull();
-		expect(
-			row?.querySelector(".memorall-co-agent-agent-select"),
-		).not.toBeNull();
+		// The agent is switched from the name tag by the avatar, not from here.
+		expect(row?.querySelector(".memorall-co-agent-agent-select")).toBeNull();
 		expect(
 			row?.querySelectorAll(".memorall-co-agent-prompt-tool"),
 		).toHaveLength(2);

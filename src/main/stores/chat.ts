@@ -20,9 +20,9 @@ import {
 	withRunUsage,
 } from "@/main/modules/chat/utils/conversation-cost-format";
 import { platform } from "@/platform/current";
+import { SELECTED_AGENT_STORAGE_KEY } from "@/constants/selected-agent";
 
-/** The agent picked last in the composer ("chat" for none), kept across reloads. */
-export const SELECTED_AGENT_STORAGE_KEY = "memorall.chat.selectedAgent";
+export { SELECTED_AGENT_STORAGE_KEY };
 
 const readRememberedAgentFlowId = async (): Promise<string | null> => {
 	try {

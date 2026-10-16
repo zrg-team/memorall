@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { logError } from "@/utils/logger";
 import {
+	CO_AGENT_DEFAULT_FLOW,
 	CO_AGENT_DEFAULT_FLOW_ID,
 	getSelectedAgentFlowId,
 	loadSelectedAgentFlowId,
 	setSelectedAgentFlowId as persistSelectedAgentFlowId,
+	resolveAvailableAgentFlowId,
 	subscribeToSelectedAgentFlowId,
 } from "./selected-agent-flow";
 
@@ -21,8 +23,8 @@ export const useEmbeddedCustomOptions = () => {
 	const [agentFlows, setAgentFlows] = useState<EmbeddedSelectOption[]>([]);
 	const [selectedTopic, setSelectedTopic] = useState<string>("");
 	const [topicsLoading, setTopicsLoading] = useState(true);
-	// Shared across the dock and the panel and remembered between pages; see
-	// ./selected-agent-flow.
+	// Shared across the dock, the panel and the main chat, and remembered
+	// between pages; see ./selected-agent-flow.
 	const [selectedAgentFlowId, setSelectedAgentFlowIdState] = useState<string>(
 		() => getSelectedAgentFlowId(),
 	);
@@ -105,7 +107,7 @@ export const useEmbeddedCustomOptions = () => {
 						// the most recently edited agent instead is what made a
 						// deliberate choice look ignored.
 						const flows: EmbeddedSelectOption[] = [
-							{ id: CO_AGENT_DEFAULT_FLOW_ID, name: "CoAgent" },
+							CO_AGENT_DEFAULT_FLOW,
 							...(flowList as EmbeddedSelectOption[]).filter(
 								(flow) => flow.id !== CO_AGENT_DEFAULT_FLOW_ID,
 							),
@@ -127,7 +129,10 @@ export const useEmbeddedCustomOptions = () => {
 		selectedTopic,
 		setSelectedTopic,
 		topicsLoading,
-		selectedAgentFlowId,
+		selectedAgentFlowId: resolveAvailableAgentFlowId(
+			selectedAgentFlowId,
+			agentFlows,
+		),
 		setSelectedAgentFlowId,
 		hasTopics: topics.length > 0,
 	};
