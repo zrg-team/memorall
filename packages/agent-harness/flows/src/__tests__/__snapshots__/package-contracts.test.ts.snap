@@ -716,9 +716,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "a": {
+          "description": "Primary number",
           "type": "number",
         },
         "b": {
+          "description": "Secondary number",
           "type": "number",
         },
         "operation": {
@@ -754,9 +756,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "precision": {
+          "description": "Decimal precision for round/floor/ceil",
           "type": "number",
         },
         "values": {
+          "description": "List of values for aggregate operations",
           "items": {
             "type": "number",
           },
@@ -783,21 +787,26 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "command": {
+          "description": "Shell command to execute.",
           "type": "string",
         },
         "commandTimeoutMs": {
+          "description": "Optional hard timeout for the command itself.",
           "type": "number",
         },
         "cwd": {
+          "description": "Optional working directory inside the sandbox.",
           "type": "string",
         },
         "env": {
           "additionalProperties": {
             "type": "string",
           },
+          "description": "Optional environment variables to prefix for this command.",
           "type": "object",
         },
         "waitTimeoutMs": {
+          "description": "How long to wait for output or completion before returning (default 10000).",
           "type": "number",
         },
       },
@@ -813,6 +822,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "path": {
+          "description": "Virtual path to check (absolute or relative).",
           "type": "string",
         },
       },
@@ -828,15 +838,18 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "body": {
+          "description": "Optional request body string.",
           "type": "string",
         },
         "headers": {
           "additionalProperties": {
             "type": "string",
           },
+          "description": "Optional request headers.",
           "type": "object",
         },
         "method": {
+          "description": "HTTP method (default GET).",
           "enum": [
             "GET",
             "POST",
@@ -849,6 +862,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "responseType": {
+          "description": "Response parser mode (default auto).",
           "enum": [
             "auto",
             "json",
@@ -858,9 +872,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "timeoutMs": {
+          "description": "Request timeout in milliseconds (default 15000).",
           "type": "number",
         },
         "url": {
+          "description": "Resource URL to fetch.",
           "type": "string",
         },
       },
@@ -876,6 +892,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "level": {
+          "description": "Optional log level filter.",
           "enum": [
             "log",
             "info",
@@ -886,6 +903,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "limit": {
+          "description": "Maximum number of log entries to return (default 100).",
           "type": "number",
         },
       },
@@ -898,12 +916,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "packageSpec": {
+          "description": "Package spec, e.g. react, lodash@latest, or @types/node.",
           "type": "string",
         },
         "save": {
+          "description": "Save as dependency in package.json (default true).",
           "type": "boolean",
         },
         "saveDev": {
+          "description": "Save as devDependency in package.json (default false).",
           "type": "boolean",
         },
       },
@@ -935,12 +956,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "commandId": {
+          "description": "Command session ID returned by container_execute_command.",
           "type": "string",
         },
         "offset": {
+          "description": "Last nextOffset received from the command session.",
           "type": "number",
         },
         "waitTimeoutMs": {
+          "description": "How long to wait for more output or completion before returning (default 10000).",
           "type": "number",
         },
       },
@@ -957,15 +981,19 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "maxHtmlChars": {
+          "description": "Maximum HTML characters returned (default 100000).",
           "type": "number",
         },
         "path": {
+          "description": "Optional render path inside server (default '/').",
           "type": "string",
         },
         "port": {
+          "description": "Target server port.",
           "type": "number",
         },
         "timeoutMs": {
+          "description": "Request timeout in milliseconds (default 60000).",
           "type": "number",
         },
       },
@@ -981,18 +1009,22 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "body": {
+          "description": "Optional request body string.",
           "type": "string",
         },
         "headers": {
           "additionalProperties": {
             "type": "string",
           },
+          "description": "Optional request headers.",
           "type": "object",
         },
         "maxBodyChars": {
+          "description": "Maximum response body characters returned (default 100000).",
           "type": "number",
         },
         "method": {
+          "description": "HTTP method (default GET).",
           "enum": [
             "GET",
             "POST",
@@ -1005,12 +1037,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "path": {
+          "description": "Request path (default '/'). Supports query string.",
           "type": "string",
         },
         "port": {
+          "description": "Target server port.",
           "type": "number",
         },
         "responseType": {
+          "description": "Response parser mode (default auto).",
           "enum": [
             "auto",
             "json",
@@ -1020,6 +1055,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "timeoutMs": {
+          "description": "Request timeout in milliseconds (default 15000).",
           "type": "number",
         },
       },
@@ -1035,6 +1071,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "port": {
+          "description": "Port of the server to restart.",
           "type": "number",
         },
       },
@@ -1050,15 +1087,19 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "code": {
+          "description": "JavaScript/TypeScript code to run.",
           "type": "string",
         },
         "filename": {
+          "description": "Optional virtual filename for better stack traces.",
           "type": "string",
         },
         "maxLogEntries": {
+          "description": "Maximum number of captured console logs (default 50).",
           "type": "number",
         },
         "timeoutMs": {
+          "description": "Execution timeout in milliseconds (default 5000).",
           "type": "number",
         },
       },
@@ -1074,12 +1115,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "appendNewline": {
+          "description": "Append a newline after the input before sending.",
           "type": "boolean",
         },
         "commandId": {
+          "description": "Running command session ID.",
           "type": "string",
         },
         "input": {
+          "description": "Input to send to the command stdin.",
           "type": "string",
         },
       },
@@ -1096,12 +1140,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "entryPath": {
+          "description": "Entry file for express servers (relative to projectDir or absolute). Only needed when the entry file is not server.js.",
           "type": "string",
         },
         "hostname": {
+          "description": "Optional bind hostname.",
           "type": "string",
         },
         "kind": {
+          "description": "Server framework kind. Use "auto" (or omit) to detect from config files (vite.config.*, next.config.*) in projectDir. Use "express", "vite", or "next" to override explicitly.",
           "enum": [
             "auto",
             "express",
@@ -1111,12 +1158,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "port": {
+          "description": "Port to listen on. Defaults: vite-react=5173, express/next=3000.",
           "type": "number",
         },
         "projectDir": {
+          "description": "VFS path to the project folder, e.g. "/projects/my-react-app". Each app must have its own unique directory. Files here persist across restarts.",
           "type": "string",
         },
         "template": {
+          "description": "Scaffold a starter project into projectDir when the folder is empty, then npm-install before starting. "express" – Express.js REST/HTML app; "vite-react" – Vite + React SPA with Tailwind and shadcn-compatible UI primitives; "next-pages" – Next.js Pages Router; "next-app" – Next.js App Router. Omit when project files already exist.",
           "enum": [
             "express",
             "vite-react",
@@ -1138,6 +1188,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "commandId": {
+          "description": "Running command session ID to stop.",
           "type": "string",
         },
       },
@@ -1153,6 +1204,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "port": {
+          "description": "Port of the server to stop.",
           "type": "number",
         },
       },
@@ -1168,6 +1220,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "timezone": {
+          "description": "Timezone (default: UTC)",
           "type": "string",
         },
       },
@@ -1180,15 +1233,19 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "file_path": {
+          "description": "Path to the file to edit",
           "type": "string",
         },
         "new_string": {
+          "description": "Replacement text",
           "type": "string",
         },
         "old_string": {
+          "description": "Exact text to find and replace. Must be present in the file.",
           "type": "string",
         },
         "replace_all": {
+          "description": "Replace every occurrence instead of only the first (default: false)",
           "type": "boolean",
         },
       },
@@ -1206,9 +1263,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "path": {
+          "description": "Base directory to search under (default: "/")",
           "type": "string",
         },
         "pattern": {
+          "description": "Glob pattern to match paths (e.g. "**/*.md", "notes/**/*.txt", "*.json")",
           "type": "string",
         },
       },
@@ -1224,18 +1283,23 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "case_sensitive": {
+          "description": "Case-sensitive matching (default: false)",
           "type": "boolean",
         },
         "context": {
+          "description": "Lines of context to show before and after each match (default: 0)",
           "type": "number",
         },
         "glob": {
+          "description": "Glob pattern to filter filenames (e.g. "*.ts", "**/*.md")",
           "type": "string",
         },
         "max_results": {
+          "description": "Maximum matching lines to return (default: 50)",
           "type": "number",
         },
         "output_mode": {
+          "description": ""content" shows file:line:text (default), "files_with_matches" shows only file paths, "count" shows match count per file",
           "enum": [
             "content",
             "files_with_matches",
@@ -1244,9 +1308,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "path": {
+          "description": "Directory (or exact file path) to search (default: "/"). If a file path is provided, searches only that file.",
           "type": "string",
         },
         "pattern": {
+          "description": "Regex pattern to search for in file content",
           "type": "string",
         },
       },
@@ -1262,9 +1328,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "path": {
+          "description": "Directory path to list (default: "/")",
           "type": "string",
         },
         "recursive": {
+          "description": "List all subdirectory contents recursively (default: false)",
           "type": "boolean",
         },
       },
@@ -1277,9 +1345,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "path": {
+          "description": "Directory path to create",
           "type": "string",
         },
         "recursive": {
+          "description": "Create all missing parent directories automatically (default: true)",
           "type": "boolean",
         },
       },
@@ -1295,12 +1365,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "file_path": {
+          "description": "Path to the file to read",
           "type": "string",
         },
         "limit": {
+          "description": "Maximum number of lines to return",
           "type": "number",
         },
         "offset": {
+          "description": "Start line number, 1-based (default: 1)",
           "type": "number",
         },
       },
@@ -1316,9 +1389,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "path": {
+          "description": "Path of the file or directory to delete",
           "type": "string",
         },
         "recursive": {
+          "description": "Delete a directory and all its contents recursively (required for non-empty directories, default: false)",
           "type": "boolean",
         },
       },
@@ -1334,12 +1409,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "content": {
+          "description": "Text content to write",
           "type": "string",
         },
         "create_dirs": {
+          "description": "Auto-create parent directories if they do not exist (default: true)",
           "type": "boolean",
         },
         "file_path": {
+          "description": "Path of the file to create or overwrite",
           "type": "string",
         },
       },
@@ -1356,6 +1434,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "skill_name": {
+          "description": "Exact name of the skill to load (case-sensitive)",
           "type": "string",
         },
       },
@@ -1371,6 +1450,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "description": {
+          "description": "Description of the new item to add",
           "type": "string",
         },
       },
@@ -1386,12 +1466,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "checked": {
+          "description": "Whether to mark the item as done (true) or not done (false)",
           "type": "boolean",
         },
         "item_id": {
+          "description": "ID of the item to update (e.g. '1', '2')",
           "type": "string",
         },
         "notes": {
+          "description": "Optional notes to attach to this item",
           "type": "string",
         },
       },
@@ -1408,9 +1491,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "items": {
+          "description": "Plan items as a single string separated by semicolons. Example: "Inspect logs; patch planner_create; verify the fix"",
           "type": "string",
         },
         "title": {
+          "description": "Short title of the plan",
           "type": "string",
         },
       },
@@ -1435,6 +1520,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "item_id": {
+          "description": "ID of the item to remove (e.g. '1', '2')",
           "type": "string",
         },
       },
@@ -1787,9 +1873,11 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "agentId": {
+          "description": "Target child agent flow ID.",
           "type": "string",
         },
         "message": {
+          "description": "Focused message to send to the selected child agent.",
           "type": "string",
         },
       },
@@ -1806,6 +1894,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "action": {
+          "description": "DOM action. \`query\` supports index-less selection list, others operate by selector+index.",
           "enum": [
             "query",
             "read",
@@ -1818,18 +1907,23 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "index": {
+          "description": "Element index for selectors returning multiple results.",
           "type": "number",
         },
         "maxResults": {
+          "description": "For query: max returned element list.",
           "type": "number",
         },
         "selector": {
+          "description": "CSS selector for DOM target.",
           "type": "string",
         },
         "sessionId": {
+          "description": "Active web session ID.",
           "type": "string",
         },
         "value": {
+          "description": "Text to fill (input action only).",
           "type": "string",
         },
       },
@@ -1847,6 +1941,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "browserMode": {
+          "description": "Open mode when no sessionId is provided. Leave it out for a window; \`iframe\` only for a local server.",
           "enum": [
             "iframe",
             "tab",
@@ -1855,33 +1950,43 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "caseSensitive": {
+          "description": "Case-sensitive text matching (default false).",
           "type": "boolean",
         },
         "isRegex": {
+          "description": "Treat pattern as regular expression.",
           "type": "boolean",
         },
         "maxMatches": {
+          "description": "Maximum matches to return.",
           "type": "number",
         },
         "maxSnippetChars": {
+          "description": "Max characters returned per match snippet.",
           "type": "number",
         },
         "pattern": {
+          "description": "Text or regex pattern to find within the current rendered page.",
           "type": "string",
         },
         "query": {
+          "description": "Deprecated alias for \`pattern\`.",
           "type": "string",
         },
         "selector": {
+          "description": "Optional selector to limit find-in-page scope.",
           "type": "string",
         },
         "sessionId": {
+          "description": "Active web session to search.",
           "type": "string",
         },
         "timeoutMs": {
+          "description": "Navigation/load timeout used when opening by URL.",
           "type": "number",
         },
         "url": {
+          "description": "Open first, then search current page content. Use with no sessionId.",
           "type": "string",
         },
       },
@@ -1894,6 +1999,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "browserMode": {
+          "description": "Open mode. Leave it out for a browser window (falls back to a tab); \`tab\` for a tab; \`iframe\` only for a local server (localhost or a sandbox preview), and on a public site it opens a window instead.",
           "enum": [
             "iframe",
             "tab",
@@ -1902,15 +2008,19 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "keepSession": {
+          "description": "Keep session alive for follow-up DOM actions (default true).",
           "type": "boolean",
         },
         "maxHtmlChars": {
+          "description": "Limit HTML length returned to the agent. Values are clamped to 1024-500000.",
           "type": "number",
         },
         "timeoutMs": {
+          "description": "Navigation wait timeout in milliseconds.",
           "type": "number",
         },
         "url": {
+          "description": "Target web URL to open.",
           "type": "string",
         },
       },
@@ -1926,6 +2036,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "browserMode": {
+          "description": "Open mode when no sessionId is provided. Leave it out for a window; \`iframe\` only for a local server.",
           "enum": [
             "iframe",
             "tab",
@@ -1934,6 +2045,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "contentMode": {
+          "description": "Content format. Default is \`text\`. \`text\` returns readable page text, \`html\` returns rendered HTML, \`clean_html\` returns HTML with tags only and no attributes/scripts/styles.",
           "enum": [
             "text",
             "structure_text",
@@ -1943,18 +2055,23 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "maxHtmlChars": {
+          "description": "Limit HTML length returned to the agent. Values are clamped to 1024-500000.",
           "type": "number",
         },
         "selector": {
+          "description": "Optional selector for a focused read.",
           "type": "string",
         },
         "sessionId": {
+          "description": "Active web session to read.",
           "type": "string",
         },
         "timeoutMs": {
+          "description": "Navigation/load timeout used when opening by URL.",
           "type": "number",
         },
         "url": {
+          "description": "Open first, then read. Use with no sessionId.",
           "type": "string",
         },
       },
@@ -1967,15 +2084,19 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "engines": {
+          "description": "Comma-separated engines to search. Use "all" for all engines, or any combination of: google, bing, duckduckgo, yahoo, brave. Default: "duckduckgo,brave,bing". Example: "google,bing".",
           "type": "string",
         },
         "maxResultsPerEngine": {
+          "description": "Max results to return per engine (default 10).",
           "type": "number",
         },
         "query": {
+          "description": "The search query.",
           "type": "string",
         },
         "timeoutMs": {
+          "description": "Per-engine page load timeout in milliseconds (default 15000).",
           "type": "number",
         },
       },
@@ -1991,6 +2112,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "browserMode": {
+          "description": "Open mode when no sessionId is provided. Leave it out for a window; \`iframe\` only for a local server.",
           "enum": [
             "iframe",
             "tab",
@@ -1999,21 +2121,27 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "delayMs": {
+          "description": "Fixed delay mode when no selector is provided.",
           "type": "number",
         },
         "intervalMs": {
+          "description": "Polling interval when waiting for render or selector stability.",
           "type": "number",
         },
         "selector": {
+          "description": "DOM selector to wait for.",
           "type": "string",
         },
         "sessionId": {
+          "description": "Active web session ID.",
           "type": "string",
         },
         "stabilityMs": {
+          "description": "Stable unchanged duration required for \`render\` mode.",
           "type": "number",
         },
         "state": {
+          "description": "Selector visibility state.",
           "enum": [
             "present",
             "absent",
@@ -2021,12 +2149,15 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "string",
         },
         "timeoutMs": {
+          "description": "Total wait timeout.",
           "type": "number",
         },
         "url": {
+          "description": "Open first, then wait.",
           "type": "string",
         },
         "waitMode": {
+          "description": "Wait mode. \`render\` waits for page snapshot stability, \`selector\` waits for a DOM selector state, \`time\` waits a fixed duration.",
           "enum": [
             "render",
             "selector",

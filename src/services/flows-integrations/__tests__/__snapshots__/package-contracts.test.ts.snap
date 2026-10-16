@@ -880,12 +880,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "index": {
+          "description": "Zero-based element index when selector matches multiple elements.",
           "type": "number",
         },
         "message": {
+          "description": "Short user-facing reason for the click, shown when confirmation is needed.",
           "type": "string",
         },
         "selector": {
+          "description": "Stable CSS selector for the element to click. Use co_agent_observe or co_agent_query first to get this value.",
           "type": "string",
         },
       },
@@ -898,15 +901,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "index": {
+          "description": "Zero-based element index when selector matches multiple elements.",
           "type": "number",
         },
         "message": {
+          "description": "Short user-facing reason for the input action, shown when confirmation is needed.",
           "type": "string",
         },
         "selector": {
+          "description": "Stable CSS selector for the text input or textarea. Use co_agent_observe or co_agent_query first to get this value.",
           "type": "string",
         },
         "value": {
+          "description": "Text to type into the selected input. Defaults to an empty string.",
           "type": "string",
         },
       },
@@ -919,24 +926,31 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "index": {
+          "description": "Zero-based element index when selector matches multiple elements.",
           "type": "number",
         },
         "message": {
+          "description": "Short label or explanation to show near the co-agent cursor.",
           "type": "string",
         },
         "mode": {
+          "description": "Cursor movement mode: moveTo or jumpTo. Defaults to the page handler behavior.",
           "type": "string",
         },
         "scrollIntoView": {
+          "description": "Whether to scroll the selected element into view before pointing.",
           "type": "boolean",
         },
         "selector": {
+          "description": "Stable CSS selector for the element to point at. Use co_agent_observe or co_agent_query first to get this value.",
           "type": "string",
         },
         "x": {
+          "description": "Viewport x coordinate to point at when no selector is used.",
           "type": "number",
         },
         "y": {
+          "description": "Viewport y coordinate to point at when no selector is used.",
           "type": "number",
         },
       },
@@ -949,21 +963,27 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "from": {
+          "description": "Zero-based character offset to start reading page text from. Only applies to scope page.",
           "type": "number",
         },
         "index": {
+          "description": "Zero-based element index when selector matches multiple elements.",
           "type": "number",
         },
         "maxChars": {
+          "description": "Approximate text character limit for selector, viewport, or page reads. Defaults to 30000 for page and 8000 for viewport.",
           "type": "number",
         },
         "outputFormat": {
+          "description": "Output format: text or html. Use html when you need stable data-selector attributes for move/click/input tools. Defaults to text.",
           "type": "string",
         },
         "scope": {
+          "description": "What to read: metadata, selector, selection, viewport, or page. Use page for whole-page summaries and product details. Defaults to metadata.",
           "type": "string",
         },
         "selector": {
+          "description": "CSS selector to read when scope is selector. Leave empty for metadata, selection, viewport, or page reads.",
           "type": "string",
         },
       },
@@ -976,9 +996,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "maxResults": {
+          "description": "Maximum number of matching elements to return.",
           "type": "number",
         },
         "selector": {
+          "description": "CSS selector to query in the active tab. Defaults to body when omitted or blank.",
           "type": "string",
         },
       },
@@ -991,27 +1013,35 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "behavior": {
+          "description": "Scroll behavior: auto or smooth. Defaults to page handler behavior.",
           "type": "string",
         },
         "deltaX": {
+          "description": "Horizontal scroll delta in pixels.",
           "type": "number",
         },
         "deltaY": {
+          "description": "Vertical scroll delta in pixels.",
           "type": "number",
         },
         "index": {
+          "description": "Zero-based element index when selector matches multiple elements.",
           "type": "number",
         },
         "left": {
+          "description": "Absolute horizontal scroll position in pixels.",
           "type": "number",
         },
         "message": {
+          "description": "Short label or explanation for the scroll action.",
           "type": "string",
         },
         "selector": {
+          "description": "Stable CSS selector for a scrollable element. Leave empty to scroll the page window.",
           "type": "string",
         },
         "top": {
+          "description": "Absolute vertical scroll position in pixels.",
           "type": "number",
         },
       },
@@ -1024,15 +1054,18 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "body": {
+          "description": "Request body (for POST/PUT/PATCH).",
           "type": "string",
         },
         "headers": {
           "additionalProperties": {
             "type": "string",
           },
+          "description": "Additional request headers.",
           "type": "object",
         },
         "method": {
+          "description": "HTTP method (default: GET).",
           "enum": [
             "GET",
             "POST",
@@ -1045,9 +1078,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "url": {
+          "description": "URL to access on the sandbox container server. Accepts: /__virtual__/<port>/path.",
           "type": "string",
         },
         "useIframe": {
+          "description": "REQUIRED true for any web server UI page (Vite, Next.js, Express HTML, React, etc.). The iframe renderer waits for the page to fully load before capturing HTML. Set false or omit ONLY for pure API endpoints that return JSON or plain text — those use direct fetch.",
           "type": "boolean",
         },
       },
@@ -1063,15 +1098,18 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "body": {
+          "description": "Request body (for POST/PUT/PATCH).",
           "type": "string",
         },
         "headers": {
           "additionalProperties": {
             "type": "string",
           },
+          "description": "Additional request headers.",
           "type": "object",
         },
         "method": {
+          "description": "HTTP method (default: GET).",
           "enum": [
             "GET",
             "POST",
@@ -1084,12 +1122,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "timeoutMs": {
+          "description": "Maximum wait time for the renderer iframe before failing.",
           "type": "number",
         },
         "url": {
+          "description": "URL to access on the sandbox container server. Accepts: /__virtual__/<port>/path.",
           "type": "string",
         },
         "useIframe": {
+          "description": "REQUIRED true for any web UI server page (Vite, Next.js, Express HTML page, React SPA, etc.). The iframe renderer waits for the page to fully load before capturing HTML. Set false or omit ONLY for API-style endpoints that return JSON or plain text.",
           "type": "boolean",
         },
       },
@@ -1105,15 +1146,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "file_path": {
+          "description": "File to edit",
           "type": "string",
         },
         "new_string": {
+          "description": "Replacement text",
           "type": "string",
         },
         "old_string": {
+          "description": "Text to find",
           "type": "string",
         },
         "replace_all": {
+          "description": "Replace all occurrences (default: false)",
           "type": "boolean",
         },
       },
@@ -1131,12 +1176,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "new_name": {
+          "description": "New name (rename mode)",
           "type": "string",
         },
         "source_path": {
+          "description": "Current file or folder path",
           "type": "string",
         },
         "target_folder": {
+          "description": "Destination folder path (move mode)",
           "type": "string",
         },
       },
@@ -1152,12 +1200,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "file_path": {
+          "description": "Document path to read",
           "type": "string",
         },
         "limit": {
+          "description": "Max lines to return",
           "type": "number",
         },
         "offset": {
+          "description": "Start line, 1-based (default: 1)",
           "type": "number",
         },
       },
@@ -1173,6 +1224,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "path": {
+          "description": "File or folder path to delete",
           "type": "string",
         },
       },
@@ -1188,18 +1240,23 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "case_sensitive": {
+          "description": "Case sensitive search (default: false)",
           "type": "boolean",
         },
         "file_pattern": {
+          "description": "Glob to filter file names (e.g., "*.md")",
           "type": "string",
         },
         "max_results": {
+          "description": "Max matching lines (default: 50)",
           "type": "number",
         },
         "path": {
+          "description": "Directory scope (default: "/")",
           "type": "string",
         },
         "pattern": {
+          "description": "Regex pattern to search file content. If omitted, lists files only",
           "type": "string",
         },
       },
@@ -1212,12 +1269,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "content": {
+          "description": "Text content to write",
           "type": "string",
         },
         "create_folders": {
+          "description": "Auto-create parent folders (default: true)",
           "type": "boolean",
         },
         "file_path": {
+          "description": "Target file path",
           "type": "string",
         },
       },
@@ -1234,13 +1294,16 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "commands": {
+          "description": "Commands to run in order; the file is saved once, after them. A failed command stops the rest. Without commands: the app's commands and the file at a glance.",
           "items": {
             "properties": {
               "args": {
                 "additionalProperties": {},
+                "description": "Its arguments, as the command's parameters say.",
                 "type": "object",
               },
               "name": {
+                "description": "A command the app lists.",
                 "type": "string",
               },
             },
@@ -1252,9 +1315,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "array",
         },
         "file_path": {
+          "description": "The file, e.g. /reports/Q3.xlsx. Apps open .xlsx, .xlsm, .xls, .ods, .docx, .dotx, .docm, .hwp, .hwpx, .pptx, .whiteboard, .pdf. A path that does not exist yet makes the file.",
           "type": "string",
         },
         "help": {
+          "description": "A command's name: its description and full parameters.",
           "type": "string",
         },
       },
@@ -1270,15 +1335,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "file_path": {
+          "description": "Path to the file to edit",
           "type": "string",
         },
         "new_string": {
+          "description": "Replacement text",
           "type": "string",
         },
         "old_string": {
+          "description": "Exact text to find and replace. Must be present in the file.",
           "type": "string",
         },
         "replace_all": {
+          "description": "Replace every occurrence instead of only the first (default: false)",
           "type": "boolean",
         },
       },
@@ -1296,9 +1365,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "path": {
+          "description": "Base directory to search under (default: "/")",
           "type": "string",
         },
         "pattern": {
+          "description": "Glob pattern to match paths (e.g. "**/*.md", "notes/**/*.txt", "*.json")",
           "type": "string",
         },
       },
@@ -1314,18 +1385,23 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "case_sensitive": {
+          "description": "Case-sensitive matching (default: false)",
           "type": "boolean",
         },
         "context": {
+          "description": "Lines of context to show before and after each match (default: 0)",
           "type": "number",
         },
         "glob": {
+          "description": "Glob pattern to filter filenames (e.g. "*.ts", "**/*.md")",
           "type": "string",
         },
         "max_results": {
+          "description": "Maximum matching lines to return (default: 50)",
           "type": "number",
         },
         "output_mode": {
+          "description": ""content" shows file:line:text (default), "files_with_matches" shows only file paths, "count" shows match count per file",
           "enum": [
             "content",
             "files_with_matches",
@@ -1334,9 +1410,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "path": {
+          "description": "Directory (or exact file path) to search (default: "/"). If a file path is provided, searches only that file.",
           "type": "string",
         },
         "pattern": {
+          "description": "Regex pattern to search for in file content",
           "type": "string",
         },
       },
@@ -1352,9 +1430,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "path": {
+          "description": "Directory path to list (default: "/")",
           "type": "string",
         },
         "recursive": {
+          "description": "List all subdirectory contents recursively (default: false)",
           "type": "boolean",
         },
       },
@@ -1367,9 +1447,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "path": {
+          "description": "Directory path to create",
           "type": "string",
         },
         "recursive": {
+          "description": "Create all missing parent directories automatically (default: true)",
           "type": "boolean",
         },
       },
@@ -1385,12 +1467,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "file_path": {
+          "description": "Path to the file to read",
           "type": "string",
         },
         "limit": {
+          "description": "Maximum number of lines to return",
           "type": "number",
         },
         "offset": {
+          "description": "Start line number, 1-based (default: 1)",
           "type": "number",
         },
       },
@@ -1406,9 +1491,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "path": {
+          "description": "Path of the file or directory to delete",
           "type": "string",
         },
         "recursive": {
+          "description": "Delete a directory and all its contents recursively (required for non-empty directories, default: false)",
           "type": "boolean",
         },
       },
@@ -1424,12 +1511,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "content": {
+          "description": "Text content to write",
           "type": "string",
         },
         "create_dirs": {
+          "description": "Auto-create parent directories if they do not exist (default: true)",
           "type": "boolean",
         },
         "file_path": {
+          "description": "Path of the file to create or overwrite",
           "type": "string",
         },
       },
@@ -1452,6 +1542,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "number",
         },
         "path": {
+          "description": "The source file's library path.",
           "type": "string",
         },
       },
@@ -1467,6 +1558,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "folder": {
+          "description": "Only this folder and its indexed descendants.",
           "type": "string",
         },
         "kind": {
@@ -1482,6 +1574,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "number",
         },
         "query": {
+          "description": "Describe the passage, image, sound, music or video moment to find.",
           "type": "string",
         },
       },
@@ -1497,6 +1590,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "format": {
+          "description": "Output format: \`markdown\` (default) renders each sheet as a Markdown table with a heading; \`csv\` renders each sheet as CSV rows.",
           "enum": [
             "markdown",
             "csv",
@@ -1504,15 +1598,18 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "output_path": {
+          "description": "Optional path to save the extracted text in the root filesystem. If omitted, the text is returned directly.",
           "type": "string",
         },
         "sheets": {
+          "description": "Optional list of sheet names to include. Defaults to all sheets.",
           "items": {
             "type": "string",
           },
           "type": "array",
         },
         "source_path": {
+          "description": "Path to the Excel file in the root filesystem. Must end with .xls, .xlsx, or .xlsm.",
           "type": "string",
         },
       },
@@ -1528,15 +1625,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "new_string": {
+          "description": "Replacement text",
           "type": "string",
         },
         "old_string": {
+          "description": "Exact text to find and replace. Must be present in index.html.",
           "type": "string",
         },
         "project_path": {
+          "description": "Absolute path to the project directory. Call hyperframes_list first if you do not already know this path — never guess values like 'default'.",
           "type": "string",
         },
         "replace_all": {
+          "description": "Replace every occurrence instead of only the first (default: false)",
           "type": "boolean",
         },
       },
@@ -1554,12 +1655,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "force": {
+          "description": "Overwrite if the project already exists (default: false)",
           "type": "boolean",
         },
         "project_path": {
+          "description": "Absolute path for the new project. Choose a meaningful slug that reflects the content (e.g. /projects/vietnam-travel or /projects/product-launch). Never use generic names like 'default', 'project', or 'untitled'.",
           "type": "string",
         },
         "template": {
+          "description": "Template to use for index.html. Options: neon-launch, social-reel, clean-minimal, tech-data, warm-cinema, scaffold-social-reel, scaffold-launch-teaser, scaffold-explainer, scaffold-cinematic. Defaults to neon-launch if omitted.",
           "enum": [
             "neon-launch",
             "social-reel",
@@ -1594,6 +1698,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "project_path": {
+          "description": "Absolute path to the project directory. Call hyperframes_list first if you do not already know this path — never guess values like 'default'.",
           "type": "string",
         },
       },
@@ -1609,15 +1714,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "asset_path": {
+          "description": "Optional relative path inside the project's resources folder, e.g. images/hero.jpg. Do not include project_path.",
           "type": "string",
         },
         "project_path": {
+          "description": "HyperFrames project directory, e.g. /projects/product-launch.",
           "type": "string",
         },
         "sessionId": {
+          "description": "Deprecated. Remote asset import downloads the candidate URL directly.",
           "type": "string",
         },
         "url": {
+          "description": "Remote image or SVG URL to import.",
           "type": "string",
         },
       },
@@ -1634,6 +1743,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "kind": {
+          "description": "Asset type to prioritize. Default: image. Use svg/icon for vector assets.",
           "enum": [
             "image",
             "photo",
@@ -1645,12 +1755,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "max_results": {
+          "description": "Maximum candidates to return from the first successful provider.",
           "type": "number",
         },
         "min_results": {
+          "description": "Fallback to next provider unless this many candidates are found.",
           "type": "number",
         },
         "providers": {
+          "description": "Optional provider order override. Default uses the best supported order.",
           "items": {
             "enum": [
               "google_images",
@@ -1665,6 +1778,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "array",
         },
         "query": {
+          "description": "Search query for remote visual assets, e.g. Vietnam skyline",
           "type": "string",
         },
       },
@@ -1680,6 +1794,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "project_path": {
+          "description": "Absolute path to the project directory, e.g. /projects/product-launch",
           "type": "string",
         },
       },
@@ -1695,6 +1810,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "project_path": {
+          "description": "Absolute path to the project directory, e.g. /projects/product-launch",
           "type": "string",
         },
       },
@@ -1710,9 +1826,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "content": {
+          "description": "Full HyperFrames composition HTML",
           "type": "string",
         },
         "project_path": {
+          "description": "Absolute path to the project directory. For new projects choose a meaningful name under the workspace root. For existing projects, call hyperframes_list first — never guess values like 'default'.",
           "type": "string",
         },
       },
@@ -1729,12 +1847,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "code": {
+          "description": "JavaScript code to execute. Use \`return\` to return a value.",
           "type": "string",
         },
         "maxLogEntries": {
+          "description": "Maximum console log entries to capture (default: 20, keeps latest)",
           "type": "number",
         },
         "timeoutMs": {
+          "description": "Execution timeout in milliseconds (default: 1000)",
           "type": "number",
         },
       },
@@ -1750,15 +1871,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "new_string": {
+          "description": "Replacement text",
           "type": "string",
         },
         "old_string": {
+          "description": "Exact text to find and replace. Must be present in animation.json.",
           "type": "string",
         },
         "project_path": {
+          "description": "Absolute path to the project directory. Call lottie_list first if you do not already know this path — never guess values like 'default'.",
           "type": "string",
         },
         "replace_all": {
+          "description": "Replace every occurrence instead of only the first (default: false)",
           "type": "boolean",
         },
       },
@@ -1776,21 +1901,27 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "duration_frames": {
+          "description": "Total frames, e.g. 90 for 1.5s @ 60fps (default 90)",
           "type": "number",
         },
         "force": {
+          "description": "Overwrite if the project already exists",
           "type": "boolean",
         },
         "frame_rate": {
+          "description": "Frames per second (default 60)",
           "type": "number",
         },
         "height": {
+          "description": "Composition height in px (default 512)",
           "type": "number",
         },
         "project_path": {
+          "description": "Absolute path for the new project under the workspace root, e.g. /projects/loading-spinner. Choose a meaningful slug. Never use generic names like 'default' or 'untitled'.",
           "type": "string",
         },
         "width": {
+          "description": "Composition width in px (default 512)",
           "type": "number",
         },
       },
@@ -1814,6 +1945,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "project_path": {
+          "description": "Absolute path to the project directory. Call lottie_list first if you do not already know this path — never guess values like 'default'.",
           "type": "string",
         },
       },
@@ -1829,6 +1961,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "project_path": {
+          "description": "Absolute path to the project directory, e.g. /projects/loading-spinner",
           "type": "string",
         },
       },
@@ -1844,6 +1977,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "project_path": {
+          "description": "Absolute path to the project directory, e.g. /projects/loading-spinner",
           "type": "string",
         },
       },
@@ -1859,9 +1993,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "content": {
+          "description": "Full Lottie/Bodymovin JSON document (as a JSON string)",
           "type": "string",
         },
         "project_path": {
+          "description": "Absolute path to the project directory. For existing projects, call lottie_list first — never guess values like 'default'.",
           "type": "string",
         },
       },
@@ -1876,8 +2012,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, or write and save in the Editor. Returns the new screen.",
     "name": "memon_act",
     "parameters": {
+      "description": "Act on the computer screen.",
       "properties": {
         "action": {
+          "description": "click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe to see a picture: a page ref (a canvas, an image or any part of the page; an image also gives its address), an image in Files (f3), or with no ref the image the Viewer shows, else the page as it shows; scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
           "enum": [
             "click",
             "hover",
@@ -1902,6 +2040,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "direction": {
+          "description": "scroll: which way (default down, one screen); top/bottom jump to an end; left/right on a page.",
           "enum": [
             "up",
             "down",
@@ -1913,27 +2052,35 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "path": {
+          "description": "describe: the exact image file path from search results, such as "/agents/Bot/assets/hero.webp" or "~/assets/hero.webp". No Files ref or open Viewer is needed. A folder opens in Files so you can choose an image.",
           "type": "string",
         },
         "ref": {
+          "description": "A ref from the latest screen: "b12" (browser), "f3" (files), "e1"/"e2" (editor), or a control of an app window such as "s5" (Studio), "n2" (Tasks), "k3" (Skills), "c1" (Connections), "h4" (Scheduler).",
           "type": "string",
         },
         "submit": {
+          "description": "type: press Enter after typing (submit a search box).",
           "type": "boolean",
         },
         "tab": {
+          "description": "select_tab/close_tab: the tab number from the screen.",
           "type": "number",
         },
         "text": {
+          "description": "type: the text (it replaces the field's value; in the editor e1, the whole file). press: the key. select: the option. toggle: on or off. move/copy: the folder to put the entry in. download: the file's address. zip: the folder's path.",
           "type": "string",
         },
         "to": {
+          "description": "download/zip: a folder (the file keeps its name) or a file path; ~/Downloads by default.",
           "type": "string",
         },
         "x": {
+          "description": "click/hover by position on the Browser's page only, in CSS pixels: from the left of the ref (a canvas b9) or, without a ref, of the page's viewport. Other windows (Files, Tasks, the Editor…) take refs, never x/y.",
           "type": "number",
         },
         "y": {
+          "description": "click/hover by position: from the top, like x.",
           "type": "number",
         },
       },
@@ -1947,15 +2094,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Work in the computer's file apps: Spreadsheet (.xlsx), Documents (.docx), Presentation (.pptx), Whiteboard (.whiteboard) and PDF. { path } opens the file in its app and lists the app's commands; { path, commands: [{ name, args }] } runs them and saves the file, which the user sees change in the app's window; { path, help: "<command>" } gives one command's full parameters. Never write these files as text.",
     "name": "memon_app",
     "parameters": {
+      "description": "Read and change spreadsheets, Word documents, presentations, whiteboards and PDFs with their apps.",
       "properties": {
         "commands": {
+          "description": "Commands to run in order; the file is saved once, after them. A failed command stops the rest. Without commands: the app's commands and the file at a glance.",
           "items": {
             "properties": {
               "args": {
                 "additionalProperties": {},
+                "description": "Its arguments, as the command's parameters say.",
                 "type": "object",
               },
               "name": {
+                "description": "A command the app lists.",
                 "type": "string",
               },
             },
@@ -1967,9 +2118,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "array",
         },
         "help": {
+          "description": "A command's name: its description and full parameters.",
           "type": "string",
         },
         "path": {
+          "description": "The file, e.g. ~/Reports/Q3.xlsx. A path that does not exist yet makes the file. Default: the file open in the app window in front.",
           "type": "string",
         },
       },
@@ -1980,8 +2133,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Hand coding work to pi code, the pi coding agent in its own window: it reads, edits and runs code in the computer's files with its own tools, on the chat's model. A prompt returns when pi's turn ends: it answered or asks you something, failed, or the user stopped it; or sooner, when the user writes to you. Then answer it, steer it, stop it or type into it. The user confirms in the pi code window before you hand it work. Returns a summary and the screen, which shows pi's conversation while its window is in front.",
     "name": "memon_code",
     "parameters": {
+      "description": "Drive pi code, the coding agent app on the computer.",
       "properties": {
         "action": {
+          "description": ""prompt" hands pi work, or steers it while it works, and waits until its turn ends; "wait" waits for that again; "stop" stops it; "keys" types into its terminal; "new" starts a new pi session; "compact" compacts its conversation; "close" quits pi.",
           "enum": [
             "prompt",
             "wait",
@@ -1994,9 +2149,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "cwd": {
+          "description": "prompt: the folder pi works in when this call starts it, e.g. "~/todo-app" (default ~). It stays until pi is closed.",
           "type": "string",
         },
         "key": {
+          "description": "keys: a key pressed after text, e.g. "enter" or "escape".",
           "enum": [
             "enter",
             "alt+enter",
@@ -2015,6 +2172,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "queue": {
+          "description": "A prompt while pi works: "steer" (default) reaches it after its current tool calls, "followUp" once it is done.",
           "enum": [
             "steer",
             "followUp",
@@ -2022,9 +2180,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "text": {
+          "description": "prompt: the work for pi, standing on its own (the goal, the files, how to check it). keys: the text to type. compact: what the summary should keep.",
           "type": "string",
         },
         "waitSeconds": {
+          "description": "The most seconds to wait for pi's turn to end (prompt and wait: 600 by default; 0 returns at once).",
           "type": "number",
         },
       },
@@ -2038,8 +2198,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "See the user's connected apps (Composio apps, MCP servers), their status and tools, and (when the user asks) grant or revoke them for this agent.",
     "name": "memon_connections",
     "parameters": {
+      "description": "View the user's connected apps and which ones this agent uses.",
       "properties": {
         "action": {
+          "description": "list: the user's connections, numbered, with status and whether you may use them; tools: a connection's tools; refresh: ask it for its tools again; grant/revoke: let this agent use it or stop.",
           "enum": [
             "list",
             "tools",
@@ -2050,6 +2212,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "connection": {
+          "description": "tools/refresh/grant/revoke: the connection's number in the list.",
           "type": "number",
         },
       },
@@ -2063,8 +2226,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Keep what you remember between chats in Memory.md (and, when the user asks, their standing instructions in Bot.md), one entry at a time. Both files are read at the start of every chat.",
     "name": "memon_memory",
     "parameters": {
+      "description": "Remember things between chats in Memory.md, and keep Bot.md.",
       "properties": {
         "action": {
+          "description": "list: show the entries, numbered; add: a new entry; update: reword \`entry\`; remove: delete \`entry\`.",
           "enum": [
             "list",
             "add",
@@ -2074,9 +2239,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "entry": {
+          "description": "update/remove (required): the entry number, as [n] in the latest list. A remove moves the entries after it up one, so take numbers from the last memon_memory result, not the start of the chat, and make one change per call.",
           "type": "number",
         },
         "file": {
+          "description": "memory (default): Memory.md, what you remember about the user and their work. bot: Bot.md, the user's standing instructions for you — change it only when the user asks to change how you behave in future chats.",
           "enum": [
             "memory",
             "bot",
@@ -2084,6 +2251,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "text": {
+          "description": "add/update (required): one short, self-contained fact or instruction; for update, the entry's whole new wording.",
           "type": "string",
         },
       },
@@ -2097,8 +2265,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Open an app on the computer and return the screen. Browser opens a url (or a search) and waits for the page to finish drawing itself; Files shows a folder; Editor opens a file; Terminal brings up the shell.",
     "name": "memon_open",
     "parameters": {
+      "description": "Open an app on the computer, a page in the Browser, or a file.",
       "properties": {
         "app": {
+          "description": "The app to open or bring to the front.",
           "enum": [
             "browser",
             "files",
@@ -2110,15 +2280,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "embedded": {
+          "description": "Browser: a local address a Terminal server listens on (http://localhost:PORT) opens embedded; any other opens in a real browser tab, where the user's own servers are. true or false forces one.",
           "type": "boolean",
         },
         "newTab": {
+          "description": "Browser: open in a new tab and keep the current page.",
           "type": "boolean",
         },
         "path": {
+          "description": "Files: the folder to show (default "/"), or a file to open in its app: a .terminal launcher runs in a new Terminal tab, a .studio app opens Studio set up, a .tasks file opens in Tasks. Editor: the file to open as text (a launcher or studio app too, to read or change it without running it); a missing file starts empty and is created on save. Visualize: the .openui file to open.",
           "type": "string",
         },
         "url": {
+          "description": "Browser: the page to open. Plain words search DuckDuckGo instead.",
           "type": "string",
         },
       },
@@ -2132,29 +2306,38 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Run a shell command in the Terminal window (the same "/" tree as Files) and return its output with the screen. Long commands keep running and streaming: call again to wait, type into them, or stop them. The Terminal has tabs, each with its own working directory; \`cd dir\` changes the tab's directory for later commands. One long command (a server) keeps running at a time; while it does, any command that finishes (ls, node --check, tests, curl, git, py) runs next to it in any tab, and a second server is stopped.",
     "name": "memon_run",
     "parameters": {
+      "description": "Run, wait for, type into, or stop a command in the computer's Terminal, and open, switch or close its tabs.",
       "properties": {
         "closeTab": {
+          "description": "Close the Terminal tab given by terminal (default: the tab in front), stopping the command running in it.",
           "type": "boolean",
         },
         "command": {
+          "description": "The shell command to run. Leave out to work with the running one.",
           "type": "string",
         },
         "cwd": {
+          "description": "Working directory; defaults to the Terminal tab's current one.",
           "type": "string",
         },
         "input": {
+          "description": "Type this line into the running command, e.g. an answer to its prompt.",
           "type": "string",
         },
         "saveAs": {
+          "description": "Keep \`command\` as a launcher instead of running it, e.g. "Start Landing Page" saves ~/Start Landing Page.terminal on the desktop; opening it runs the command in a new Terminal tab, in \`cwd\` (default: the tab's directory). A path saves it there.",
           "type": "string",
         },
         "stop": {
+          "description": "Stop the running command (Ctrl+C).",
           "type": "boolean",
         },
         "terminal": {
+          "description": "Terminal tab to work in, e.g. "2", or "new" to open one; it comes to the front so the screen shows its output. Alone, it only switches to that tab. Defaults to the tab in front.",
           "type": "string",
         },
         "waitSeconds": {
+          "description": "How long to wait for the command to finish before returning (default 10). With nothing else set, waits for the running command, or just waits when nothing runs.",
           "type": "number",
         },
       },
@@ -2165,8 +2348,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "View, create, edit, pause, resume or delete this agent's scheduled prompts (runs of this agent at set times) in the Scheduler app. Returns the screen.",
     "name": "memon_schedule",
     "parameters": {
+      "description": "View and manage this agent's scheduled prompts in the Scheduler.",
       "properties": {
         "action": {
+          "description": "list: show this agent's scheduled prompts; create: add one; edit: change one; delete/pause/resume: one by \`schedule\` number.",
           "enum": [
             "list",
             "create",
@@ -2178,15 +2363,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "cron": {
+          "description": "create/edit: 5-field cron in local time: "0 9 * * *" every day 09:00, "30 17 * * 5" Fridays 17:30, "0 */6 * * *" every 6 hours.",
           "type": "string",
         },
         "name": {
+          "description": "create/edit: a short name.",
           "type": "string",
         },
         "prompt": {
+          "description": "create/edit: what the agent is asked each time it runs.",
           "type": "string",
         },
         "schedule": {
+          "description": "edit/delete/pause/resume: the schedule number in the Scheduler.",
           "type": "number",
         },
       },
@@ -2200,11 +2389,14 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Read the computer screen: the open windows, the focused window in full (a page outline with refs, a folder listing, a file, or terminal output), and anything the user changed since your last look. The Browser tab is synced again from its page, once the page holds still.",
     "name": "memon_screen",
     "parameters": {
+      "description": "Read the computer screen.",
       "properties": {
         "waitSeconds": {
+          "description": "Wait this long first (a page loading, a server starting, the user acting), then read the screen.",
           "type": "number",
         },
         "window": {
+          "description": "Optional window to focus first, by id ("w2") or app ("browser", "files", "editor", "terminal").",
           "type": "string",
         },
       },
@@ -2215,8 +2407,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "See the skill library and which skills this agent uses, read a skill's instructions, and (when the user asks) enable, disable, create, edit or delete skills.",
     "name": "memon_skills",
     "parameters": {
+      "description": "View and manage the skills this agent uses.",
       "properties": {
         "action": {
+          "description": "list: the skill library, the agent's skills first; read: open a skill's instructions; enable/disable: use a skill or stop using it; create/edit/delete: change a custom skill.",
           "enum": [
             "list",
             "read",
@@ -2229,12 +2423,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "body": {
+          "description": "create/edit: the skill's instructions, in Markdown.",
           "type": "string",
         },
         "description": {
+          "description": "create/edit: when to use the skill; it is all you see of it before reading it.",
           "type": "string",
         },
         "skill": {
+          "description": "The skill's name, e.g. research-writer (lowercase, hyphens).",
           "type": "string",
         },
       },
@@ -2248,8 +2445,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Use the user's studios with the models they chose: answer typed questions about a text (decision), speak text (speech), transcribe audio, generate images or audio, and run image and text tools. Every result comes back as text; media is saved to Files.",
     "name": "memon_studio",
     "parameters": {
+      "description": "Run the user's studios on the computer: decisions, speech, transcripts, images, image and text tools, audio.",
       "properties": {
         "action": {
+          "description": "list: open Studio and show which tools have a model, with their voices and tasks; run: run one tool, or a .studio app; save: keep a tool and its settings (questions, voice, task, labels…) as a .studio app on the desktop, ready to run again.",
           "enum": [
             "list",
             "run",
@@ -2258,39 +2457,49 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "app": {
+          "description": "run: a .studio app, e.g. "~/Analyze User Feedback.studio": its tool and settings are used, so give only the input (text or path).",
           "type": "string",
         },
         "count": {
+          "description": "image: how many images (default 1).",
           "type": "number",
         },
         "documents": {
+          "description": "text_tools text-ranking: the documents to rank.",
           "items": {
             "type": "string",
           },
           "type": "array",
         },
         "duration": {
+          "description": "audio: seconds (default 10).",
           "type": "number",
         },
         "instructions": {
+          "description": "speech: how to speak, for models that take it.",
           "type": "string",
         },
         "labels": {
+          "description": "text_tools zero-shot-classification: labels to choose from.",
           "items": {
             "type": "string",
           },
           "type": "array",
         },
         "language": {
+          "description": "transcribe: the spoken language as an ISO code, if known.",
           "type": "string",
         },
         "multiLabel": {
+          "description": "text_tools zero-shot-classification: score each label alone.",
           "type": "boolean",
         },
         "name": {
+          "description": "save: the app's name, e.g. "Analyze User Feedback" (saved as ~/Analyze User Feedback.studio), or a path.",
           "type": "string",
         },
         "path": {
+          "description": "A file in Files. transcribe: audio or video; image_tools: an image; image: an image to start from (optional).",
           "type": "string",
         },
         "questions": {
@@ -2311,11 +2520,14 @@ exports[`flows-integrations registered contracts > registers every integrations 
                     "type": "object",
                   },
                 ],
+                "description": "choice: the options, ["a", "b"] or {"a": "what a means"}; score: 2-10 levels, lowest first; noul: optional {"true": "…", "false": "…"} wording.",
               },
               "instructions": {
+                "description": "The question, in full.",
                 "type": "string",
               },
               "type": {
+                "description": "choice: pick one option; score: a level; noul: yes or no.",
                 "enum": [
                   "choice",
                   "score",
@@ -2330,27 +2542,35 @@ exports[`flows-integrations registered contracts > registers every integrations 
             ],
             "type": "object",
           },
+          "description": "decision: questions keyed by a short id, e.g. { sentiment: { type: "choice", instructions: "…", criteria: ["positive", "negative"] } }.",
           "type": "object",
         },
         "saveTo": {
+          "description": "run: also write the whole text result (a transcript, answers, labels) to this file in Files.",
           "type": "string",
         },
         "size": {
+          "description": "image: e.g. "1024x1024".",
           "type": "string",
         },
         "speed": {
+          "description": "speech: 1 is normal.",
           "type": "number",
         },
         "task": {
+          "description": "image_tools, text_tools: the task, only when list shows the model does not fix one.",
           "type": "string",
         },
         "text": {
+          "description": "decision: the text or JSON object to decide about; speech: the words to speak; image, audio: the prompt; text_tools: the text to classify, or the query to rank documents by.",
           "type": "string",
         },
         "threshold": {
+          "description": "image_tools object-detection: the lowest score to keep.",
           "type": "number",
         },
         "tool": {
+          "description": "run: decision (typed questions about a text), speech (text to speech), transcribe (audio to text), image (generate images), image_tools (background removal, depth, detection, captions), text_tools (classify or rank text), audio (music or sound from a prompt).",
           "enum": [
             "decision",
             "speech",
@@ -2363,9 +2583,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "translate": {
+          "description": "transcribe: translate the speech to English instead.",
           "type": "boolean",
         },
         "voice": {
+          "description": "speech: a voice id from list.",
           "type": "string",
         },
       },
@@ -2379,8 +2601,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Plan and track work in the Tasks app the user watches and edits too: add a task with its checklist, start it, tick items, finish or drop it. Tasks stay across chats. Keep them as a careful person would: one task per piece of work, and before adding one, continue the open task it belongs to; tick each item as you finish it, so the list always shows where the work stands; when the plan changes, edit the list rather than leaving stale items; when asked to bring a task up to date, check what is really done and fix the whole list in one edit; finish it only when every item is ticked or edited out. Returns the screen.",
     "name": "memon_tasks",
     "parameters": {
+      "description": "Keep the tasks you share with the user in the Tasks app.",
       "properties": {
         "action": {
+          "description": "add: a new task with \`title\` and its checklist \`items\`; start: begin \`task\` (in progress); check/uncheck: tick one checklist \`item\` of \`task\`; edit: rename \`task\` to \`title\` and/or replace its checklist with \`items\`; done: finish \`task\`; drop: give \`task\` up (it stays as the record).",
           "enum": [
             "add",
             "start",
@@ -2393,21 +2617,26 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "item": {
+          "description": "check/uncheck (required): the checklist item's number in the task, from 1.",
           "type": "number",
         },
         "items": {
+          "description": "add/edit: the checklist, in order: 3–8 concrete steps, each one you can see is done ("Write the hero copy", not "Think about copy"). edit replaces the whole list: items with the same text keep their tick, "[x] " marks one done and "[ ] " not, so one edit brings every item up to date.",
           "items": {
             "type": "string",
           },
           "type": "array",
         },
         "start": {
+          "description": "add: true for a task the user asked for, started at once. Leave out to propose it: it stays new until the user approves it.",
           "type": "boolean",
         },
         "task": {
+          "description": "The task's number, #3 in Tasks. start/drop need it; check/uncheck/edit/done act on the task in progress (the screen's "now: #3") when it is left out.",
           "type": "number",
         },
         "title": {
+          "description": "add/edit: the outcome, short, as a person would name it: "Landing page for the spring launch", not the request word for word.",
           "type": "string",
         },
       },
@@ -2421,17 +2650,22 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Show the user a visual (dashboard, report, comparison, chart, table, form) written in OpenUI Lang in the Visualize app, saved as a .openui file they can open again. Returns the screen.",
     "name": "memon_visualize",
     "parameters": {
+      "description": "Show the user a visual in the Visualize app and keep it as a file.",
       "properties": {
         "guide": {
+          "description": "true: return the OpenUI Lang reference (every component's arguments and the rules) instead of showing a visual. Read it once before your first visual.",
           "type": "boolean",
         },
         "openui": {
+          "description": "The visual in OpenUI Lang: root = CardBlock("Title", "Description", [section_1, …]) first, then one line per section.",
           "type": "string",
         },
         "path": {
+          "description": "Where to keep it (.openui). Default: ~/Visuals/<title>.openui; the visual on screen is updated in place.",
           "type": "string",
         },
         "title": {
+          "description": "Its name; the root CardBlock's title by default.",
           "type": "string",
         },
       },
@@ -2442,8 +2676,10 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "description": "Focus, minimize, maximize or close a window on the computer, and return the screen.",
     "name": "memon_window",
     "parameters": {
+      "description": "Arrange windows on the computer.",
       "properties": {
         "op": {
+          "description": "What to do with the window.",
           "enum": [
             "focus",
             "minimize",
@@ -2453,6 +2689,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "window": {
+          "description": "The window, by id ("w2") or app ("browser", "files", "editor", "viewer", "terminal", "tasks", "studio").",
           "type": "string",
         },
       },
@@ -2469,6 +2706,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "path": {
+          "description": "Folder to list, e.g. "/Work/Invoices 2026". Omit to list every folder with an OKF index.",
           "type": "string",
         },
       },
@@ -2481,6 +2719,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "path": {
+          "description": "The file's path, e.g. "/Work/Invoices 2026/acme.pdf" (its card "acme.pdf.md" works too).",
           "type": "string",
         },
       },
@@ -2496,21 +2735,26 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "folder": {
+          "description": "Only files in this folder or below it.",
           "type": "string",
         },
         "limit": {
+          "description": "Most results (default 10).",
           "type": "number",
         },
         "query": {
+          "description": "Words to find in titles, descriptions, tags and card text.",
           "type": "string",
         },
         "tags": {
+          "description": "Only cards with all of these tags.",
           "items": {
             "type": "string",
           },
           "type": "array",
         },
         "type": {
+          "description": "Only cards whose type contains this, e.g. "PDF" or "invoice".",
           "type": "string",
         },
       },
@@ -2523,14 +2767,17 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "content": {
+          "description": "URL string, markdown text, or HTML string depending on source_type.",
           "type": "string",
         },
         "options": {
           "properties": {
             "margin_mm": {
+              "description": "Page margin in millimetres (default: 10).",
               "type": "number",
             },
             "orientation": {
+              "description": "Page orientation (default: portrait).",
               "enum": [
                 "portrait",
                 "landscape",
@@ -2538,6 +2785,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
               "type": "string",
             },
             "page_size": {
+              "description": "Page size (default: a4).",
               "enum": [
                 "a4",
                 "letter",
@@ -2549,9 +2797,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "object",
         },
         "output_path": {
+          "description": "Where to save the PDF in the root filesystem. Must end with .pdf.",
           "type": "string",
         },
         "source_type": {
+          "description": "Input source type. \`url\` opens a web page; \`markdown\` converts markdown text; \`html\` renders raw HTML.",
           "enum": [
             "url",
             "markdown",
@@ -2574,6 +2824,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "source_path": {
+          "description": "Path to the PDF file in the root filesystem. Must end with .pdf.",
           "type": "string",
         },
       },
@@ -2589,6 +2840,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "detail": {
+          "description": "OpenAI image detail hint. Defaults to auto.",
           "enum": [
             "auto",
             "low",
@@ -2597,6 +2849,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "mode": {
+          "description": "\`page\` renders full PDF pages (default). \`images\` extracts embedded/inline raster images from the selected pages when available.",
           "enum": [
             "page",
             "images",
@@ -2604,11 +2857,14 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "page_range": {
+          "description": "Optional page range to render. Defaults to the first page.",
           "properties": {
             "end": {
+              "description": "Last page to render (1-based, inclusive).",
               "type": "number",
             },
             "start": {
+              "description": "First page to render (1-based).",
               "type": "number",
             },
           },
@@ -2619,12 +2875,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "object",
         },
         "prompt": {
+          "description": "Optional text to include with the generated image message. Defaults to a concise page description prompt.",
           "type": "string",
         },
         "scale": {
+          "description": "PDF render scale. Defaults to 1.5.",
           "type": "number",
         },
         "source_path": {
+          "description": "Path to the PDF file in the root filesystem. Must end with .pdf.",
           "type": "string",
         },
       },
@@ -2640,6 +2899,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "format": {
+          "description": "Output format: \`text\` (default) for plain text with page separators, \`markdown\` for Markdown with frontmatter and headings.",
           "enum": [
             "text",
             "markdown",
@@ -2647,14 +2907,18 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "output_path": {
+          "description": "Optional path to save the extracted text in the root filesystem. If omitted, the text is returned directly.",
           "type": "string",
         },
         "page_range": {
+          "description": "Optional page range to extract. Defaults to all pages.",
           "properties": {
             "end": {
+              "description": "Last page to extract (1-based, inclusive).",
               "type": "number",
             },
             "start": {
+              "description": "First page to extract (1-based).",
               "type": "number",
             },
           },
@@ -2665,6 +2929,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "object",
         },
         "source_path": {
+          "description": "Path to the PDF file in the root filesystem. Must end with .pdf.",
           "type": "string",
         },
       },
@@ -2680,15 +2945,18 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "fromLine": {
+          "description": "Inclusive first line (default: 1)",
           "type": "number",
         },
         "messageIds": {
+          "description": "One to eight message IDs returned by thread_history_search",
           "items": {
             "type": "string",
           },
           "type": "array",
         },
         "mode": {
+          "description": "compact (default) renders prose and collapses each tool call and result to one line; detail renders tool arguments and outputs in full. Line numbers differ between modes.",
           "enum": [
             "compact",
             "detail",
@@ -2696,6 +2964,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "toLine": {
+          "description": "Inclusive last line (default: fromLine + 79, capped at fromLine + 199)",
           "type": "number",
         },
       },
@@ -2711,15 +2980,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "limit": {
+          "description": "Maximum matched message IDs to return (default: 8)",
           "type": "number",
         },
         "prefixLines": {
+          "description": "Context lines before each match (default: 2)",
           "type": "number",
         },
         "query": {
+          "description": "Text to find in earlier messages",
           "type": "string",
         },
         "suffixLines": {
+          "description": "Context lines after each match (default: 2)",
           "type": "number",
         },
       },
@@ -2735,12 +3008,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "file_path": {
+          "description": "Where to save the image inside the root filesystem. Default: /resources/images/<filename>",
           "type": "string",
         },
         "sessionId": {
+          "description": "Optional active web session whose tab fetches the image. Uses direct fetch when no tab session is available.",
           "type": "string",
         },
         "url": {
+          "description": "Image URL to fetch and store in the root filesystem.",
           "type": "string",
         },
       },
@@ -2756,6 +3032,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "detail": {
+          "description": "Vision detail hint. Use 'low' when skimming many images.",
           "enum": [
             "auto",
             "low",
@@ -2764,12 +3041,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "save_dir": {
+          "description": "Also save each image under this directory in the root filesystem, e.g. /resources/images.",
           "type": "string",
         },
         "sessionId": {
+          "description": "Web session whose tab fetches the images. Falls back to a direct download.",
           "type": "string",
         },
         "urls": {
+          "description": "Image URLs to look at, up to 8. Collect them from web_dom_action (query "img" and read each src).",
           "items": {
             "type": "string",
           },
@@ -2788,6 +3068,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     "parameters": {
       "properties": {
         "browserMode": {
+          "description": "Open mode when opening by URL. Leave it out for a window; \`iframe\` only for a local server.",
           "enum": [
             "iframe",
             "tab",
@@ -2796,15 +3077,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "file_path": {
+          "description": "Where to save the PNG in the root filesystem. Default: /screenshots/screenshot-<timestamp>.png",
           "type": "string",
         },
         "sessionId": {
+          "description": "Active web session to capture. Use this when a session is already open.",
           "type": "string",
         },
         "timeoutMs": {
+          "description": "Navigation timeout in milliseconds when opening by URL.",
           "type": "number",
         },
         "url": {
+          "description": "Open this URL first, then capture. Use when no sessionId is available.",
           "type": "string",
         },
       },

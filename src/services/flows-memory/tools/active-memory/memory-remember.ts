@@ -7,7 +7,7 @@ import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-regi
 import {
 	createMemoryEdge,
 	formatMemoryFact,
-	MEMORY_KINDS,
+	MEMORY_FACT_FIELDS,
 	normalizeMemoryKind,
 	resolveRuntimeGraphId,
 	type ActiveMemoryServices,
@@ -17,17 +17,8 @@ import { upsertMemoryNode } from "./shared";
 const TOOL_NAME = "memory_remember" as const;
 
 const schema = z.object({
-	subject: z.string().min(1).describe("The entity this memory is about"),
-	subjectType: z.string().optional().describe("Type of the subject entity"),
-	relation: z.string().min(1).describe("Relationship or predicate"),
-	object: z.string().min(1).describe("The target/value of the memory"),
-	objectType: z.string().optional().describe("Type of the object entity"),
-	factText: z.string().min(1).describe("Natural-language fact to remember"),
-	memoryKind: z.enum(MEMORY_KINDS).optional(),
+	...MEMORY_FACT_FIELDS,
 	validAt: z.string().optional().describe("Optional ISO timestamp when valid"),
-	confidence: z.number().min(0).max(1).optional(),
-	tags: z.array(z.string()).optional(),
-	reason: z.string().optional().describe("Why this memory is being saved"),
 });
 
 type Input = z.infer<typeof schema>;
@@ -38,7 +29,7 @@ export const createMemoryRememberTool: ToolFactory<
 > = (services): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Remember a durable user fact, preference, or project-context item in the currently selected memory graph.",
+		'Remember a durable user fact, preference, or project-context item in the currently selected memory graph. Give it as subject → relation → object plus the full sentence, e.g. subject "user", relation "prefers", object "dark mode", factText "The user prefers dark mode."',
 	schema,
 	execute: async (input, context) => {
 		const graphId = resolveRuntimeGraphId(context);

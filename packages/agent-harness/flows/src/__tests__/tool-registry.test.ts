@@ -59,6 +59,48 @@ describe("tool schema conversion", () => {
 		});
 	});
 
+	it("carries field descriptions to the model, wherever they were set", () => {
+		const [tool] = convertToolsToOpenAI([
+			baseTool(
+				z
+					.object({
+						object: z.string().min(1).describe("What the subject relates to"),
+						inner: z.string().describe("Set before optional").optional(),
+						outer: z.string().optional().describe("Set after optional"),
+						count: z.number().describe("Set before default").default(3),
+						filters: z.array(
+							z.object({ name: z.string().describe("Filter name") }),
+						),
+						plain: z.string(),
+					})
+					.describe("Tool input"),
+			),
+		]);
+
+		expect(tool.function.parameters).toEqual({
+			type: "object",
+			description: "Tool input",
+			properties: {
+				object: { type: "string", description: "What the subject relates to" },
+				inner: { type: "string", description: "Set before optional" },
+				outer: { type: "string", description: "Set after optional" },
+				count: { type: "number", description: "Set before default" },
+				filters: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							name: { type: "string", description: "Filter name" },
+						},
+						required: ["name"],
+					},
+				},
+				plain: { type: "string" },
+			},
+			required: ["object", "filters", "plain"],
+		});
+	});
+
 	it("passes explicit JSON schemas through unchanged", () => {
 		const jsonSchema = {
 			type: "object",

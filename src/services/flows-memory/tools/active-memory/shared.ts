@@ -1,3 +1,4 @@
+import z from "zod";
 import { getKnowledgeDatabase } from "../../interfaces/knowledge";
 import { and, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { ToolExecutionContext } from "@memorall/agent-harness-flows/interfaces/engine/tool";
@@ -25,6 +26,53 @@ export const ACTIVE_MEMORY_ORIGIN = "active_memory";
 export const MEMORY_KINDS = ["fact", "preference", "project_context"] as const;
 
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
+
+/**
+ * The fact a memory stores, as `memory_remember` and `memory_update` take it.
+ *
+ * A memory is a subject → relation → object edge plus the sentence it came
+ * from. `factText` already reads as the whole fact, so without being told the
+ * three parts are separate, required fields, models fold the object into the
+ * sentence and leave `object` out.
+ */
+export const MEMORY_FACT_FIELDS = {
+	subject: z
+		.string()
+		.min(1)
+		.describe(
+			'Who or what the memory is about: the start of subject → relation → object, e.g. "user"',
+		),
+	subjectType: z
+		.string()
+		.optional()
+		.describe('Kind of thing the subject is, e.g. "person", "project"'),
+	relation: z
+		.string()
+		.min(1)
+		.describe(
+			'How the subject relates to the object, as a short predicate, e.g. "prefers", "works on"',
+		),
+	object: z
+		.string()
+		.min(1)
+		.describe(
+			'What the subject relates to: the end of subject → relation → object, e.g. "dark mode". Required even when factText already says it.',
+		),
+	objectType: z
+		.string()
+		.optional()
+		.describe('Kind of thing the object is, e.g. "setting", "tool"'),
+	factText: z
+		.string()
+		.min(1)
+		.describe(
+			'The whole memory as one natural-language sentence, e.g. "The user prefers dark mode."',
+		),
+	memoryKind: z.enum(MEMORY_KINDS).optional(),
+	confidence: z.number().min(0).max(1).optional(),
+	tags: z.array(z.string()).optional(),
+	reason: z.string().optional().describe("Why this memory is being saved"),
+};
 
 /**
  * Which facts a lookup is allowed to see.

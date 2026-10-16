@@ -9,7 +9,7 @@ import {
 	findMemoryFacts,
 	formatMemoryFact,
 	invalidateMemoryEdges,
-	MEMORY_KINDS,
+	MEMORY_FACT_FIELDS,
 	normalizeMemoryKind,
 	resolveRuntimeGraphId,
 	type ActiveMemoryServices,
@@ -22,16 +22,7 @@ const schema = z
 	.object({
 		edgeId: z.string().optional().describe("Exact memory edge id to update"),
 		query: z.string().optional().describe("Search query for memory to update"),
-		subject: z.string().min(1),
-		subjectType: z.string().optional(),
-		relation: z.string().min(1),
-		object: z.string().min(1),
-		objectType: z.string().optional(),
-		factText: z.string().min(1),
-		memoryKind: z.enum(MEMORY_KINDS).optional(),
-		confidence: z.number().min(0).max(1).optional(),
-		tags: z.array(z.string()).optional(),
-		reason: z.string().optional(),
+		...MEMORY_FACT_FIELDS,
 	})
 	.refine((input) => Boolean(input.edgeId?.trim() || input.query?.trim()), {
 		message: "Provide edgeId or query to identify the memory to update",
@@ -45,7 +36,7 @@ export const createMemoryUpdateTool: ToolFactory<
 > = (services): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Update a memory in the currently selected memory graph by invalidating the old fact and creating a replacement.",
+		"Update a memory in the currently selected memory graph by invalidating the old fact and creating a replacement. Identify the old memory with edgeId or query, then give the replacement in full as subject → relation → object plus factText.",
 	schema,
 	execute: async (input, context) => {
 		const graphId = resolveRuntimeGraphId(context);
