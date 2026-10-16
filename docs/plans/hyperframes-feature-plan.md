@@ -1,5 +1,9 @@
 # HyperFrames Feature — Implementation Plan
 
+> **Historical.** This was the original plan; paths and tools below are out of
+> date. The current design (agent tools, reference artifacts, runner export,
+> MemonOS Video app, licenses) is in [docs/hyperframes.md](../hyperframes.md).
+
 ## What We're Building
 
 A new agent feature that lets the agent **compose, preview, and export HyperFrames video compositions** — structured HTML+GSAP files that render deterministically to MP4.

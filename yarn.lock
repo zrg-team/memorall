@@ -1808,10 +1808,108 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource/archivo@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/archivo@npm:5.3.0"
+  checksum: 10c0/8f404b181d15476413c434f441ad9630e08923424a54ff752a255d7c345bf7da7c6a123389c96e7bcb6bd06912f6a99e640d72ff131a459b47cd206d4d85f932
+  languageName: node
+  linkType: hard
+
+"@fontsource/barlow@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/barlow@npm:5.3.0"
+  checksum: 10c0/2efe5abb3dac2ef2eb3ae9a3fd5acdc6955daf85efc1b5439081003e2d67ea90d62aae1d54fd1dcf6fc0eccfc815174bb77e70120a4973c0142431827d0b9c6d
+  languageName: node
+  linkType: hard
+
+"@fontsource/bebas-neue@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/bebas-neue@npm:5.3.0"
+  checksum: 10c0/82a80de77cdfeb127a4b87496cd5c074448797ab614ffcfe406e739b5c4b2953f4d8eccb448a9e9c14f5afeb20162f555b37b8dfdfcf71e3248ad4b3ca7c809a
+  languageName: node
+  linkType: hard
+
+"@fontsource/bodoni-moda@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/bodoni-moda@npm:5.3.0"
+  checksum: 10c0/7397850032134ae6f9b00ad58c9c7c839eae28d42319f5836aa83bee81add9471ab138d677e371470a8907cd177c3e378ad0e5b5d91b3a1e4396fde769e9d79e
+  languageName: node
+  linkType: hard
+
+"@fontsource/dm-mono@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/dm-mono@npm:5.3.0"
+  checksum: 10c0/785424fe3a610ba8dd58e5a6c7b5f9f5f50cdc9419873ac97522ac611aa803b6d2a9de52835593a9b7b76fb721ee87d4d6d959344a8cb4b67353465f681c347f
+  languageName: node
+  linkType: hard
+
+"@fontsource/fredoka-one@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/fredoka-one@npm:5.3.0"
+  checksum: 10c0/f1a02bdc19aaa492fb4dfe5c70c2cb219b7ed487358773d42cfe9988c17d7a2aa66f0d2ce7fc47e33ec1dcde5dfef23facf3f65a645fe4d13191da4cd8b4e56a
+  languageName: node
+  linkType: hard
+
+"@fontsource/fredoka@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/fredoka@npm:5.3.0"
+  checksum: 10c0/15f621efc394a4763f1c2d837dd6e46f0129773be9fd1f68d5efd9ada2d1f2e4804fd3fab8ae1300fa7e88fd39e68e012f351ba2b5f8a62f78255be76f94fe25
+  languageName: node
+  linkType: hard
+
+"@fontsource/hanken-grotesk@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/hanken-grotesk@npm:5.3.0"
+  checksum: 10c0/4c009c37017a5d5288ae393f393b8ef400813d9dd932647ed4bf34efe0c6cefeceaf69f7ae975a30523a3507d26d1793cfb6a89bcd971aed2c8c940e3c7d0c5e
+  languageName: node
+  linkType: hard
+
 "@fontsource/ibm-plex-mono@npm:5.3.0":
   version: 5.3.0
   resolution: "@fontsource/ibm-plex-mono@npm:5.3.0"
   checksum: 10c0/4aaf5a3c9efc7c32de4fa46ff3187ac63720904beab825f331ac01800038899761da23270f09d3fb5cff22f7cdc366904834854e2107229ad60833bba71c223d
+  languageName: node
+  linkType: hard
+
+"@fontsource/instrument-serif@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/instrument-serif@npm:5.3.0"
+  checksum: 10c0/4b04757b67e17b00b631d6ecc9897fbe3129bff2a4320d222827be54f5685565b055ed7b656885da32c3cc05827b080513705d92aa746c666b5a785b3c9f30a2
+  languageName: node
+  linkType: hard
+
+"@fontsource/libre-baskerville@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/libre-baskerville@npm:5.3.0"
+  checksum: 10c0/94d93c8788b0c2350e8794aa332414bd37479ed526b27506a994848f5b1559b6fd70225d0ebf470925583bc6f0fcb79ec93d03fbc6053d69aa62ea2a1b37d664
+  languageName: node
+  linkType: hard
+
+"@fontsource/newsreader@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/newsreader@npm:5.3.0"
+  checksum: 10c0/deda64f6553ad7d05e3f91e2e5a8b10657b28ef04317a8f231cd4524509ac3a33aca3e752df8ab3496e426ac99b51183bdda92d33f80136b525e5b8ba0a96553
+  languageName: node
+  linkType: hard
+
+"@fontsource/quicksand@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/quicksand@npm:5.3.0"
+  checksum: 10c0/54811eca33e5c7a1d945edffcf5fc9f74a822e2e38c703bd70a26af7f885bfdf6e139457a67133fa661fdf3e1fb41b0afa06ab53e0fa206fb4279f9f6ced7e06
+  languageName: node
+  linkType: hard
+
+"@fontsource/shrikhand@npm:5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource/shrikhand@npm:5.3.0"
+  checksum: 10c0/06ab13341cb06ffe3849d2fd15734771e28d38566856426ca2a423b804a7ac35b88e18b9ecc5b79aff445cfa87d29778fa4b76f767c3c2273d71dce623b2a4b1
+  languageName: node
+  linkType: hard
+
+"@fontsource/source-serif-4@npm:5.3.1":
+  version: 5.3.1
+  resolution: "@fontsource/source-serif-4@npm:5.3.1"
+  checksum: 10c0/c00dcc82240225a1e08a7ab4a0b1f4be42f5d4aa5528dc394dff00943180001fd60c6b43c2ae6f1598b09a2b2c1743d2c95c5dec9828583fd0a003c992a145bd
   languageName: node
   linkType: hard
 
@@ -1882,81 +1980,86 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hyperframes/core@npm:0.7.108":
-  version: 0.7.108
-  resolution: "@hyperframes/core@npm:0.7.108"
+"@hyperframes/core@npm:0.8.164":
+  version: 0.8.164
+  resolution: "@hyperframes/core@npm:0.8.164"
   dependencies:
     "@chenglou/pretext": "npm:^0.0.5"
-    "@hyperframes/lint": "npm:0.7.108"
-    "@hyperframes/parsers": "npm:0.7.108"
-    "@hyperframes/studio-server": "npm:0.7.108"
-    bpm-detective: "npm:^2.0.5"
+    "@hyperframes/lint": "npm:0.8.164"
+    "@hyperframes/parsers": "npm:0.8.164"
+    "@hyperframes/studio-server": "npm:0.8.164"
+    acorn: "npm:^8.17.0"
     esbuild: "npm:^0.25.12"
     linkedom: "npm:^0.18.12"
     postcss: "npm:^8.5.8"
+    wawoff2: "npm:^2.0.1"
   dependenciesMeta:
     esbuild:
       optional: true
-  checksum: 10c0/75d021b64735f44365102add08ba6491c6d64976d304dc2544f044abb87123faafaee80dfcb812af3d5eeb0440b6e79cf0c9d26cc791db39fa247ea861beccc0
+  checksum: 10c0/0df840ed93a8243dceda5ca88289c3ef18707d2ae19bc5f253423de3cd819299a069a9b125c3bcc14ba55dd31694c072094cecfd9fd4294f59ddd0271599f214
   languageName: node
   linkType: hard
 
-"@hyperframes/lint@npm:0.7.108":
-  version: 0.7.108
-  resolution: "@hyperframes/lint@npm:0.7.108"
+"@hyperframes/lint@npm:0.8.164":
+  version: 0.8.164
+  resolution: "@hyperframes/lint@npm:0.8.164"
   dependencies:
-    "@hyperframes/parsers": "npm:0.7.108"
+    "@hyperframes/parsers": "npm:0.8.164"
+    acorn: "npm:^8.17.0"
+    acorn-walk: "npm:^8.3.5"
     htmlparser2: "npm:^10.1.0"
     linkedom: "npm:^0.18.12"
     postcss: "npm:^8.5.8"
     postcss-selector-parser: "npm:^7.1.4"
-  checksum: 10c0/02c5f2504116995f6a629103090d74487acecfcff7dc8af47ef777148c6e205500e3cb9aa208a0692164928cc9bf6547e246381fad9bbb2bba0a532f51ff57e2
+  checksum: 10c0/3baeb6d4791b43edd2993fc8878a94db503e43e86d7b668106e1fc38b1b22eef48c9f6bf4fc36f5a3f198dcbf194220a1554066e4a150ae7df716bc423aa260e
   languageName: node
   linkType: hard
 
-"@hyperframes/parsers@npm:0.7.108":
-  version: 0.7.108
-  resolution: "@hyperframes/parsers@npm:0.7.108"
+"@hyperframes/parsers@npm:0.8.164":
+  version: 0.8.164
+  resolution: "@hyperframes/parsers@npm:0.8.164"
   dependencies:
     "@babel/parser": "npm:^7.27.0"
     acorn: "npm:^8.17.0"
     acorn-walk: "npm:^8.3.5"
+    entities: "npm:^7.0.1"
     linkedom: "npm:^0.18.12"
     magic-string: "npm:^0.30.21"
     recast: "npm:^0.23.11"
-  checksum: 10c0/7003f45da78e450496f991301a9a51eccfea32e0d9d852c2603ce1b9e862ddc27f3ba3bf75af1fb2dc57ece7b0b65fa698ceb142c56a8fb63417ea71a6d726ca
+  checksum: 10c0/64e939da53eafcf4070ef94274f53f73409bdf683f836629e4ca93b97156731a6cb6df13919b7131fe7edf39f65fd824cb7f9e64dcf29712c058f0d5a7debe1b
   languageName: node
   linkType: hard
 
-"@hyperframes/player@npm:0.7.108":
-  version: 0.7.108
-  resolution: "@hyperframes/player@npm:0.7.108"
+"@hyperframes/player@npm:0.8.164":
+  version: 0.8.164
+  resolution: "@hyperframes/player@npm:0.8.164"
   dependencies:
-    "@hyperframes/core": "npm:0.7.108"
-  checksum: 10c0/bca7569927d0a1a421c50f78e19081a33fec74c4d5403b98ee40e358c7d9e8eb4a7478ec753f72b7bcea6e1396b7c506e25c0842f8758e8ac58bf0d63a55c039
+    "@hyperframes/core": "npm:0.8.164"
+  checksum: 10c0/e09dd9f2ac1d34f8f646ef2ff2e38e072130c99fa476c5e8e063f813a0a8d0b1f9071deb49450eaf0431a76c4fefa297cbe08c76eafd952deda2b538cda522fe
   languageName: node
   linkType: hard
 
-"@hyperframes/shader-transitions@npm:0.7.108":
-  version: 0.7.108
-  resolution: "@hyperframes/shader-transitions@npm:0.7.108"
+"@hyperframes/shader-transitions@npm:0.8.164":
+  version: 0.8.164
+  resolution: "@hyperframes/shader-transitions@npm:0.8.164"
   dependencies:
     html2canvas: "npm:^1.4.1"
-  checksum: 10c0/4454c9874fa16b7099ed8a6babba8a5902fd839fd6a89aef3d86cc354bf89946dc5e0876f9a583b65cbc01467fca0e570c77367037410f730b3eee0778d75100
+  checksum: 10c0/3985a3aeef620717039b3423ea31b29525dccb10cd0e9ec0c95875dd4b1d7042acaa63e03a50a736d85c9b61eb8e59137d747d6665c12da73c122e0d18906d1b
   languageName: node
   linkType: hard
 
-"@hyperframes/studio-server@npm:0.7.108":
-  version: 0.7.108
-  resolution: "@hyperframes/studio-server@npm:0.7.108"
+"@hyperframes/studio-server@npm:0.8.164":
+  version: 0.8.164
+  resolution: "@hyperframes/studio-server@npm:0.8.164"
   dependencies:
-    "@hyperframes/core": "npm:0.7.108"
-    "@hyperframes/parsers": "npm:0.7.108"
+    "@hyperframes/core": "npm:0.8.164"
+    "@hyperframes/parsers": "npm:0.8.164"
     hono: "npm:^4.0.0"
     linkedom: "npm:^0.18.12"
     postcss: "npm:^8.5.8"
     postcss-selector-parser: "npm:^7.1.2"
-  checksum: 10c0/750309950277b9f1076bfc8cc2f7041728159feb9d77de4a026a9dca81d49857f1050137bdc30b005bffe04fd09db7445d484724829f28fd0bdb300da128eb9b
+    sharp: "npm:^0.35.0"
+  checksum: 10c0/a3b4cb46e6faf3f7ef7a8827e47dccc45b1e3155dc46ab42fe58b302f060b3965fc1c63fbe6eb4b1bc644d278aaab9b0d17ad0227e8bdf6b1efe821e8667c62c
   languageName: node
   linkType: hard
 
@@ -7573,13 +7676,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"bpm-detective@npm:^2.0.5":
-  version: 2.0.5
-  resolution: "bpm-detective@npm:2.0.5"
-  checksum: 10c0/7803df8ef565aeb3607e6912c9c9cef0d29d4539a7ae8dc1ac9f70a1eb0db193f0e65cee2a59c23b9adca5289e9b1c79d9965ff8274477c2dea977a5df25ce36
-  languageName: node
-  linkType: hard
-
 "brace-expansion@npm:^5.0.8":
   version: 5.0.9
   resolution: "brace-expansion@npm:5.0.9"
@@ -13003,14 +13099,28 @@ __metadata:
     "@ebay/nice-modal-react": "npm:^1.2.13"
     "@electric-sql/pglite": "npm:0.4.6"
     "@ffmpeg/core": "npm:0.12.10"
+    "@fontsource/archivo": "npm:5.3.0"
+    "@fontsource/barlow": "npm:5.3.0"
+    "@fontsource/bebas-neue": "npm:5.3.0"
+    "@fontsource/bodoni-moda": "npm:5.3.0"
+    "@fontsource/dm-mono": "npm:5.3.0"
+    "@fontsource/fredoka": "npm:5.3.0"
+    "@fontsource/fredoka-one": "npm:5.3.0"
+    "@fontsource/hanken-grotesk": "npm:5.3.0"
     "@fontsource/ibm-plex-mono": "npm:5.3.0"
+    "@fontsource/instrument-serif": "npm:5.3.0"
+    "@fontsource/libre-baskerville": "npm:5.3.0"
+    "@fontsource/newsreader": "npm:5.3.0"
+    "@fontsource/quicksand": "npm:5.3.0"
+    "@fontsource/shrikhand": "npm:5.3.0"
+    "@fontsource/source-serif-4": "npm:5.3.1"
     "@fontsource/space-grotesk": "npm:5.3.0"
     "@huggingface/transformers": "npm:^4.3.1"
-    "@hyperframes/core": "npm:0.7.108"
-    "@hyperframes/lint": "npm:0.7.108"
-    "@hyperframes/player": "npm:0.7.108"
-    "@hyperframes/shader-transitions": "npm:0.7.108"
-    "@hyperframes/studio-server": "npm:0.7.108"
+    "@hyperframes/core": "npm:0.8.164"
+    "@hyperframes/lint": "npm:0.8.164"
+    "@hyperframes/parsers": "npm:0.8.164"
+    "@hyperframes/player": "npm:0.8.164"
+    "@hyperframes/shader-transitions": "npm:0.8.164"
     "@icons-pack/react-simple-icons": "npm:13.13.0"
     "@imagemagick/magick-wasm": "npm:0.0.44"
     "@langchain/core": "npm:1.2.7"
@@ -16598,7 +16708,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"sharp@npm:^0.35.4":
+"sharp@npm:^0.35.0, sharp@npm:^0.35.4":
   version: 0.35.5
   resolution: "sharp@npm:0.35.5"
   dependencies:
@@ -18247,6 +18357,18 @@ __metadata:
   bin:
     waterfox-location: bin.cjs
   checksum: 10c0/9914b958309c1c288f6ce0fac052635c38052767f77665466395cf2da818687b61ab1bce1e2b51857d486940a87a75199098dbb1ea29f0aeed04cc3c9da94fc8
+  languageName: node
+  linkType: hard
+
+"wawoff2@npm:^2.0.1":
+  version: 2.0.1
+  resolution: "wawoff2@npm:2.0.1"
+  dependencies:
+    argparse: "npm:^2.0.1"
+  bin:
+    woff2_compress.js: bin/woff2_compress.js
+    woff2_decompress.js: bin/woff2_decompress.js
+  checksum: 10c0/98a286b60114e15ed578bbeeef1759b4890a1e8106e1486d8d0d4106b8e6c7a99c4c1d1b64afc76a83893dae040cc19a59dd64cffd5754b5337b5c82efed3d12
   languageName: node
   linkType: hard
 

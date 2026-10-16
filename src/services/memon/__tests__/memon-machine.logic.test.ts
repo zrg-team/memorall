@@ -2777,6 +2777,7 @@ describe("MemonMachine zipping a folder for the user", () => {
 			"skills",
 			"connections",
 			"fx",
+			"video",
 		]);
 		expect(() => machine.openWindow("pi")).toThrow(
 			"pi code is turned off for this agent",
@@ -3097,5 +3098,48 @@ describe("MemonMachine fx", () => {
 		});
 		expect(fx.port.start).not.toHaveBeenCalled();
 		expect(machine.snapshot().terminal.tabs).toHaveLength(1);
+	});
+});
+
+describe("MemonMachine Video", () => {
+	const COMPOSITION = `<div data-composition-id="main" data-width="1920" data-height="1080" data-duration="18"></div><script>window.__timelines["main"] = tl;</script>`;
+
+	it("plays a HyperFrames project in the Video window and shows it on the screen", async () => {
+		const { machine, files } = createMachine();
+		files.set("/projects/launch/index.html", COMPOSITION);
+
+		await machine.openVideo("/projects/launch");
+
+		expect(machine.findWindow("video")).toBeDefined();
+		expect(machine.snapshot().video).toMatchObject({
+			status: "open",
+			kind: "project",
+			path: "/projects/launch",
+		});
+		const screen = machine.readScreen();
+		expect(screen).toContain(
+			"Video · HyperFrames project /projects/launch · 1920×1080 · 18s",
+		);
+		expect(screen).toContain("renders: none yet");
+	});
+
+	it("opens a composition the user double-clicks in Video, and the agent's in the Editor", async () => {
+		const { machine, files } = createMachine();
+		files.set("/projects/launch/index.html", COMPOSITION);
+
+		await machine.openFile("/projects/launch/index.html");
+		expect(machine.findWindow("editor")).toBeDefined();
+		expect(machine.findWindow("video")).toBeUndefined();
+
+		await machine.openFile("/projects/launch/index.html", { byUser: true });
+		expect(machine.findWindow("video")).toBeDefined();
+	});
+
+	it("needs Files, and leaves the dock without it", async () => {
+		const { machine } = createMachine({
+			apps: { ...DEFAULT_MEMON_FEATURE_CONFIG.apps, files: false },
+		});
+		expect(machine.snapshot().builtInApps).not.toContain("video");
+		await expect(machine.openVideo("/projects/launch")).rejects.toThrow();
 	});
 });

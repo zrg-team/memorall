@@ -34,6 +34,9 @@ type InputOperation = Exclude<
 	| "fx.read"
 	| "fx.input"
 	| "fx.resize"
+	| "video.projects"
+	| "video.exportStarted"
+	| "video.exportFailed"
 >;
 
 /** The open chat's agent, when it is a MemonOS Bot. */

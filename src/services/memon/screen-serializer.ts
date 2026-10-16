@@ -50,6 +50,7 @@ const APP_LABEL: Record<MemonWindowState["app"], string> = {
 	visualize: "Visualize",
 	pi: "pi code",
 	fx: "fx",
+	video: "Video",
 	...(Object.fromEntries(
 		HOSTED_APP_IDS.map((id) => [id, HOSTED_APPS[id].name]),
 	) as Record<HostedAppId, string>),
@@ -589,7 +590,64 @@ const briefLine = (
 			return piCodeBrief(snapshot, window.id, min);
 		case "fx":
 			return fxBrief(snapshot, window.id, min);
+		case "video":
+			return videoBrief(snapshot, window.id, min);
 	}
+};
+
+const seconds = (value: number) =>
+	`${Number.isInteger(value) ? value : value.toFixed(1)}s`;
+
+/** What the Video app shows, in a few words. */
+const videoBrief = (
+	snapshot: MemonMachineSnapshot,
+	windowId: string,
+	min: string,
+): string => {
+	const { video } = snapshot;
+	if (!video || video.status === "choosing" || !video.path) {
+		return `── ${windowId} Video${min} · the project list`;
+	}
+	const size =
+		video.width && video.height ? ` · ${video.width}×${video.height}` : "";
+	const length = video.duration ? ` · ${seconds(video.duration)}` : "";
+	const what = video.kind === "video" ? "video" : "HyperFrames project";
+	const exporting = video.exportRequest ? " · exporting MP4" : "";
+	return `── ${windowId} Video${min} · ${what} ${memonDisplayPath(video.path, snapshot.home)}${size}${length}${exporting}`;
+};
+
+const videoLines = (
+	snapshot: MemonMachineSnapshot,
+	windowId: string,
+): string[] => {
+	const { video } = snapshot;
+	const lines = [videoBrief(snapshot, windowId, "")];
+	if (!video || video.status === "choosing" || !video.path) {
+		lines.push(
+			'(the user picks a HyperFrames project to play; memon_open { app: "video", path } opens the one you name)',
+		);
+		return lines;
+	}
+	if (video.kind === "project") {
+		lines.push(
+			"The user sees the composition playing, with play, scrub and Export MP4; exports are saved to its renders folder.",
+		);
+		if (video.renders.length > 0) {
+			lines.push(
+				`renders: ${video.renders.map((path) => memonDisplayPath(path, snapshot.home)).join(", ")}`,
+			);
+		} else {
+			lines.push("renders: none yet");
+		}
+		if (video.lastExport) {
+			lines.push(
+				`last export: ${memonDisplayPath(video.lastExport, snapshot.home)}`,
+			);
+		}
+	} else {
+		lines.push("The user sees the video playing.");
+	}
+	return lines;
 };
 
 /** What fx is doing, in a few words: the user drives it in its terminal. */
@@ -765,6 +823,8 @@ const fullLines = (
 			return piCodeLines(snapshot, window.id, scroll);
 		case "fx":
 			return fxLines(snapshot, window.id);
+		case "video":
+			return videoLines(snapshot, window.id);
 		default:
 			return [];
 	}

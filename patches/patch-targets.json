@@ -3,15 +3,11 @@
 	"targets": [
 		{
 			"packageNames": ["@hyperframes/core"],
-			"intent": "Replace the template's remote GSAP reference with the bundled /vendors/hyperframes runtime."
+			"intent": "Point gsapCdnDist() at the bundled /vendors/hyperframes runtime, so the template GSAP_CDN and studio-server's GSAP, CustomEase and MotionPathPlugin injection never reference a CDN."
 		},
 		{
 			"packageNames": ["@hyperframes/lint"],
 			"intent": "Keep lint remediation hints CSP-safe by referring only to packaged GSAP, Lottie, and Three.js runtimes."
-		},
-		{
-			"packageNames": ["@hyperframes/studio-server"],
-			"intent": "Replace preview-time GSAP, CustomEase, and MotionPathPlugin CDN injection with bundled /vendors/hyperframes assets."
 		},
 		{
 			"packageNames": ["extension-develop"],

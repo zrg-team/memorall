@@ -1031,6 +1031,12 @@ async function main() {
 			src: "node_modules/three/build/three.module.min.js",
 			dest: "three.min.mjs",
 		},
+		// three.module.min.js imports "./three.core.min.js"; without it every
+		// Three.js composition fails to load.
+		{
+			src: "node_modules/three/build/three.core.min.js",
+			dest: "three.core.min.js",
+		},
 		{
 			src: "node_modules/lottie-web/build/player/lottie_canvas.min.js",
 			dest: "lottie_canvas.min.js",
@@ -1176,6 +1182,11 @@ async function main() {
 			),
 			dest: path.join(hfVendorDest, "hyperframes-player.global.js"),
 		},
+		// Apache-2.0: the license travels with the (localized) runtime files.
+		{
+			src: path.resolve(process.cwd(), "node_modules/@hyperframes/core/LICENSE"),
+			dest: path.join(hfVendorDest, "LICENSE-hyperframes.txt"),
+		},
 	];
 
 	let hfCopied = 0;
@@ -1188,6 +1199,108 @@ async function main() {
 		}
 	}
 	if (hfCopied > 0) console.log("✅ HyperFrames runtime assets copied.\n");
+
+	// 6b. Fonts for HyperFrames design presets (frame.md), beyond those
+	// HyperFrames embeds itself: woff2 per subset + a manifest the preview reads
+	// to embed the families a composition names.
+	const fontCatalog = JSON.parse(
+		fs.readFileSync(
+			path.resolve(
+				process.cwd(),
+				"src/services/flows-integrations/tools/hyperframes/font-catalog.json",
+			),
+			"utf8",
+		),
+	);
+	const hfFontDest = path.join(hfVendorDest, "fonts");
+	const fontManifest = {};
+	const fontFaceBlock = /\/\*\s*([\w-]+)\s*\*\/\s*@font-face\s*\{([^}]*)\}/g;
+	const fontProperty = (block, name) =>
+		new RegExp(`${name}\\s*:\\s*([^;]+);`).exec(block)?.[1].trim();
+	for (const [family, { package: fontPackage, faces }] of Object.entries(
+		fontCatalog.families,
+	)) {
+		const prefix = fontPackage.replace(/^@fontsource\//, "");
+		const entries = [];
+		for (const face of faces) {
+			const cssPath = path.resolve(
+				process.cwd(),
+				"node_modules",
+				fontPackage,
+				`${face}.css`,
+			);
+			if (!fs.existsSync(cssPath)) {
+				throw new Error(`HyperFrames font face is missing: ${fontPackage}/${face}.css`);
+			}
+			const css = fs.readFileSync(cssPath, "utf8");
+			for (const [, name, block] of css.matchAll(fontFaceBlock)) {
+				const weight = fontProperty(block, "font-weight");
+				const style = fontProperty(block, "font-style");
+				const subset = name
+					.slice(prefix.length + 1)
+					.replace(new RegExp(`-${weight}-${style}$`), "");
+				if (!fontCatalog.subsets.includes(subset)) continue;
+				const file = /url\(\.\/files\/([^)]+\.woff2)\)/.exec(block)?.[1];
+				if (!file) throw new Error(`No woff2 for ${name} in ${cssPath}`);
+				copyFile(
+					path.resolve(process.cwd(), "node_modules", fontPackage, "files", file),
+					path.join(hfFontDest, file),
+				);
+				entries.push({
+					weight,
+					style,
+					unicodeRange: fontProperty(block, "unicode-range") ?? null,
+					file,
+				});
+			}
+		}
+		if (!entries.some((entry) => entry.file.includes("-latin-"))) {
+			throw new Error(`HyperFrames font ${family} has no latin files`);
+		}
+		fontManifest[family] = entries;
+	}
+	writeFileWithRetry(
+		path.join(hfFontDest, "manifest.json"),
+		`${JSON.stringify(fontManifest, null, "\t")}\n`,
+	);
+	console.log(
+		`✅ HyperFrames preset fonts packaged: ${Object.keys(fontManifest).length} families.\n`,
+	);
+
+	// HyperShader samples each transition's scenes through one capture function
+	// (drawElementImage, else html2canvas). html2canvas renders from a cloned
+	// iframe, which an opaque-origin sandbox page (the preview) cannot read, so
+	// every transition fell back to a fade. Let the page supply the capture:
+	// the preview runner sets globalThis.__hfCaptureElement there.
+	const shaderTransitionsDest = path.join(
+		hfVendorDest,
+		"shader-transitions.global.js",
+	);
+	if (fs.existsSync(shaderTransitionsDest)) {
+		const source = fs.readFileSync(shaderTransitionsDest, "utf8");
+		const captureHook =
+			'if(typeof globalThis.__hfCaptureElement=="function")return globalThis.__hfCaptureElement(A,e,r,t,n);';
+		const capturePattern =
+			/function ([A-Za-z_$][\w$]*)\(A,e,r=([A-Za-z_$][\w$]*),t=([A-Za-z_$][\w$]*),n=\{\}\)\{return ([A-Za-z_$][\w$]*)\(\)&&!n\.preferBrowserPaint\?/g;
+		const matches = source.match(capturePattern)?.length ?? 0;
+		if (matches !== 1 || source.includes(captureHook)) {
+			throw new Error(
+				`@hyperframes/shader-transitions scene capture anchor changed (${matches} matches)`,
+			);
+		}
+		const patched = source.replace(
+			capturePattern,
+			(_match, name, width, height, nativeCapture) =>
+				`function ${name}(A,e,r=${width},t=${height},n={}){${captureHook}return ${nativeCapture}()&&!n.preferBrowserPaint?`,
+		);
+		if (countExact(patched, captureHook) !== 1) {
+			throw new Error(
+				"@hyperframes/shader-transitions scene capture hook did not apply",
+			);
+		}
+		writeFileWithRetry(shaderTransitionsDest, patched);
+		console.log("✅ HyperShader scene capture hook added.\n");
+	}
 
 	if (fs.existsSync(motionPathPluginDest)) {
 		const source = fs
@@ -1205,10 +1318,14 @@ async function main() {
 		);
 	}
 
-	// 7. Patch @hyperframes/player CDN fallback URL
-	// _injectRuntime() falls back to loading the HF runtime from jsdelivr CDN when
-	// the runtime isn't auto-detected. Replace with the local extension copy so
-	// the extension CSP is never violated.
+	// 7. Localize @hyperframes/player
+	// The player loads the HyperFrames runtime from jsdelivr when it is not
+	// already in the composition, and gives every composition iframe a sandbox
+	// attribute and a same-origin probe. Point the runtime at the packaged copy,
+	// and let manifest sandbox pages (any same-origin path under /sandbox/) keep
+	// their own sandbox: no iframe attribute, no probe into a document the
+	// player cannot read (a failed probe makes the player drop the runtime's
+	// messages).
 	const publicPlayerFile = path.resolve(
 		process.cwd(),
 		"public/vendors/hyperframes/hyperframes-player.global.js",
@@ -1228,148 +1345,16 @@ async function main() {
 		),
 		publicPlayerFile,
 	];
-	const hfRuntimeCdnStr = `"https://cdn.jsdelivr.net/npm/@hyperframes/core@0.7.108/dist/hyperframe.runtime.iife.js"`;
-	const hfRuntimeOldLocalExpr = `typeof chrome<"u"&&chrome.runtime?.getURL?chrome.runtime.getURL("vendors/hyperframes/hyperframe.runtime.iife.js"):"https://cdn.jsdelivr.net/npm/@hyperframes/core@0.7.108/dist/hyperframe.runtime.iife.js"`;
-	const hfRuntimePagesUnsafeExpr = `typeof chrome<"u"&&chrome.runtime?.getURL?chrome.runtime.getURL("vendors/hyperframes/hyperframe.runtime.iife.js"):typeof location<"u"?new URL("/vendors/hyperframes/hyperframe.runtime.iife.js",location.href).href:"/vendors/hyperframes/hyperframe.runtime.iife.js"`;
-	const hfRuntimePagesUnsafeMinifiedExpr = `typeof chrome<"u"&&chrome.runtime?.getURL?chrome.runtime.getURL("vendors/hyperframes/hyperframe.runtime.iife.js"):new URL("/vendors/hyperframes/hyperframe.runtime.iife.js",location.href).href`;
+	const hfRuntimeCdnPattern =
+		/"https:\/\/cdn\.jsdelivr\.net\/npm\/@hyperframes\/core@[^"/]+\/dist\/hyperframe\.runtime\.iife\.js"/g;
 	const hfRuntimeLocalExpr = `typeof chrome<"u"&&chrome.runtime?.getURL?chrome.runtime.getURL("vendors/hyperframes/hyperframe.runtime.iife.js"):typeof document<"u"&&document.currentScript?.src?new URL("./hyperframe.runtime.iife.js",document.currentScript.src).href:"./hyperframe.runtime.iife.js"`;
-	const hfRuntimeNestedLocalExpr = `${hfRuntimeOldLocalExpr.replace(hfRuntimeCdnStr, `(${hfRuntimeLocalExpr})`)}`;
-	const hfIframeSandboxExpr = `e.sandbox.add("allow-scripts","allow-same-origin"),`;
-	const hfIframeSandboxNoop = `e.src.includes("/sandbox/")||e.sandbox.add("allow-scripts","allow-same-origin"),`;
-	const hfSandboxDocReadPatches = [
-		[
-			`o=!!this._iframe.contentDocument?.querySelector("[data-composition-src]")`,
-			`o=!this._iframe.src.includes("/sandbox/")&&!!this._iframe.contentDocument?.querySelector("[data-composition-src]")`,
-		],
-		[
-			`let l=this._iframe.contentDocument,p=null,c=l?.querySelector("[data-composition-id]");`,
-			`let l=this._iframe.src.includes("/sandbox/")?null:this._iframe.contentDocument,p=null,c=l?.querySelector("[data-composition-id]");`,
-		],
-		[
-			`let e=this._iframe.contentDocument;if(!e)return;`,
-			`if(location.pathname.startsWith("/sandbox/"))return;let e=this._iframe.contentDocument;if(!e)return;`,
-		],
-		[
-			`let n=this._iframe.contentDocument?.querySelector("[data-composition-id]")?.getAttribute("data-composition-id")`,
-			`let n=this._iframe.src.includes("/sandbox/")?null:this._iframe.contentDocument?.querySelector("[data-composition-id]")?.getAttribute("data-composition-id")`,
-		],
-		[
-			`getIframeDoc:()=>this.iframe.contentDocument`,
-			`getIframeDoc:()=>location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument`,
-		],
-		[
-			`try{let n=this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
-			`try{let n=location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
-		],
-		[
-			`_promoteToParentProxy(){let e=null;try{e=this.iframe.contentDocument}catch{}`,
-			`_promoteToParentProxy(){let e=null;try{e=location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument}catch{}`,
-		],
-		[
-			`_resolveDirectTimelineAdapterFromWindow(e){if(this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
-			`_resolveDirectTimelineAdapterFromWindow(e){if(this._iframe.src.includes("/sandbox/")||this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
-		],
-		[
-			`_resolveDirectTimelineAdapterFromWindow(e){if(location.pathname.startsWith("/sandbox/")||this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
-			`_resolveDirectTimelineAdapterFromWindow(e){if(this._iframe.src.includes("/sandbox/")||this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
-		],
-		[
-			`_resolveDirectTimelineAdapterFromWindow(e){if(!location.pathname.startsWith("/sandbox/")&&this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
-			`_resolveDirectTimelineAdapterFromWindow(e){if(this._iframe.src.includes("/sandbox/")||this.hasRuntimeBridge(e))return null;let t=Reflect.get(e,"__timelines");`,
-		],
-		[
-			`_resolvePlaybackDurationAdapter(e){let t=Reflect.get(e,"__player");if(ce(t))return{kind:"runtime",getDuration:()=>t.getDuration()};let i=this._resolveDirectTimelineAdapterFromWindow(e);return i?{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()}:null}`,
-			`_resolvePlaybackDurationAdapter(e){let t=Reflect.get(e,"__player");if(ce(t))return{kind:"runtime",getDuration:()=>t.getDuration()};let i=this._resolveDirectTimelineAdapterFromWindow(e);return i?{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()}:null}`,
-		],
-		[
-			`_resolvePlaybackDurationAdapter(e){let i=location.pathname.startsWith("/sandbox/")?this._resolveDirectTimelineAdapterFromWindow(e):null;if(i)return{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()};let t=Reflect.get(e,"__player");if(ce(t))return{kind:"runtime",getDuration:()=>t.getDuration()};i=this._resolveDirectTimelineAdapterFromWindow(e);return i?{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()}:null}`,
-			`_resolvePlaybackDurationAdapter(e){let t=Reflect.get(e,"__player");if(ce(t))return{kind:"runtime",getDuration:()=>t.getDuration()};let i=this._resolveDirectTimelineAdapterFromWindow(e);return i?{kind:"direct-timeline",timeline:i,getDuration:()=>i.duration()}:null}`,
-		],
-		[
-			`start(){this.stop(),this._runtimeInjected=!1;let e=0;this._interval=setInterval(()=>{`,
-			`start(){this.stop(),this._runtimeInjected=!1;if(this._iframe.src.includes("/sandbox/"))return;let e=0;this._interval=setInterval(()=>{`,
-		],
-		[
-			`start(){this.stop(),this._runtimeInjected=!1;if(location.pathname.startsWith("/sandbox/"))return;let e=0;this._interval=setInterval(()=>{`,
-			`start(){this.stop(),this._runtimeInjected=!1;if(this._iframe.src.includes("/sandbox/"))return;let e=0;this._interval=setInterval(()=>{`,
-		],
-		[
-			`_trySyncSeek(e){if(location.pathname.startsWith("/sandbox/"))return!1;try{let i=this.iframe.contentWindow?.__player;`,
-			`_trySyncSeek(e){if(this.iframe.src.includes("/sandbox/"))return!1;try{let i=this.iframe.contentWindow?.__player;`,
-		],
-		[
-			`_trySyncSeek(e){try{let i=this.iframe.contentWindow?.__player;`,
-			`_trySyncSeek(e){if(this.iframe.src.includes("/sandbox/"))return!1;try{let i=this.iframe.contentWindow?.__player;`,
-		],
-		[
-			`_trySyncSeek(e){try{let r=this.iframe.contentWindow?.__player;`,
-			`_trySyncSeek(e){if(this.iframe.src.includes("/sandbox/"))return!1;try{let r=this.iframe.contentWindow?.__player;`,
-		],
-		[
-			`_withDirectTimeline(e){if(location.pathname.startsWith("/sandbox/"))return!1;let t=this._directTimelineAdapter||this.probe.resolveDirectTimelineAdapter();`,
-			`_withDirectTimeline(e){if(this.iframe.src.includes("/sandbox/"))return!1;let t=this._directTimelineAdapter||this.probe.resolveDirectTimelineAdapter();`,
-		],
-		[
-			`_withDirectTimeline(e){let t=this._directTimelineAdapter||this.probe.resolveDirectTimelineAdapter();`,
-			`_withDirectTimeline(e){if(this.iframe.src.includes("/sandbox/"))return!1;let t=this._directTimelineAdapter||this.probe.resolveDirectTimelineAdapter();`,
-		],
-		[
-			`_onMessage(e){Ce(e,location.pathname.startsWith("/sandbox/")?e.source:this.iframe.contentWindow,{`,
-			`_onMessage(e){Ce(e,this.iframe.src.includes("/sandbox/")?e.source:this.iframe.contentWindow,{`,
-		],
-		[
-			`_onMessage(e){Ce(e,this.iframe.contentWindow,{`,
-			`_onMessage(e){Ce(e,this.iframe.src.includes("/sandbox/")?e.source:this.iframe.contentWindow,{`,
-		],
-		[
-			`getIframeDoc:()=>location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument`,
-			`getIframeDoc:()=>this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument`,
-		],
-		[
-			`getIframeDoc:()=>this.iframe.contentDocument`,
-			`getIframeDoc:()=>this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument`,
-		],
-		[
-			`try{let n=location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
-			`try{let n=this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
-		],
-		[
-			`try{let n=this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
-			`try{let n=this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument;n&&this._media.setupFromIframe(n)}catch{}`,
-		],
-		[
-			`_promoteToParentProxy(){let e=null;try{e=location.pathname.startsWith("/sandbox/")?null:this.iframe.contentDocument}catch{}`,
-			`_promoteToParentProxy(){let e=null;try{e=this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument}catch{}`,
-		],
-		[
-			`_promoteToParentProxy(){let e=null;try{e=this.iframe.contentDocument}catch{}`,
-			`_promoteToParentProxy(){let e=null;try{e=this.iframe.src.includes("/sandbox/")?null:this.iframe.contentDocument}catch{}`,
-		],
-		[
-			`this.hasAttribute("src")&&(this.iframe.src=j(this,this.getAttribute("src")))`,
-			`this.hasAttribute("src")&&(()=>{let e=j(this,this.getAttribute("src"));e.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})()`,
-		],
-		...["q", "Y"].map((resolver) => [
-			`this.hasAttribute("src")&&(this.iframe.src=${resolver}(this,this.getAttribute("src")))`,
-			`this.hasAttribute("src")&&(()=>{let e=${resolver}(this,this.getAttribute("src")),t=new URL(e,location.href);t.origin===location.origin&&t.pathname.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this.iframe.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})()`,
-		]),
-		[
-			`case"src":i&&(this._ready=!1,this.iframe.src=j(this,i));break;`,
-			`case"src":i&&(this._ready=!1,(()=>{let e=j(this,i);e.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})());break;`,
-		],
-		...["q", "Y"].map((resolver) => [
-			`case"src":r&&(this._ready=!1,this.iframe.src=${resolver}(this,r));break;`,
-			`case"src":r&&(this._ready=!1,(()=>{let e=${resolver}(this,r),t=new URL(e,location.href);t.origin===location.origin&&t.pathname.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this.iframe.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})());break;`,
-		]),
-		[
-			`this.hasAttribute("src")&&(this.iframe.src=j(this,this.getAttribute("src")||""))`,
-			`this.hasAttribute("src")&&(()=>{let e=j(this,this.getAttribute("src")||"");e.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})()`,
-		],
-		...["q", "Y"].map((resolver) => [
-			`this.hasAttribute("src")&&(this.iframe.src=${resolver}(this,this.getAttribute("src")||""))`,
-			`this.hasAttribute("src")&&(()=>{let e=${resolver}(this,this.getAttribute("src")||""),t=new URL(e,location.href);t.origin===location.origin&&t.pathname.includes("/sandbox/")?this.iframe.removeAttribute("sandbox"):this.iframe.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e})()`,
-		]),
-	];
+	const hfProbeStart = `start(){this.stop(),this._failure=null,this._runtimeInjected=!1;let e=0;this._interval=setInterval(()=>{`;
+	const hfProbeStartGuarded = `start(){this.stop(),this._failure=null,this._runtimeInjected=!1;if(this._iframe.src.includes("/sandbox/"))return;let e=0;this._interval=setInterval(()=>{`;
+	const hfLoadSrcPattern =
+		/_loadSrc\(e\)\{if\(this\._wantsVideo\(\)\)\{this\._loadVideo\(e\);return\}this\._teardownVideo\(\),this\.iframe\.src=([A-Za-z_$][\w$]*)\(this,e\)\}/g;
+	const hfSandboxGuard = `i.origin===location.origin&&i.pathname.includes("/sandbox/")?this.iframe.removeAttribute("sandbox")`;
+	const hfLoadSrcLocalized = (resolver) =>
+		`_loadSrc(e){if(this._wantsVideo()){this._loadVideo(e);return}this._teardownVideo(),(()=>{let t=${resolver}(this,e),i=new URL(t,location.href);${hfSandboxGuard}:(this.iframe.sandbox.add("allow-scripts"),this._applySandboxOriginPolicy()),this.iframe.src=t})()}`;
 
 	let playerPatchCount = 0;
 	for (const playerFile of playerDistFiles) {
@@ -1379,70 +1364,40 @@ async function main() {
 			);
 		}
 		const src = fs.readFileSync(playerFile, "utf8");
-		let patched = src;
-		for (let pass = 0; pass < 8; pass += 1) {
-			const beforePass = patched;
-			patched = patched
-				.replaceAll(hfRuntimePagesUnsafeMinifiedExpr, hfRuntimeLocalExpr)
-				.replaceAll(hfRuntimePagesUnsafeExpr, hfRuntimeLocalExpr)
-				.replaceAll(hfRuntimeNestedLocalExpr, hfRuntimeLocalExpr)
-				.replaceAll(hfRuntimeOldLocalExpr, hfRuntimeLocalExpr)
-				.replaceAll(hfRuntimeCdnStr, hfRuntimeLocalExpr)
-				.replaceAll(hfIframeSandboxExpr, hfIframeSandboxNoop);
-			for (const [from, to] of hfSandboxDocReadPatches) {
-				patched = patched.replaceAll(from, to);
-			}
-			patched = patched
-				.replace(
-					/(?:(?:location\.pathname\.startsWith\("\/sandbox\/"\)|e\.src\.includes\("\/sandbox\/"\))\|\|)+e\.sandbox\.add\("allow-scripts","allow-same-origin"\),/g,
-					hfIframeSandboxNoop,
-				)
-				.replace(
-					/(?:if\(location\.pathname\.startsWith\("\/sandbox\/"\)\)return;)+let e=this\._iframe\.contentDocument;if\(!e\)return;/g,
-					`if(location.pathname.startsWith("/sandbox/"))return;let e=this._iframe.contentDocument;if(!e)return;`,
-				)
-				.replaceAll(
-					`:this.iframe.src.includes("/sandbox/")||e.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
-					`:this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
-				)
-				.replaceAll(
-					`:this.iframe.src.includes("/sandbox/")||this.iframe.sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
-					`:this["iframe"].sandbox.add("allow-scripts","allow-same-origin"),this.iframe.src=e`,
-				);
-			if (patched === beforePass) break;
-			if (pass === 7) {
-				throw new Error(
-					`@hyperframes/player localization did not converge: ${playerFile}`,
-				);
-			}
-		}
-		const resolver =
-			path.basename(playerFile) === "hyperframes-player.js" ? "q" : "Y";
-		const localizedAnchors = [
-			hfRuntimeLocalExpr,
-			`start(){this.stop(),this._runtimeInjected=!1;if(this._iframe.src.includes("/sandbox/"))return;let e=0;`,
-			`let e=${resolver}(this,this.getAttribute("src")),t=new URL(e,location.href)`,
-			`let e=${resolver}(this,r),t=new URL(e,location.href)`,
-			`let e=${resolver}(this,this.getAttribute("src")||""),t=new URL(e,location.href)`,
-		];
-		const anchorCounts = localizedAnchors.map((anchor) =>
-			countExact(patched, anchor),
+		const resolvers = [...src.matchAll(hfLoadSrcPattern)].map(
+			(match) => match[1],
 		);
-		const invalidAnchor = anchorCounts.some((count) => count !== 1);
+		const cdnCount = src.match(hfRuntimeCdnPattern)?.length ?? 0;
 		if (
-			invalidAnchor ||
-			countExact(
-				patched,
-				`t.origin===location.origin&&t.pathname.includes("/sandbox/")?this.iframe.removeAttribute("sandbox")`,
-			) !== 3 ||
-			patched.includes(hfRuntimeCdnStr) ||
+			cdnCount !== 1 ||
+			countExact(src, hfProbeStart) !== 1 ||
+			resolvers.length !== 1
+		) {
+			throw new Error(
+				`@hyperframes/player localization anchors changed: ${playerFile} (runtime URLs ${cdnCount}, probes ${countExact(src, hfProbeStart)}, src loaders ${resolvers.length})`,
+			);
+		}
+		const [resolver] = resolvers;
+		// Replacer functions: a resolver such as "$n" must not be read as a
+		// replacement pattern.
+		const patched = src
+			.replace(hfRuntimeCdnPattern, () => hfRuntimeLocalExpr)
+			.replace(hfProbeStart, () => hfProbeStartGuarded)
+			.replace(hfLoadSrcPattern, () => hfLoadSrcLocalized(resolver));
+		if (
+			countExact(patched, hfRuntimeLocalExpr) !== 1 ||
+			countExact(patched, hfProbeStartGuarded) !== 1 ||
+			countExact(patched, `let t=${resolver}(this,e),i=new URL(t,location.href)`) !==
+				1 ||
+			countExact(patched, hfSandboxGuard) !== 1 ||
+			/cdn\.jsdelivr\.net\/npm\/@hyperframes\//.test(patched) ||
 			patched.includes(`?e.source:this.iframe.contentWindow`)
 		) {
 			throw new Error(
-				`@hyperframes/player localization integrity check failed: ${playerFile} (anchor counts ${anchorCounts.join(",")})`,
+				`@hyperframes/player localization integrity check failed: ${playerFile}`,
 			);
 		}
-		if (playerFile === publicPlayerFile && patched !== src) {
+		if (playerFile === publicPlayerFile) {
 			writeFileWithRetry(playerFile, patched.replace(/\r\n?/g, "\n"));
 		}
 		playerPatchCount++;

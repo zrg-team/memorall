@@ -611,6 +611,7 @@
 			"visualize": "Trực quan hóa",
 			"pi": "pi code",
 			"fx": "fx",
+			"video": "Video",
 			"spreadsheet": "Bảng tính",
 			"documents": "Tài liệu",
 			"presentation": "Trình chiếu",
@@ -634,6 +635,19 @@
 				"subtitle": "fx đọc, sửa và chạy mã trong thư mục bạn mở, và lưu các cuộc trò chuyện ở đó.",
 				"createHint": "Tạo trong {{folder}}, rồi fx mở trong đó."
 			}
+		},
+		"video": {
+			"title": "Video",
+			"subtitle": "Các video HyperFrames do agent của bạn tạo. Mở một video để phát và xuất MP4 vào thư mục renders của nó.",
+			"empty": "Chưa có dự án HyperFrames nào. Hãy nhờ agent làm một video.",
+			"refresh": "Làm mới",
+			"renderCount": "{{count}} bản xuất",
+			"renderCount_plural": "{{count}} bản xuất",
+			"allProjects": "Tất cả dự án",
+			"renders": "Bản xuất",
+			"download": "Tải về",
+			"backToComposition": "Quay lại bố cục",
+			"playing": "Đang phát {{name}}"
 		},
 		"piCode": {
 			"starting": "Đang khởi động pi…",
@@ -908,6 +922,12 @@
 			"done": "Xong",
 			"ignore": "Vẫn tiếp tục"
 		},
+		"captureAccess": {
+			"title": "Cần bạn cho phép chụp màn hình",
+			"description": "Trình duyệt hỏi một lần trước khi Memorall được chụp ảnh một thẻ, cho bạn hoặc cho tác nhân.",
+			"allow": "Cho phép chụp màn hình",
+			"declined": "Trình duyệt chưa cho phép. Hãy thử lại; việc chụp ảnh thẻ sẽ tắt cho đến khi được cho phép."
+		},
 		"siteAccess": {
 			"title": "Memorall không đọc được trang này",
 			"description": "Quyền truy cập trang của Memorall trong trình duyệt đang đặt là “Khi nhấp”, nên cả Trình duyệt lẫn tác nhân đều không đọc được trang. Cho phép trên mọi trang để tiếp tục.",
@@ -922,12 +942,6 @@
 		},
 		"kit": {
 			"new": "Mới",
-		"captureAccess": {
-			"title": "Cần bạn cho phép chụp màn hình",
-			"description": "Trình duyệt hỏi một lần trước khi Memorall được chụp ảnh một thẻ, cho bạn hoặc cho tác nhân.",
-			"allow": "Cho phép chụp màn hình",
-			"declined": "Trình duyệt chưa cho phép. Hãy thử lại; việc chụp ảnh thẻ sẽ tắt cho đến khi được cho phép."
-		},
 			"refresh": "Làm mới",
 			"loading": "(đang tải…)",
 			"save": "Lưu",

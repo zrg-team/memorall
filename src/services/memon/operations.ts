@@ -666,5 +666,39 @@ export const runMemonOperation = async (
 			await findMemonMachine(key)?.fx.resize(columns, rows);
 			return null;
 		}
+		case "video.projects":
+			return (await findMemonMachine(job.payload.key)?.video.projects()) ?? [];
+		case "video.open": {
+			const { key, path } = job.payload;
+			return userInput(key, `opened ${path} in Video`, (machine) =>
+				machine.openVideo(path),
+			);
+		}
+		case "video.close":
+			return userInput(
+				job.payload.key,
+				"went back to the Video projects",
+				(machine) => machine.video.close(),
+			);
+		case "video.exported": {
+			const { key, path, requestId } = job.payload;
+			const machine = await getMemonMachine(key);
+			await machine.video.exported(path, requestId);
+			// The agent's own request is answered through its tool call.
+			if (requestId === undefined) {
+				machine.noteUserChange(`exported the video to ${path}`);
+			}
+			return machine.snapshot();
+		}
+		case "video.exportStarted":
+			findMemonMachine(job.payload.key)?.video.exportStarted(
+				job.payload.requestId,
+			);
+			return null;
+		case "video.exportFailed": {
+			const { key, requestId, error } = job.payload;
+			findMemonMachine(key)?.video.exportFailed(requestId, error);
+			return null;
+		}
 	}
 };

@@ -1,7 +1,7 @@
 diff --git a/node_modules/@hyperframes/lint/dist/browser.js b/node_modules/@hyperframes/lint/dist/browser.js
 --- a/node_modules/@hyperframes/lint/dist/browser.js
 +++ b/node_modules/@hyperframes/lint/dist/browser.js
-@@ -2405,7 +2405,7 @@ ${right.raw}`)
+@@ -4730,7 +4730,7 @@ ${right.raw}`)
          code: "missing_gsap_script",
          severity: "error",
          message: "Composition uses GSAP but no GSAP script is loaded. The animation will not run.",
@@ -10,7 +10,7 @@ diff --git a/node_modules/@hyperframes/lint/dist/browser.js b/node_modules/@hype
        }
      ];
    },
-@@ -4348,7 +4348,7 @@ var adapterRules = [
+@@ -5730,7 +5730,7 @@ var adapterRules = [
          code: "missing_lottie_script",
          severity: "error",
          message: "Composition uses Lottie but no Lottie script is loaded. The animation will not render.",
@@ -19,7 +19,7 @@ diff --git a/node_modules/@hyperframes/lint/dist/browser.js b/node_modules/@hype
        }
      ];
    },
-@@ -4369,7 +4369,7 @@ var adapterRules = [
+@@ -5751,7 +5751,7 @@ var adapterRules = [
          code: "missing_three_script",
          severity: "error",
          message: "Composition uses Three.js but no Three.js script is loaded. The 3D scene will not render.",
@@ -31,7 +31,7 @@ diff --git a/node_modules/@hyperframes/lint/dist/browser.js b/node_modules/@hype
 diff --git a/node_modules/@hyperframes/lint/dist/index.js b/node_modules/@hyperframes/lint/dist/index.js
 --- a/node_modules/@hyperframes/lint/dist/index.js
 +++ b/node_modules/@hyperframes/lint/dist/index.js
-@@ -2405,7 +2405,7 @@ ${right.raw}`)
+@@ -4736,7 +4736,7 @@ ${right.raw}`)
          code: "missing_gsap_script",
          severity: "error",
          message: "Composition uses GSAP but no GSAP script is loaded. The animation will not run.",
@@ -40,7 +40,7 @@ diff --git a/node_modules/@hyperframes/lint/dist/index.js b/node_modules/@hyperf
        }
      ];
    },
-@@ -4348,7 +4348,7 @@ var adapterRules = [
+@@ -5736,7 +5736,7 @@ var adapterRules = [
          code: "missing_lottie_script",
          severity: "error",
          message: "Composition uses Lottie but no Lottie script is loaded. The animation will not render.",
@@ -49,7 +49,7 @@ diff --git a/node_modules/@hyperframes/lint/dist/index.js b/node_modules/@hyperf
        }
      ];
    },
-@@ -4369,7 +4369,7 @@ var adapterRules = [
+@@ -5757,7 +5757,7 @@ var adapterRules = [
          code: "missing_three_script",
          severity: "error",
          message: "Composition uses Three.js but no Three.js script is loaded. The 3D scene will not render.",

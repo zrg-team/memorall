@@ -11,6 +11,10 @@ const FPS = 30;
 const TIMESTAMPS = [0, 3, DURATION / 2, DURATION - 1 / FPS];
 const MAX_MEAN_DIFF = 10;
 const MAX_OUTLIER_RATIO = 0.08;
+// The fixture's own html/body fill: the runner's page defaults must not
+// override it (they once did, and every page-level background exported black).
+const PAGE_BACKGROUND = "#05050a";
+const PAGE_BACKGROUND_RGB = "rgb(5, 5, 10)";
 
 const CONTENT_TYPES = new Map([
 	[".html", "text/html; charset=utf-8"],
@@ -193,7 +197,7 @@ function makeFixtureHtml() {
 <head>
   <meta charset="utf-8" />
   <style>
-    html, body { margin: 0; width: 100%; height: 100%; background: #000; font-family: Inter, Arial, sans-serif; }
+    html, body { margin: 0; width: 100%; height: 100%; background: ${PAGE_BACKGROUND}; font-family: Inter, Arial, sans-serif; }
     .scene { position: relative; width: ${WIDTH}px; height: ${HEIGHT}px; overflow: hidden; background: #000; color: white; }
     .cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(1.14) contrast(1.08); }
     .veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.7) 0%, rgba(0,0,0,.12) 42%, rgba(0,0,0,.4) 100%); }
@@ -501,6 +505,16 @@ async function main() {
 		await page.goto(runnerUrl, { waitUntil: "domcontentloaded" });
 		await waitForRunnerReady(page, key);
 		await renderFixture(page, key);
+
+		const pageBackgrounds = await page.evaluate(() => [
+			getComputedStyle(document.documentElement).backgroundColor,
+			getComputedStyle(document.body).backgroundColor,
+		]);
+		if (pageBackgrounds.some((color) => color !== PAGE_BACKGROUND_RGB)) {
+			throw new Error(
+				`The composition's html/body background was overridden: ${pageBackgrounds.join(", ")} (expected ${PAGE_BACKGROUND_RGB})`,
+			);
+		}
 
 		const references = [];
 		for (const timestamp of TIMESTAMPS) {

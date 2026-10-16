@@ -89,6 +89,8 @@ import {
 	type PiCodeOpened,
 } from "./apps/pi-code/pi-code-app";
 import { type FxOpened, MemonFx, type MemonFxPort } from "./apps/fx/fx-app";
+import { MemonVideo, type VideoExportResult } from "./apps/video/video-app";
+import { isHyperframesComposition } from "@/services/flows-integrations/tools/hyperframes/reference";
 import type { MemonEmbeddedPort } from "./embedded-browser";
 import type { MemonModelsPort } from "./models-port";
 import type {
@@ -109,9 +111,9 @@ import {
 } from "./terminal/memon-terminal";
 import type {
 	MemonAppAvailability,
+	MemonBrowserShot,
 	MemonBrowserTab,
 	MemonCursorState,
-	MemonBrowserShot,
 	MemonDriver,
 	MemonFileClipboard,
 	MemonFileExport,
@@ -130,6 +132,7 @@ import type {
 	MemonStudioToolState,
 	MemonTask,
 	MemonTaskState,
+	MemonVideoExportSettings,
 	MemonWindowState,
 } from "./types";
 
@@ -332,6 +335,7 @@ const DEFAULT_LAYOUT: Record<
 	visualize: { x: 0.12, y: 0.04, w: 0.7, h: 0.88 },
 	pi: { x: 0.1, y: 0.04, w: 0.74, h: 0.88 },
 	fx: { x: 0.12, y: 0.05, w: 0.74, h: 0.86 },
+	video: { x: 0.14, y: 0.05, w: 0.7, h: 0.86 },
 	// Office apps need room: a ribbon above the sheet, deck or page.
 	...forHostedApps({ x: 0.05, y: 0.03, w: 0.84, h: 0.9 }),
 };
@@ -351,6 +355,8 @@ const APP_OF_WINDOW: Record<MemonWindowApp, MemonAppId | null> = {
 	connections: null,
 	pi: null,
 	fx: null,
+	// It plays and saves files: it comes with Files.
+	video: "files",
 };
 const FX_TURNED_OFF =
 	"fx is turned off for this agent. The user can turn it on in MemonOS Bot settings.";
@@ -377,12 +383,6 @@ const samePage = (a?: string, b?: string): boolean =>
 
 /** A wall the user let the agent past: this tab, at this address. */
 const wallKey = (tab: MemonBrowserTab): string => `${tab.id} ${tab.url}`;
-const normalizePath = (path: string, cwd = "/"): string => {
-	const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
-	const parts: string[] = [];
-	for (const part of absolute.split("/")) {
-		if (!part || part === ".") continue;
-		if (part === "..") parts.pop();
 
 /** The bytes of a base64 data URL. */
 const dataUrlBytes = (dataUrl: string): Uint8Array =>
@@ -419,6 +419,12 @@ export const screenshotName = (
 	].join("-");
 	return `${[site, part, stamp].filter(Boolean).join("-")}.png`;
 };
+const normalizePath = (path: string, cwd = "/"): string => {
+	const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
+	const parts: string[] = [];
+	for (const part of absolute.split("/")) {
+		if (!part || part === ".") continue;
+		if (part === "..") parts.pop();
 		else parts.push(part);
 	}
 	return `/${parts.join("/")}`;
@@ -487,15 +493,15 @@ export class MemonMachine {
 	private activeTabId: string | null = null;
 	private browserWindowId: number | undefined;
 	private tabSeq = 0;
+	/** The browser refused a screenshot until the user allows it. */
+	private captureBlocked = false;
+	private lastShot: MemonBrowserShot | null = null;
 	/** The agent's home, `/agents/<agent name>`: where Files and the Terminal start. */
 	private homeDir: string = MEMON_GUEST_HOME;
 	private filesCwd: string = MEMON_GUEST_HOME;
 	private fileEntries: MemonFileEntry[] = [];
 	/** The folder `fileEntries` lists. */
 	private listedFilesCwd: string | undefined;
-	/** The browser refused a screenshot until the user allows it. */
-	private captureBlocked = false;
-	private lastShot: MemonBrowserShot | null = null;
 	private filesError: string | undefined;
 	private fileClipboard: MemonFileClipboard | null = null;
 	private fileExport: MemonFileExport | null = null;
@@ -555,6 +561,8 @@ export class MemonMachine {
 	readonly piCode: MemonPiCode;
 	/** fx: runs while its window is open, with or without a view. */
 	readonly fx: MemonFx;
+	/** Plays HyperFrames projects and videos, and exports projects to MP4. */
+	readonly video: MemonVideo;
 	/** Spreadsheet, Documents, Presentation, Whiteboard and PDF. */
 	readonly hosted: MemonHostedApps;
 	private disposed = false;
@@ -674,6 +682,16 @@ export class MemonMachine {
 			},
 			ports.fx,
 		);
+		this.video = new MemonVideo({
+			home: () => this.home,
+			files: this.ports.files,
+			changed: () => this.changed(),
+			show: () => {
+				const window = this.windowFor("video") ?? this.openWindow("video");
+				this.focusWindow(window.id);
+			},
+			windowOpen: () => Boolean(this.windowFor("video")),
+		});
 		this.hosted = new MemonHostedApps(
 			{
 				showWindow: (app) => {
@@ -1052,6 +1070,8 @@ export class MemonMachine {
 		if (app === "pi") this.piCode.choose();
 		// fx too, and its window asks for a folder the same way.
 		if (app === "fx") this.fx.choose();
+		// Video lists the projects to play, unless one is open.
+		if (app === "video") this.video.choose();
 		this.focusWindow(window.id);
 		return window;
 	}
@@ -1114,6 +1134,7 @@ export class MemonMachine {
 		// Closing pi's window quits pi, like closing an app.
 		if (window.app === "pi") await this.piCode.stop();
 		if (window.app === "fx") await this.fx.stop();
+		if (window.app === "video") this.video.reset();
 		this.windows = this.windows.filter((candidate) => candidate !== window);
 		if (this.focusedWindowId === windowId)
 			this.focusedWindowId = this.topWindowId();
@@ -1160,6 +1181,23 @@ export class MemonMachine {
 		if (!this.config.fx) throw new Error(FX_TURNED_OFF);
 		const cwd = await this.codeFolder(path, options.create);
 		return this.fx.open(cwd, options);
+	}
+
+	/**
+	 * Opens a HyperFrames project (its folder or index.html) or a video file
+	 * in the Video app (`~` is the home).
+	 */
+	async openVideo(path: string): Promise<void> {
+		this.requireApp("files");
+		await this.video.open(this.resolvePath(path, this.home));
+	}
+
+	/**
+	 * Exports the project the Video app shows to MP4, in its window, and
+	 * waits for the saved file (`{project}/renders/{name}.mp4`).
+	 */
+	exportVideo(settings?: MemonVideoExportSettings): Promise<VideoExportResult> {
+		return this.video.exportOpenProject(settings);
 	}
 
 	/**
@@ -1241,6 +1279,18 @@ export class MemonMachine {
 
 	/** A picture of a ref of the page, or without one, of what the page shows. */
 	async captureRef(ref?: string): Promise<MemonPageCapture> {
+		return this.capturePage(this.requireActiveTab(), { ref });
+	}
+
+	/**
+	 * A picture of the tab's page as the browser shows it: a real tab's is the
+	 * browser's own screenshot. A refusal for want of the user's permission is
+	 * kept, so the Browser can ask for it.
+	 */
+	private async capturePage(
+		tab: MemonBrowserTab,
+		{ ref, ...options }: Omit<MemonCaptureRequest, "docToken"> = {},
+	): Promise<MemonPageCapture> {
 		this.requireApp("browser");
 		const port = this.browserPort(tab);
 		if (!port.capture) {
@@ -1323,6 +1373,16 @@ export class MemonMachine {
 				new Date(),
 			),
 		);
+		await this.ports.files.write(path, dataUrlBytes(picture.dataUrl));
+		this.lastShot = {
+			id: (this.lastShot?.id ?? 0) + 1,
+			path,
+			width: picture.width,
+			height: picture.height,
+			...(picture.cut ? { cut: true } : {}),
+		};
+		await this.refreshFiles().catch(() => this.changed());
+		return { ...this.lastShot };
 	}
 
 	/** An image file in Files as a picture for the agent to look at. */
@@ -1351,18 +1411,6 @@ export class MemonMachine {
 	private readToken(tab: MemonBrowserTab): string | undefined {
 		return this.readTokens.get(tab.id) ?? tab.outline?.docToken;
 	}
-		return this.capturePage(this.requireActiveTab(), { ref });
-	}
-
-	/**
-	 * A picture of the tab's page as the browser shows it: a real tab's is the
-	 * browser's own screenshot. A refusal for want of the user's permission is
-	 * kept, so the Browser can ask for it.
-	 */
-	private async capturePage(
-		tab: MemonBrowserTab,
-		{ ref, ...options }: Omit<MemonCaptureRequest, "docToken"> = {},
-	): Promise<MemonPageCapture> {
 
 	/** The chat's model can look at pictures, so a picture goes to it. */
 	async modelAcceptsImages(): Promise<boolean> {
@@ -1373,16 +1421,6 @@ export class MemonMachine {
 
 	/** Saves a picture (a PNG data URL) into ~/Pictures; returns its path. */
 	async savePicture(dataUrl: string, name: string): Promise<string> {
-		await this.ports.files.write(path, dataUrlBytes(picture.dataUrl));
-		this.lastShot = {
-			id: (this.lastShot?.id ?? 0) + 1,
-			path,
-			width: picture.width,
-			height: picture.height,
-			...(picture.cut ? { cut: true } : {}),
-		};
-		await this.refreshFiles().catch(() => this.changed());
-		return { ...this.lastShot };
 		this.requireApp("files");
 		const path = await this.freeName(
 			this.resolvePath(MEMON_PICTURES_DIR),
@@ -2119,6 +2157,17 @@ export class MemonMachine {
 			}
 			saved = false;
 		}
+		// A HyperFrames composition the user opens plays in Video; the agent
+		// and "open as text" still get it in the Editor.
+		if (
+			asApp &&
+			options.byUser &&
+			target.split("/").pop()?.toLowerCase() === "index.html" &&
+			isHyperframesComposition(content)
+		) {
+			await this.video.open(target);
+			return;
+		}
 		this.editorPath = target;
 		this.editorContent = content;
 		this.editorSaved = saved;
@@ -2315,6 +2364,30 @@ export class MemonMachine {
 	}
 
 	/**
+	 * Where a new file goes: `to`, a folder (the file keeps `name`) or a file
+	 * path, else `dir`. A name taken already gets a number.
+	 */
+	private async placeFile(
+		to: string | undefined,
+		dir: string,
+		name: string,
+	): Promise<string> {
+		const target = to?.trim();
+		const wanted = this.resolvePath(target || dir);
+		const intoFolder =
+			!target ||
+			/\/$/.test(target) ||
+			(await this.ports.files.isDirectory(wanted).catch(() => false));
+		return intoFolder
+			? this.freeName(wanted, name, "move")
+			: this.freeName(
+					wanted.replace(/\/[^/]*$/, "") || "/",
+					wanted.slice(wanted.lastIndexOf("/") + 1),
+					"move",
+				);
+	}
+
+	/**
 	 * A name nothing in `dir` has yet: the name itself, else "a copy.md",
 	 * "a copy 2.md" for copies and "a 2.md", "a 3.md" for moves.
 	 */
@@ -2363,30 +2436,6 @@ export class MemonMachine {
 			throw new Error(
 				`Give a full http(s) address to download, not "${source}".`,
 			);
-	/**
-	 * Where a new file goes: `to`, a folder (the file keeps `name`) or a file
-	 * path, else `dir`. A name taken already gets a number.
-	 */
-	private async placeFile(
-		to: string | undefined,
-		dir: string,
-		name: string,
-	): Promise<string> {
-		const target = to?.trim();
-		const wanted = this.resolvePath(target || dir);
-		const intoFolder =
-			!target ||
-			/\/$/.test(target) ||
-			(await this.ports.files.isDirectory(wanted).catch(() => false));
-		return intoFolder
-			? this.freeName(wanted, name, "move")
-			: this.freeName(
-					wanted.replace(/\/[^/]*$/, "") || "/",
-					wanted.slice(wanted.lastIndexOf("/") + 1),
-					"move",
-				);
-	}
-
 		}
 		if (sandboxTargetOf(source)) {
 			throw new Error(
@@ -3326,7 +3375,8 @@ export class MemonMachine {
 		return MEMON_BUILTIN_APPS.filter(
 			(app) =>
 				(app !== "pi" || this.config.piCode) &&
-				(app !== "fx" || this.config.fx),
+				(app !== "fx" || this.config.fx) &&
+				(app !== "video" || this.config.apps.files),
 		);
 	}
 
@@ -3360,6 +3410,8 @@ export class MemonMachine {
 				activeTabId: this.activeTabId,
 				windowId: this.browserWindowId,
 				...(this.wallTabId ? { wallTabId: this.wallTabId } : {}),
+				...(this.captureBlocked ? { captureBlocked: true } : {}),
+				...(this.lastShot ? { shot: { ...this.lastShot } } : {}),
 			},
 			files: {
 				cwd: this.filesCwd,
@@ -3410,8 +3462,6 @@ export class MemonMachine {
 				agentName: this.agentName,
 				items: this.connectionItems.map((item) => ({
 					...item,
-				...(this.captureBlocked ? { captureBlocked: true } : {}),
-				...(this.lastShot ? { shot: { ...this.lastShot } } : {}),
 					tools: [...item.tools],
 				})),
 				unlocked: this.connectionsUnlocked,
@@ -3455,6 +3505,7 @@ export class MemonMachine {
 			},
 			piCode: this.piCode.state(),
 			fx: this.fx.state(),
+			video: this.video.state(),
 			pendingUserChanges: [...this.userChanges],
 			drafts: Object.fromEntries(this.drafts),
 			updatedAt: this.lastActiveAt,

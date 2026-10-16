@@ -402,7 +402,14 @@
 		"previewIssue": "Bản xem trước báo cáo {{count}} lỗi",
 		"previewIssue_plural": "Bản xem trước báo cáo {{count}} lỗi",
 		"sendToAgentTitle": "Gửi chi tiết lỗi xem trước cho agent",
-		"sendToAgent": "Gửi cho agent"
+		"sendToAgent": "Gửi cho agent",
+		"dismissIssues": "Ẩn lỗi",
+		"exportCancel": "Hủy",
+		"exportSaving": "Đang lưu MP4",
+		"exportSaved": "Đã lưu vào {{path}}",
+		"exportSaveFailed": "Chưa lưu được vào dự án, bạn vẫn có thể tải về",
+		"exportAgain": "Xuất lại",
+		"loadFailed": "Không mở được video: {{error}}"
 	},
 	"saveDialog": {
 		"title": "Chọn thư mục để lưu",
@@ -577,7 +584,8 @@
 				"skills": "Kỹ năng",
 				"connections": "Kết nối",
 				"pi": "pi code",
-				"fx": "fx"
+				"fx": "fx",
+				"video": "Video"
 			},
 			"appsShort": "Ứng dụng",
 			"appsLabel": "Ứng dụng trên màn hình",

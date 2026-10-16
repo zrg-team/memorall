@@ -30,3 +30,18 @@ export const normalizeProjectPath = (
 /** The composition HTML file inside a project directory. */
 export const compositionFile = (projectPath: string, rootPath = ""): string =>
 	`${normalizeProjectPath(projectPath, rootPath)}/index.html`;
+
+/** The files the HyperFrames tools read and write in a project. */
+export const HYPERFRAMES_PROJECT_FILES = [
+	"index.html",
+	"frame.md",
+	"design.md",
+] as const;
+export type HyperframesProjectFile = (typeof HYPERFRAMES_PROJECT_FILES)[number];
+
+/** A file of a project: its composition (index.html) or its design spec. */
+export const projectFile = (
+	projectPath: string,
+	file: HyperframesProjectFile = "index.html",
+	rootPath = "",
+): string => `${normalizeProjectPath(projectPath, rootPath)}/${file}`;

@@ -475,6 +475,8 @@ export interface MemonMachineSnapshot {
 	piCode?: MemonPiCodeState;
 	/** fx, while its window is open (absent before it is opened). */
 	fx?: MemonFxState;
+	/** The Video app, while its window is open. */
+	video?: MemonVideoState;
 	/** The agent's home folder, `/agents/<agent name>` (shown as `~`). */
 	home: string;
 	cursor: MemonCursorState | null;
@@ -517,6 +519,37 @@ export interface MemonFxState {
 	working: boolean;
 	cwd?: string;
 	error?: string;
+}
+
+/** How an MP4 export is made: the export settings of the HyperFrames player. */
+export interface MemonVideoExportSettings {
+	fps?: 24 | 25 | 30 | 60;
+	quality?: "standard" | "high" | "max";
+	size?: "native" | "720p" | "1080p" | "1440p" | "2160p";
+}
+
+/** A HyperFrames project: a folder whose index.html is a composition. */
+export interface MemonVideoProject {
+	path: string;
+	name: string;
+	width?: number;
+	height?: number;
+	/** Seconds. */
+	duration?: number;
+	/** MP4s exported from it, in its renders folder. */
+	renders: string[];
+}
+
+/** The Video app: a HyperFrames project or a video file, playing. */
+export interface MemonVideoState extends Partial<MemonVideoProject> {
+	/** choosing: the window lists the projects to open. */
+	status: "choosing" | "open";
+	kind?: "project" | "video";
+	renders: string[];
+	/** The agent asked for an MP4: the window exports it, then reports back. */
+	exportRequest?: { id: number } & MemonVideoExportSettings;
+	/** The last MP4 exported here. */
+	lastExport?: string;
 }
 
 /**

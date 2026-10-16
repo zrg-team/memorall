@@ -38,9 +38,8 @@ ordered, stale, missing, orphaned, and mismatched patches.
 The active patch inventory is:
 
 - `@electric-sql+pglite+0.4.6.patch`
-- `@hyperframes+core+0.7.108.patch`
-- `@hyperframes+lint+0.7.108.patch`
-- `@hyperframes+studio-server+0.7.108.patch`
+- `@hyperframes+core+0.8.164.patch`
+- `@hyperframes+lint+0.8.164.patch`
 - `extension-develop+4.0.32.patch`
 - `jspdf+4.2.1.patch`
 - `util+0.12.5.patch`
@@ -84,9 +83,11 @@ Web/Extension/Desktop JavaScript artifact for either forbidden expression.
   0.5.x requires an explicit dump/restore migration) with its bundled vector
   extension,
   Wllama 3.5.1, WebLLM 0.2.84, Transformers 4.2.0, and aligned ZenFS peers.
-- HyperFrames: core/lint/player/shader/studio-server 0.7.108, async lint
-  migration, local GSAP/CustomEase/MotionPath assets, and exact-count player
-  localization/sandbox rewrites.
+- HyperFrames: core/lint/parsers/player/shader 0.8.164 (studio-server is now
+  only core's own dependency and needs no patch: it takes its GSAP URLs from
+  core's patched `gsapCdnDist()`), the browser lint entry
+  (`@hyperframes/lint/browser`), local GSAP/CustomEase/MotionPath assets, and
+  exact-count player localization/sandbox rewrites. See `docs/hyperframes.md`.
 - Extension: Extension.js 4.0.32, its v4 configuration hook, and a minimal
   no-reload patch that gates only the four remaining HMR/reload injection
   paths. Source, config, and staged-artifact scanners are part of the gate.

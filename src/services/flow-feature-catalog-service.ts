@@ -467,8 +467,10 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		displayName: "Video Creator",
 		nameKey: "flowBuilder.features.hyperframesFeature.name",
 		tools: [
+			"hyperframes_list",
 			"hyperframes_init",
 			"hyperframes_write",
+			"hyperframes_edit",
 			"hyperframes_read",
 			"hyperframes_validate",
 			"hyperframes_show",

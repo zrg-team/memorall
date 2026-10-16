@@ -1,0 +1,54 @@
+{
+	"$comment": "Fonts Memorall packages for HyperFrames beyond the ones HyperFrames itself embeds: the families its design presets (frame.md) use. tools/copy-bundled-assets.mjs copies their latin, latin-ext and vietnamese woff2 files from these @fontsource packages into public/vendors/hyperframes/fonts with a manifest; the preview embeds the ones a composition names. All SIL OFL 1.1.",
+	"subsets": ["latin", "latin-ext", "vietnamese"],
+	"families": {
+		"Archivo": {
+			"package": "@fontsource/archivo",
+			"faces": ["400", "500", "600", "700"]
+		},
+		"Barlow": {
+			"package": "@fontsource/barlow",
+			"faces": ["400", "600", "700", "800", "900"]
+		},
+		"Bebas Neue": { "package": "@fontsource/bebas-neue", "faces": ["400"] },
+		"Bodoni Moda": {
+			"package": "@fontsource/bodoni-moda",
+			"faces": ["400", "700", "800", "900", "400-italic"]
+		},
+		"DM Mono": { "package": "@fontsource/dm-mono", "faces": ["400", "500"] },
+		"Fredoka": {
+			"package": "@fontsource/fredoka",
+			"faces": ["500", "600", "700"]
+		},
+		"Fredoka One": { "package": "@fontsource/fredoka-one", "faces": ["400"] },
+		"Hanken Grotesk": {
+			"package": "@fontsource/hanken-grotesk",
+			"faces": ["400", "500", "600", "700"]
+		},
+		"Instrument Serif": {
+			"package": "@fontsource/instrument-serif",
+			"faces": ["400", "400-italic"]
+		},
+		"Libre Baskerville": {
+			"package": "@fontsource/libre-baskerville",
+			"faces": ["400", "700", "400-italic"]
+		},
+		"Newsreader": {
+			"package": "@fontsource/newsreader",
+			"faces": ["400", "500", "400-italic"]
+		},
+		"Quicksand": {
+			"package": "@fontsource/quicksand",
+			"faces": ["400", "500", "600", "700"]
+		},
+		"Shrikhand": { "package": "@fontsource/shrikhand", "faces": ["400"] },
+		"Source Serif 4": {
+			"package": "@fontsource/source-serif-4",
+			"faces": ["400", "500", "600", "400-italic"]
+		},
+		"Space Grotesk": {
+			"package": "@fontsource/space-grotesk",
+			"faces": ["400", "500", "600", "700"]
+		}
+	}
+}

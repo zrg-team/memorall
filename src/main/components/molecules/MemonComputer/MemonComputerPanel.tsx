@@ -64,6 +64,7 @@ import { EditorWindow } from "./windows/EditorWindow";
 import { FilesWindow } from "./windows/FilesWindow";
 import { TerminalWindow } from "./windows/TerminalWindow";
 import { FxWindow } from "./windows/FxWindow";
+import { VideoWindow } from "./windows/VideoWindow";
 import { PiCodeWindow } from "./windows/PiCodeWindow";
 import { MemonWindowErrorBoundary } from "./MemonWindowErrorBoundary";
 import { ViewerWindow } from "./windows/ViewerWindow";
@@ -205,6 +206,10 @@ const windowTitle = (
 			return snapshot.fx?.cwd
 				? `${t("memonComputer.apps.fx")} · ${memonDisplayPath(snapshot.fx.cwd, snapshot.home)}`
 				: t("memonComputer.apps.fx");
+		case "video":
+			return snapshot.video?.path
+				? `${t("memonComputer.apps.video")} · ${snapshot.video.name ?? memonDisplayPath(snapshot.video.path, snapshot.home)}`
+				: t("memonComputer.apps.video");
 	}
 };
 
@@ -445,6 +450,7 @@ export const MemonComputerPanel = React.memo<{
 				return (
 					<BrowserWindow
 						machineKey={key}
+						home={snapshot.home}
 						browser={snapshot.browser}
 						servers={snapshot.terminal.servers ?? NO_SERVERS}
 						send={send}
@@ -513,6 +519,15 @@ export const MemonComputerPanel = React.memo<{
 						state={snapshot.fx}
 						home={snapshot.home}
 						focused={window.id === snapshot.focusedWindowId}
+						send={send}
+					/>
+				);
+			case "video":
+				return (
+					<VideoWindow
+						machineKey={key}
+						state={snapshot.video}
+						home={snapshot.home}
 						send={send}
 					/>
 				);

@@ -14,6 +14,7 @@ import type {
 	MemonMachineSummary,
 	MemonPiCodeBrowse,
 	MemonPiCodeFolder,
+	MemonVideoProject,
 	MemonWindowState,
 } from "./types";
 
@@ -63,7 +64,6 @@ export interface MemonOperationPayloadMap {
 	"browser.recheckWall": Keyed;
 	/** The user lets the agent past a page it stopped on as a wall. */
 	"browser.continuePastWall": Keyed;
-	"scheduler.refresh": Keyed;
 	/**
 	 * Saves a screenshot of the page in front into ~/Pictures: what it shows,
 	 * or with `fullPage`, all of it.
@@ -71,6 +71,7 @@ export interface MemonOperationPayloadMap {
 	"browser.screenshot": Keyed<{ fullPage?: boolean }>;
 	/** The user allowed screenshots of tabs (the browser asked them). */
 	"browser.captureAllowed": Keyed;
+	"scheduler.refresh": Keyed;
 	"scheduler.save": Keyed<{ schedule: MemonScheduleInput }>;
 	"scheduler.delete": Keyed<{ id: string }>;
 	"skills.refresh": Keyed;
@@ -204,6 +205,21 @@ export interface MemonOperationPayloadMap {
 	/** Raw key data from the view (escape sequences, pastes). */
 	"fx.input": Keyed<{ data: string }>;
 	"fx.resize": Keyed<{ columns: number; rows: number }>;
+	/** The HyperFrames projects the Video app lists. */
+	"video.projects": Keyed;
+	/** Opens a project (folder or index.html) or a video file in the Video app. */
+	"video.open": Keyed<{ path: string }>;
+	/** Back to the Video app's project list. */
+	"video.close": Keyed;
+	/**
+	 * The Video window saved an MP4: `requestId` when it was the agent's
+	 * export request, none when the user exported.
+	 */
+	"video.exported": Keyed<{ path: string; requestId?: number }>;
+	/** A Video window on screen started the export the agent asked for. */
+	"video.exportStarted": Keyed<{ requestId: number }>;
+	/** The Video window could not do the export the agent asked for. */
+	"video.exportFailed": Keyed<{ requestId: number; error: string }>;
 }
 
 export type MemonOperation = keyof MemonOperationPayloadMap;
@@ -217,22 +233,26 @@ export type MemonOperationResultMap = {
 				? MemonTerminalCompletion
 				: K extends "piCode.folders" | "fx.folders"
 					? MemonPiCodeFolder[]
-					: K extends "folders.browse"
-						? MemonPiCodeBrowse | null
-						: K extends "piCode.attach" | "fx.attach"
-							? { cursor: number } | null
-							: K extends "piCode.read"
-								? MemonPiCodeOutput
-								: K extends "fx.read"
-									? MemonFxOutput
-									: K extends
-												| "piCode.input"
-												| "piCode.pasteImage"
-												| "piCode.resize"
-												| "fx.input"
-												| "fx.resize"
-										? null
-										: MemonMachineSnapshot | null;
+					: K extends "video.projects"
+						? MemonVideoProject[]
+						: K extends "video.exportFailed" | "video.exportStarted"
+							? null
+							: K extends "folders.browse"
+								? MemonPiCodeBrowse | null
+								: K extends "piCode.attach" | "fx.attach"
+									? { cursor: number } | null
+									: K extends "piCode.read"
+										? MemonPiCodeOutput
+										: K extends "fx.read"
+											? MemonFxOutput
+											: K extends
+														| "piCode.input"
+														| "piCode.pasteImage"
+														| "piCode.resize"
+														| "fx.input"
+														| "fx.resize"
+												? null
+												: MemonMachineSnapshot | null;
 };
 
 /** A read of pi code's terminal output. */

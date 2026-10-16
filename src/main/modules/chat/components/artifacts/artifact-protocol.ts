@@ -311,6 +311,7 @@ const getToolArtifactsFromParts = (
 					content: segment.content,
 					identifier: segment.identifier,
 					title: segment.title,
+					projectPath: segment.projectPath,
 					source: "tool",
 					messageId: message.id,
 					messageContent: message.content,

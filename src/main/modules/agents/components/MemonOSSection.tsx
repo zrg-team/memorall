@@ -1,6 +1,7 @@
 import NiceModal from "@ebay/nice-modal-react";
 import {
 	CalendarClock,
+	Clapperboard,
 	FolderOpen,
 	Globe,
 	LayoutDashboard,
@@ -63,6 +64,7 @@ const BUILTIN_ICONS: Record<
 	connections: Plug,
 	pi: Pi,
 	fx: SquareFunction,
+	video: Clapperboard,
 };
 
 /** The built-in apps the agent's settings can turn off, and their switches. */

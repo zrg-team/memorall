@@ -402,7 +402,14 @@
 		"previewIssue": "Preview reported {{count}} issue",
 		"previewIssue_plural": "Preview reported {{count}} issues",
 		"sendToAgentTitle": "Send preview issue details to the agent",
-		"sendToAgent": "Send to agent"
+		"sendToAgent": "Send to agent",
+		"dismissIssues": "Dismiss issues",
+		"exportCancel": "Cancel",
+		"exportSaving": "Saving MP4",
+		"exportSaved": "Saved to {{path}}",
+		"exportSaveFailed": "Not saved to the project; you can still download it",
+		"exportAgain": "Export again",
+		"loadFailed": "Could not open the video: {{error}}"
 	},
 	"saveDialog": {
 		"title": "Select folder to store",
@@ -578,7 +585,8 @@
 				"skills": "Skills",
 				"connections": "Connections",
 				"pi": "pi code",
-				"fx": "fx"
+				"fx": "fx",
+				"video": "Video"
 			},
 			"appsShort": "Apps",
 			"apps": {
