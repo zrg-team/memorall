@@ -1,5 +1,4 @@
 import {
-	Bot,
 	ChevronDown,
 	Crop,
 	LogOut,
@@ -182,36 +181,6 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 			}`}
 		>
 			<div className="memorall-co-agent-dock">
-				{!collapsed && !showAuthAction && selectedAgent ? (
-					<div
-						className="memorall-co-agent-agent-tag"
-						data-disabled={isSubmitting ? "true" : undefined}
-					>
-						<Bot size={14} strokeWidth={2.25} aria-hidden="true" />
-						<span className="memorall-co-agent-agent-tag-name">
-							{selectedAgent.name}
-						</span>
-						<ChevronDown size={13} strokeWidth={2.25} aria-hidden="true" />
-						{/* Invisible over the whole tag, so the tag is as wide as the
-						    selected name while a click anywhere on it opens the list. */}
-						<select
-							className="memorall-co-agent-agent-select"
-							value={selectedAgent.id}
-							onChange={(event) => onSelectAgentFlow(event.currentTarget.value)}
-							disabled={isSubmitting}
-							aria-label={t("selectAgent")}
-							title={t("workingWith", { agent: selectedAgent.name })}
-							onKeyDown={(event) => event.stopPropagation()}
-							onKeyUp={(event) => event.stopPropagation()}
-						>
-							{agentOptions.map((flow) => (
-								<option key={flow.id} value={flow.id}>
-									{flow.name}
-								</option>
-							))}
-						</select>
-					</div>
-				) : null}
 				<div
 					className="memorall-co-agent-icon"
 					role="button"
@@ -288,6 +257,35 @@ export const CoAgentDock: React.FC<CoAgentDockProps> = ({
 					/>
 				</div>
 			</div>
+			{!collapsed && !showAuthAction && selectedAgent ? (
+				<div
+					className="memorall-co-agent-agent-tag"
+					data-disabled={isSubmitting ? "true" : undefined}
+				>
+					<span className="memorall-co-agent-agent-tag-name">
+						{selectedAgent.name}
+					</span>
+					<ChevronDown size={13} strokeWidth={2.25} aria-hidden="true" />
+					{/* Invisible over the whole tag, so the tag is as wide as the
+					    selected name while a click anywhere on it opens the list. */}
+					<select
+						className="memorall-co-agent-agent-select"
+						value={selectedAgent.id}
+						onChange={(event) => onSelectAgentFlow(event.currentTarget.value)}
+						disabled={isSubmitting}
+						aria-label={t("selectAgent")}
+						title={t("workingWith", { agent: selectedAgent.name })}
+						onKeyDown={(event) => event.stopPropagation()}
+						onKeyUp={(event) => event.stopPropagation()}
+					>
+						{agentOptions.map((flow) => (
+							<option key={flow.id} value={flow.id}>
+								{flow.name}
+							</option>
+						))}
+					</select>
+				</div>
+			) : null}
 			{!collapsed && !showAuthAction ? (
 				<div
 					className="memorall-co-agent-actions"

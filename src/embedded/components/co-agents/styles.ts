@@ -520,12 +520,12 @@ ${coAgentAnchorStyles}
 		border-color: hsl(var(--foreground));
 		color: hsl(var(--background));
 	}
-	/* Who the co-agent is: a name tag beside the avatar that also switches it. */
+	/* Who the co-agent is: a name tag under the avatar that also switches it. */
 	.memorall-co-agent-agent-tag {
 		position: relative;
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: 4px;
 		max-width: min(220px, calc(100vw - 120px));
 		height: 30px;
 		box-sizing: border-box;
@@ -536,8 +536,10 @@ ${coAgentAnchorStyles}
 		box-shadow: 0 10px 24px rgb(15 23 42 / 0.14);
 		backdrop-filter: blur(10px);
 		font: 650 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
-		padding: 0 9px 0 10px;
+		padding: 0 9px 0 12px;
 		cursor: pointer;
+		/* The root lets clicks through to the page; the tag has to take them. */
+		pointer-events: auto;
 	}
 	.memorall-co-agent-agent-tag:hover {
 		background: hsl(var(--accent));

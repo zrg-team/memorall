@@ -122,7 +122,7 @@ describe("co-agent prompt tools", () => {
 
 		const row = document.querySelector(".memorall-co-agent-prompt-tools");
 		expect(row).not.toBeNull();
-		// The agent is switched from the name tag by the avatar, not from here.
+		// The agent is switched from the name tag under the avatar, not from here.
 		expect(row?.querySelector(".memorall-co-agent-agent-select")).toBeNull();
 		expect(
 			row?.querySelectorAll(".memorall-co-agent-prompt-tool"),
