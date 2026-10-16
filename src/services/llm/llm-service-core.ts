@@ -39,8 +39,13 @@ import {
 	CURRENT_MODEL_KEY,
 	CURRENT_MODELS_BY_CATEGORY_KEY,
 	DEFAULT_ON_DEMAND_SERVICE_CONFIGS,
+	DEFAULT_SERVICES,
+	isLocalServerService,
+	LOCAL_SERVER_SERVICES,
+	LOCAL_SERVERS_CHANGED_KEY,
 	SERVICE_TO_PROVIDER,
 	type DefaultOnDemandServiceName,
+	type LocalServerServiceName,
 } from "./constants";
 import type { LLMRegistry } from "./interfaces/service";
 import { PROVIDER_REGISTRY, isKnownProvider } from "./provider-registry";
@@ -108,6 +113,8 @@ export abstract class LLMServiceCore {
 	protected currentModelsByCategory: CurrentModelsByCategory = {};
 	private storageUnsubscribe: (() => void) | null = null;
 	private storageLoadAttempted = false;
+	/** Local server work runs one at a time, so a service is never made twice. */
+	private localServicesQueue: Promise<unknown> = Promise.resolve();
 
 	protected abstract create<K extends keyof LLMRegistry>(
 		name: string,
@@ -354,6 +361,12 @@ export abstract class LLMServiceCore {
 			return true;
 		}
 
+		// Saved after this context started: each context (a page, the offscreen
+		// document) holds its own services and restores them only at startup.
+		if (isLocalServerService(name)) {
+			return this.restoreLocalService(name);
+		}
+
 		const serviceName = name as DefaultOnDemandServiceName;
 		const config = DEFAULT_ON_DEMAND_SERVICE_CONFIGS[serviceName];
 		if (!config) {
@@ -509,6 +522,12 @@ export abstract class LLMServiceCore {
 			);
 		unsubscribeFunctions.push(categoriesUnsubscribe);
 
+		unsubscribeFunctions.push(
+			sharedStorageService.subscribe(LOCAL_SERVERS_CHANGED_KEY, () => {
+				void this.restoreLocalServices();
+			}),
+		);
+
 		this.storageUnsubscribe = () => {
 			unsubscribeFunctions.forEach((fn) => fn());
 		};
@@ -521,6 +540,57 @@ export abstract class LLMServiceCore {
 			type: this.currentModel?.provider || "unknown",
 			ready,
 		};
+	}
+
+	private queueLocalServices<T>(work: () => Promise<T>): Promise<T> {
+		const run = this.localServicesQueue.then(work, work);
+		this.localServicesQueue = run.catch(() => undefined);
+		return run;
+	}
+
+	private createLocalService(
+		name: LocalServerServiceName,
+		baseURL: string,
+	): Promise<unknown> {
+		return name === DEFAULT_SERVICES.OLLAMA
+			? this.create(name, { type: "ollama", baseURL })
+			: this.create(name, { type: "lmstudio", baseURL });
+	}
+
+	/**
+	 * Ollama and LM Studio as saved now: each is made again on its saved URL,
+	 * or removed when it is no longer saved.
+	 */
+	async restoreLocalServices(): Promise<void> {
+		await this.queueLocalServices(async () => {
+			const configs = (await this.loadLocalServiceConfigs()) ?? {};
+			for (const name of LOCAL_SERVER_SERVICES) {
+				if (this.has(name)) this.remove(name);
+				const baseURL = configs[name]?.baseURL;
+				if (!baseURL) continue;
+				try {
+					await this.createLocalService(name, baseURL);
+				} catch (error) {
+					logWarn(`Failed to create/update ${name} service:`, error);
+				}
+			}
+		});
+	}
+
+	/** One local server, made from its saved settings when it is missing. */
+	private restoreLocalService(name: LocalServerServiceName): Promise<boolean> {
+		return this.queueLocalServices(async () => {
+			if (this.has(name)) return true;
+			const baseURL = (await this.loadLocalServiceConfigs())?.[name]?.baseURL;
+			if (!baseURL) return false;
+			try {
+				await this.createLocalService(name, baseURL);
+				return true;
+			} catch (error) {
+				logWarn(`Failed to create ${name} service on demand:`, error);
+				return this.has(name);
+			}
+		});
 	}
 
 	// Shared method to load local service configurations from database
