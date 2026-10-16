@@ -16,6 +16,7 @@ const PAGE = `<!doctype html>
     window.plausible = window.plausible || function () {};
   </script>
   <script src="https://js.puter.com/v2/" defer></script>
+  <link rel="manifest" href="./manifest.json" />
 </head><body>
   <script type="module" src="/src/main.js"></script>
 </body></html>`;
@@ -30,6 +31,8 @@ test("an app's page runs no remote or inline code and keeps its entry", () => {
 	assert.match(html, /application\/ld\+json/);
 	assert.equal(inline.length, 1);
 	assert.match(inline[0].body, /localStorage\.getItem/);
+	// The stores accept one manifest.json per package: the extension's.
+	assert.doesNotMatch(html, /manifest/i);
 });
 
 test("a page without exactly one main.js entry is refused", () => {

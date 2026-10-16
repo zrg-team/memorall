@@ -30,7 +30,7 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	DIST_REWRITES,
@@ -232,9 +232,9 @@ const applyEdits = (app, work) => {
 
 /**
  * index.html as an extension page may hold it: remote scripts (the Puter SDK,
- * analytics) dropped, inline scripts moved to files in public/, and the
- * host's stylesheet added. The page still enters at src/main.js, whose first
- * import is now the host's boot.
+ * analytics) dropped, inline scripts moved to files in public/, the web app
+ * manifest link dropped (see finishDist), and the host's stylesheet added. The
+ * page still enters at src/main.js, whose first import is now the host's boot.
  */
 export const transformIndexHtml = (html) => {
 	const inline = [];
@@ -259,8 +259,21 @@ export const transformIndexHtml = (html) => {
 		},
 	);
 	if (entries !== 1) throw new Error(`index.html: expected one src/main.js entry, found ${entries}`);
-	return { html: out.replace(/\n\s*<!--[^>]*Plausible[^>]*-->/gi, ""), inline };
+	return {
+		html: out
+			.replace(/\n\s*<!--[^>]*Plausible[^>]*-->/gi, "")
+			.replace(/\n?[ \t]*<link\b[^>]*\brel\s*=\s*["']manifest["'][^>]*>/gi, ""),
+		inline,
+	};
 };
+
+/**
+ * The name an extension package keeps for its own manifest. The Chrome Web
+ * Store and Edge Add-ons refuse a package with more than one file of this
+ * name, and each app ships a web app manifest under it — for installing the
+ * app as a PWA, which a framed app never is.
+ */
+export const EXTENSION_MANIFEST = "manifest.json";
 
 const rewriteIndexHtml = (work) => {
 	const file = join(work, "index.html");
@@ -323,6 +336,9 @@ const build = (app, work) => {
 const finishDist = (app, work) => {
 	const dist = join(work, "dist");
 	for (const path of app.prune ?? []) rmSync(join(dist, path), { recursive: true, force: true });
+	for (const file of walkFiles(dist)) {
+		if (basename(file) === EXTENSION_MANIFEST) rmSync(file);
+	}
 	for (const file of walkFiles(dist)) {
 		if (!/\.(m?js|html)$/i.test(file)) continue;
 		const source = readFileSync(file, "utf8");
