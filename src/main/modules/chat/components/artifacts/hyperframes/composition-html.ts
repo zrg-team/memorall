@@ -17,6 +17,7 @@ import {
 	type CatalogFontLoader,
 	type CatalogFontManifest,
 	HYPERFRAMES_FONT_ASSET_DIR,
+	HYPERFRAMES_FONT_INDEX,
 } from "@/services/flows-integrations/tools/hyperframes/fonts";
 import { platform } from "@/platform/current";
 
@@ -35,7 +36,7 @@ const fetchBytes = async (url: string): Promise<Uint8Array> => {
 /** The packaged design-preset fonts, fetched once per page. */
 const catalogFonts: CatalogFontLoader = {
 	manifest: () => {
-		fontManifest ??= fetch(fontAsset("manifest.json"))
+		fontManifest ??= fetch(fontAsset(HYPERFRAMES_FONT_INDEX))
 			.then((response) => (response.ok ? response.json() : {}))
 			.catch(() => {
 				fontManifest = null;

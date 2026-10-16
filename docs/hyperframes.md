@@ -214,7 +214,7 @@ Moda, DM Mono, Fredoka, Fredoka One, Hanken Grotesk, Instrument Serif, Libre
 Baskerville, Newsreader, Quicksand, Shrikhand, Source Serif 4, Space Grotesk.
 `font-catalog.json` lists their `@fontsource` packages and weights. Step 6b of
 `tools/copy-bundled-assets.mjs` copies their latin, latin-ext and vietnamese
-woff2 files to `public/vendors/hyperframes/fonts/` with a `manifest.json`
+woff2 files to `public/vendors/hyperframes/fonts/` with a `fonts.json` index (not `manifest.json`: the stores refuse a second one)
 (119 files, ~1.8 MB; git-ignored, rebuilt by the asset step). The preview
 fetches only the faces a composition names and embeds them as data URLs with
 their `unicode-range`. Add a family by adding its `@fontsource` package to

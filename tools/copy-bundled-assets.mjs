@@ -1201,7 +1201,7 @@ async function main() {
 	if (hfCopied > 0) console.log("✅ HyperFrames runtime assets copied.\n");
 
 	// 6b. Fonts for HyperFrames design presets (frame.md), beyond those
-	// HyperFrames embeds itself: woff2 per subset + a manifest the preview reads
+	// HyperFrames embeds itself: woff2 per subset + an index the preview reads
 	// to embed the families a composition names.
 	const fontCatalog = JSON.parse(
 		fs.readFileSync(
@@ -1259,8 +1259,12 @@ async function main() {
 		}
 		fontManifest[family] = entries;
 	}
+	// HYPERFRAMES_FONT_INDEX in fonts.ts. Never manifest.json: the stores
+	// refuse a package with a second one (tools/package-extension.mjs checks),
+	// so an index written under that name by an older run is removed.
+	fs.rmSync(path.join(hfFontDest, "manifest.json"), { force: true });
 	writeFileWithRetry(
-		path.join(hfFontDest, "manifest.json"),
+		path.join(hfFontDest, "fonts.json"),
 		`${JSON.stringify(fontManifest, null, "\t")}\n`,
 	);
 	console.log(

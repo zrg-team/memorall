@@ -25,7 +25,7 @@ const CATALOG_KEYS = new Map(
 	HYPERFRAMES_CATALOG_FONTS.map((family) => [family.toLowerCase(), family]),
 );
 
-/** One face of a packaged catalog font: public/vendors/hyperframes/fonts/manifest.json. */
+/** One face of a packaged catalog font, as HYPERFRAMES_FONT_INDEX lists it. */
 export interface CatalogFontFace {
 	weight: string;
 	style: string;
@@ -37,6 +37,13 @@ export type CatalogFontManifest = Record<string, CatalogFontFace[]>;
 
 /** Where the packaged catalog fonts live, relative to the app's assets. */
 export const HYPERFRAMES_FONT_ASSET_DIR = "vendors/hyperframes/fonts";
+
+/**
+ * The index of the packaged fonts in that folder, written by
+ * tools/copy-bundled-assets.mjs. Not `manifest.json`: the extension stores
+ * refuse a package with a second file of that name.
+ */
+export const HYPERFRAMES_FONT_INDEX = "fonts.json";
 
 /** Reads the packaged catalog fonts: the manifest and each woff2 file. */
 export interface CatalogFontLoader {
