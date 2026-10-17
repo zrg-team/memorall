@@ -58,7 +58,7 @@ export const isSiteAccessWithheldMessage = (
 ): boolean => Boolean(text?.includes(SITE_ACCESS_WITHHELD_MARKER));
 
 /**
- * What a screenshot of a tab needs. `chrome.tabs.captureVisibleTab` asks for
+ * What a screenshot of a tab needs. `tabs.captureVisibleTab` asks for
  * `<all_urls>` itself (or an activeTab grant), not for the sites it covers:
  * `permissions.contains` says `<all_urls>` is held already, and the capture
  * is refused all the same. The manifest declares it as optional; asked for
