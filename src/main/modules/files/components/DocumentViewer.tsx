@@ -49,6 +49,7 @@ import { useSourceStatus } from "../hooks/use-source-status";
 import { type SyncedFile, useDocumentSync } from "../hooks/use-document-sync";
 import { editorRegistry } from "../editors";
 import { CodeEditor } from "../editors/CodeEditor";
+import { isZipFileName } from "@/services/filesystem/folder-zip";
 import { useFileIndexActions } from "../folder-index";
 import { useHostedAppFor } from "../hooks/use-hosted-app";
 import { changeTouches } from "../utils/change-touches";
@@ -79,6 +80,13 @@ const blobPart = (bytes: Uint8Array): Uint8Array<ArrayBuffer> =>
 	bytes.buffer instanceof ArrayBuffer
 		? (bytes as Uint8Array<ArrayBuffer>)
 		: bytes.slice();
+
+/**
+ * Whether bytes are not text: a zero byte early on, as git and curl tell.
+ * Decoded and drawn as code, a big zip overflowed the stack.
+ */
+const isBinaryContent = (bytes: Uint8Array): boolean =>
+	bytes.subarray(0, 8000).includes(0);
 
 /** One empty list, so a default does not count as a new prop each render. */
 const EMPTY_TOPIC_IDS: string[] = [];
@@ -116,6 +124,8 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 	const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 	const [mediaError, setMediaError] = useState(false);
 	const [textContent, setTextContent] = useState<string | null>(null);
+	/** An "other" file that is not text: it gets a note, not the code view. */
+	const [binary, setBinary] = useState(false);
 	const [excelData, setExcelData] = useState<Uint8Array | null>(null);
 	const [presentationData, setPresentationData] = useState<Uint8Array | null>(
 		null,
@@ -151,6 +161,7 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 	useEffect(() => {
 		// Reset content state when file changes
 		setTextContent(null);
+		setBinary(false);
 		setPreviewUrl(null);
 		setExcelData(null);
 		setPresentationData(null);
@@ -197,6 +208,10 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 				try {
 					const content = await loadContent();
 					if (cancelled) return;
+					if (file.type === "other" && isBinaryContent(content)) {
+						setBinary(true);
+						return;
+					}
 					const textDecoder = new TextDecoder("utf-8");
 					const text = textDecoder.decode(content);
 					setTextContent(text);
@@ -573,6 +588,18 @@ export const DocumentViewer = React.memo(function DocumentViewer({
 								/>
 							)}
 						</div>
+					</div>
+				)}
+
+				{binary && (
+					<div className="flex flex-1 items-center justify-center p-6">
+						<p className="max-w-xl text-center text-sm text-muted-foreground">
+							{t(
+								isZipFileName(file.name)
+									? "viewer.zipNoPreview"
+									: "viewer.binaryNoPreview",
+							)}
+						</p>
 					</div>
 				)}
 

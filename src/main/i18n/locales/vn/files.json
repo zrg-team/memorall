@@ -80,7 +80,9 @@
 		"convertSuccess": "Chuyển đổi nội dung thành công.",
 		"preview": "Xem trước",
 		"code": "Mã nguồn",
-		"mediaUnsupported": "Trình duyệt không phát được định dạng tệp này. Hãy tải xuống để mở bằng ứng dụng khác."
+		"mediaUnsupported": "Trình duyệt không phát được định dạng tệp này. Hãy tải xuống để mở bằng ứng dụng khác.",
+		"binaryNoPreview": "Không có bản xem trước cho loại tệp này. Hãy tải xuống để mở bằng ứng dụng khác.",
+		"zipNoPreview": "Tệp nén .zip. Giải nén từ menu của tệp (nhấp chuột phải hoặc ⋮), hoặc tải xuống."
 	},
 	"tree": {
 		"dropToRoot": "Thả để di chuyển đến thư mục gốc",

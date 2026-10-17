@@ -84,6 +84,13 @@ const LINE_HEIGHT = "1.5";
 const PADDING = "1rem"; // 16 px
 const GUTTER_WIDTH = "3.5rem";
 
+/**
+ * Past this the file shows as plain text: highlighting tokenizes all of it
+ * on every keystroke, and react-syntax-highlighter overflows the call stack
+ * flattening a big file's tokens.
+ */
+export const MAX_HIGHLIGHTED_CHARS = 200_000;
+
 export const CodeEditor: React.FC<DocumentEditorProps> = ({
 	file,
 	initialContent,
@@ -112,7 +119,11 @@ export const CodeEditor: React.FC<DocumentEditorProps> = ({
 	const highlightRef = useRef<HTMLDivElement>(null);
 	const gutterRef = useRef<HTMLDivElement>(null);
 	const language = getLanguage(file.name);
-	const lineCount = content.split("\n").length;
+	const highlighted = content.length <= MAX_HIGHLIGHTED_CHARS;
+	const lineCount = highlighted ? content.split("\n").length : 0;
+	const textPaddingLeft = highlighted
+		? `calc(${PADDING} + ${GUTTER_WIDTH})`
+		: PADDING;
 
 	// Sync highlighted layer position to textarea scroll
 	const syncHighlight = useCallback(() => {
@@ -229,54 +240,58 @@ export const CodeEditor: React.FC<DocumentEditorProps> = ({
 
 			{/* Editor: highlighted layer behind transparent textarea */}
 			<div className="relative flex-1 overflow-hidden bg-background">
-				<div
-					ref={gutterRef}
-					className="absolute top-0 left-0 pointer-events-none select-none border-r text-right text-muted-foreground/70"
-					style={{
-						width: `calc(${GUTTER_WIDTH} + ${PADDING})`,
-						paddingTop: PADDING,
-						paddingRight: "0.75rem",
-						paddingBottom: PADDING,
-						fontFamily: FONT_FAMILY,
-						fontSize: FONT_SIZE,
-						lineHeight: LINE_HEIGHT,
-						background: "hsl(var(--muted) / 0.25)",
-					}}
-					aria-hidden
-				>
-					{Array.from({ length: lineCount }, (_, i) => (
-						<div key={i + 1}>{i + 1}</div>
-					))}
-				</div>
+				{highlighted ? (
+					<>
+						<div
+							ref={gutterRef}
+							className="absolute top-0 left-0 pointer-events-none select-none border-r text-right text-muted-foreground/70"
+							style={{
+								width: `calc(${GUTTER_WIDTH} + ${PADDING})`,
+								paddingTop: PADDING,
+								paddingRight: "0.75rem",
+								paddingBottom: PADDING,
+								fontFamily: FONT_FAMILY,
+								fontSize: FONT_SIZE,
+								lineHeight: LINE_HEIGHT,
+								background: "hsl(var(--muted) / 0.25)",
+							}}
+							aria-hidden
+						>
+							{Array.from({ length: lineCount }, (_, i) => (
+								<div key={i + 1}>{i + 1}</div>
+							))}
+						</div>
 
-				{/* Syntax-highlighted layer (absolutely positioned, pointer-events: none) */}
-				<div
-					ref={highlightRef}
-					className="absolute top-0 left-0 pointer-events-none"
-					style={{ willChange: "transform", minWidth: "100%" }}
-					aria-hidden
-				>
-					{/* Light mode */}
-					<SyntaxHighlighter
-						className="dark:hidden"
-						language={language}
-						style={oneLight}
-						customStyle={highlighterCustomStyle}
-						codeTagProps={codeTagProps}
-					>
-						{content}
-					</SyntaxHighlighter>
-					{/* Dark mode */}
-					<SyntaxHighlighter
-						className="hidden dark:block"
-						language={language}
-						style={oneDark}
-						customStyle={highlighterCustomStyle}
-						codeTagProps={codeTagProps}
-					>
-						{content}
-					</SyntaxHighlighter>
-				</div>
+						{/* Syntax-highlighted layer (absolutely positioned, pointer-events: none) */}
+						<div
+							ref={highlightRef}
+							className="absolute top-0 left-0 pointer-events-none"
+							style={{ willChange: "transform", minWidth: "100%" }}
+							aria-hidden
+						>
+							{/* Light mode */}
+							<SyntaxHighlighter
+								className="dark:hidden"
+								language={language}
+								style={oneLight}
+								customStyle={highlighterCustomStyle}
+								codeTagProps={codeTagProps}
+							>
+								{content}
+							</SyntaxHighlighter>
+							{/* Dark mode */}
+							<SyntaxHighlighter
+								className="hidden dark:block"
+								language={language}
+								style={oneDark}
+								customStyle={highlighterCustomStyle}
+								codeTagProps={codeTagProps}
+							>
+								{content}
+							</SyntaxHighlighter>
+						</div>
+					</>
+				) : null}
 
 				{/* Transparent textarea — receives all user input */}
 				<textarea
@@ -293,9 +308,10 @@ export const CodeEditor: React.FC<DocumentEditorProps> = ({
 						paddingTop: PADDING,
 						paddingRight: PADDING,
 						paddingBottom: PADDING,
-						paddingLeft: `calc(${PADDING} + ${GUTTER_WIDTH})`,
+						paddingLeft: textPaddingLeft,
 						tabSize: 2,
-						color: "transparent",
+						// Plain text draws its own letters.
+						color: highlighted ? "transparent" : "hsl(var(--foreground))",
 						caretColor: "hsl(var(--foreground))",
 						background: "transparent",
 						whiteSpace: "pre",
