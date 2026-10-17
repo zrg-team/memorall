@@ -1466,7 +1466,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     "parameters": {
       "properties": {
         "checked": {
-          "description": "Whether to mark the item as done (true) or not done (false)",
+          "description": "true marks the item done (the default); false reopens it",
           "type": "boolean",
         },
         "item_id": {
@@ -1480,7 +1480,6 @@ exports[`Memorall flow registered contracts > registers every core tool contract
       },
       "required": [
         "item_id",
-        "checked",
       ],
       "type": "object",
     },

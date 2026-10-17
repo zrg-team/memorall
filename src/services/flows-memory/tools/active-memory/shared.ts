@@ -68,9 +68,22 @@ export const MEMORY_FACT_FIELDS = {
 		.describe(
 			'The whole memory as one natural-language sentence, e.g. "The user prefers dark mode."',
 		),
-	memoryKind: z.enum(MEMORY_KINDS).optional(),
-	confidence: z.number().min(0).max(1).optional(),
-	tags: z.array(z.string()).optional(),
+	// The model sees only what `.describe()` says: the enum's options and the
+	// number's range are not advertised otherwise, and "high" or 90 failed.
+	memoryKind: z
+		.enum(MEMORY_KINDS)
+		.optional()
+		.describe(`One of: ${MEMORY_KINDS.join(", ")}`),
+	confidence: z
+		.number()
+		.min(0)
+		.max(1)
+		.optional()
+		.describe("How sure, from 0 to 1, e.g. 0.9"),
+	tags: z
+		.array(z.string())
+		.optional()
+		.describe('A list of short labels, e.g. ["work", "ui"]'),
 	reason: z.string().optional().describe("Why this memory is being saved"),
 };
 

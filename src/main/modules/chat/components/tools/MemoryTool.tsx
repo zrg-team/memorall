@@ -1,4 +1,4 @@
-import { BookMarked, Brain, Link2, Trash2 } from "lucide-react";
+import { AlertTriangle, BookMarked, Brain, Link2, Trash2 } from "lucide-react";
 import type React from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/main/components/ui/badge";
@@ -169,10 +169,12 @@ export const memoryToolRenderer: ActionRenderer = (item, isOpen) => {
 
 			<ToolSection
 				title={
-					parsed.lead ??
-					(parsed.facts.length > 0
-						? `${parsed.facts.length} ${parsed.facts.length === 1 ? "memory" : "memories"}`
-						: "Memory")
+					parsed.error
+						? "Not saved"
+						: (parsed.lead ??
+							(parsed.facts.length > 0
+								? `${parsed.facts.length} ${parsed.facts.length === 1 ? "memory" : "memories"}`
+								: "Memory"))
 				}
 			>
 				{parsed.facts.length > 0 ? (
@@ -184,6 +186,13 @@ export const memoryToolRenderer: ActionRenderer = (item, isOpen) => {
 								index={index}
 							/>
 						))}
+					</div>
+				) : parsed.error ? (
+					<div className="flex items-start gap-2 text-sm text-destructive">
+						<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+						<p className="min-w-0 whitespace-pre-wrap break-words">
+							{parsed.message}
+						</p>
 					</div>
 				) : (
 					<div className="flex items-start gap-2 text-sm text-muted-foreground">

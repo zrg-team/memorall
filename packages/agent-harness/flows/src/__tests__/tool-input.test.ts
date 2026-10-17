@@ -163,3 +163,60 @@ describe("describeSchemaIssues", () => {
 		expect(describeSchemaIssues(new Error("boom"))).toBe("boom");
 	});
 });
+
+describe("parseToolInput: values in a near-miss shape", () => {
+	const schema = z.object({
+		item_id: z.string(),
+		checked: z.boolean().optional(),
+		count: z.number().optional(),
+		tags: z.array(z.string()).optional(),
+		kind: z.enum(["fact", "preference", "project_context"]).optional(),
+	});
+
+	it("reads each near miss the one way it can be read", () => {
+		expect(
+			parseToolInput(
+				schema,
+				{
+					item_id: 1,
+					checked: "false",
+					count: " 3 ",
+					tags: "launch",
+					kind: "Project Context",
+				},
+				"t",
+			),
+		).toEqual({
+			item_id: "1",
+			checked: false,
+			count: 3,
+			tags: ["launch"],
+			kind: "project_context",
+		});
+	});
+
+	it("leaves a value with no single reading for the model to fix", () => {
+		for (const [field, value] of [
+			["checked", "yes"],
+			["count", "ten"],
+			["kind", "favourite"],
+		] as const) {
+			expect(() =>
+				parseToolInput(schema, { item_id: "1", [field]: value }, "t"),
+			).toThrowError(ToolInputError);
+		}
+	});
+
+	it("does not change the arguments it was given", () => {
+		const args = { item_id: 7 };
+		parseToolInput(schema, args, "t");
+		expect(args).toEqual({ item_id: 7 });
+	});
+
+	it("repairs inside a list too", () => {
+		const nested = z.object({ items: z.array(z.object({ id: z.string() })) });
+		expect(
+			parseToolInput(nested, { items: [{ id: 1 }, { id: "b" }] }, "t"),
+		).toEqual({ items: [{ id: "1" }, { id: "b" }] });
+	});
+});

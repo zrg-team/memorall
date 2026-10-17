@@ -5,19 +5,18 @@ import type {
 	ToolExecutionContext,
 } from "../../interfaces/engine/tool.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
-import {
-	getPlan,
-	setPlan,
-	formatPlan,
-} from "./store.js";
+import { getPlan, setPlan, formatPlan } from "./store.js";
 
 const TOOL_NAME = "planner_check_item" as const;
 
 const schema = z.object({
 	item_id: z.string().describe("ID of the item to update (e.g. '1', '2')"),
+	// Defaults to done: the tool's name and every prompt say "mark it done",
+	// and models called it with the id alone, which failed every time.
 	checked: z
 		.boolean()
-		.describe("Whether to mark the item as done (true) or not done (false)"),
+		.default(true)
+		.describe("true marks the item done (the default); false reopens it"),
 	notes: z
 		.string()
 		.optional()
