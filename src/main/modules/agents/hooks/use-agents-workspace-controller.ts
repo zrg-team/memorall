@@ -367,13 +367,13 @@ export const useAgentsWorkspaceController = () => {
 				status: "draft",
 			},
 		);
+		// Creating it already listed the presets again, with it selected.
 		if (!created) return;
-		await refreshPresets(created.id);
 		setIsAgentWizardMode(true);
 		setIsWizardTemplateChooserOpen(true);
 		updateMetadataField("status", "draft");
 		if (!isDesktop) setActiveCompactTab("config");
-	}, [handleCreatePreset, isDesktop, refreshPresets, t, updateMetadataField]);
+	}, [handleCreatePreset, isDesktop, t, updateMetadataField]);
 
 	const handleOptimizeCurrentAgent = React.useCallback(() => {
 		if (!selectedPresetId || isLegacyConfig || isBusy) return;
