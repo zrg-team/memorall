@@ -25,7 +25,9 @@
 		"renameItemError": "Failed to rename item",
 		"deleteFileError": "Failed to delete file",
 		"downloadFileError": "Failed to download file",
-		"downloadFolderError": "Failed to download the folder"
+		"downloadFolderError": "Failed to download the folder",
+		"unzipError": "Failed to unzip the file",
+		"unzipping": "Unzipping {{name}}… {{percent}}%"
 	},
 	"upload": {
 		"uploadFiles": "Upload Files",
@@ -39,6 +41,8 @@
 		"rename": "Rename",
 		"deleteFolder": "Delete Folder",
 		"downloadZip": "Download as ZIP",
+		"unzip": "Unzip",
+		"copyPath": "Copy path",
 		"manageTopics": "Manage Topics",
 		"converting": "Converting...",
 		"convertToKnowledge": "Convert to knowledge",
@@ -82,7 +86,9 @@
 		"dropToRoot": "Drop to move to root folder",
 		"rootFolder": "Root folder",
 		"rename": "Rename",
-		"delete": "Delete"
+		"delete": "Delete",
+		"unzip": "Unzip",
+		"copyPath": "Copy path"
 	},
 	"excelSelector": {
 		"title": "Convert Excel Sheets to Remembered Content",

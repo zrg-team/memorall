@@ -105,6 +105,8 @@ export interface MemonOperationPayloadMap {
 	"files.paste": Keyed<{ to?: string }>;
 	/** Deletes entries, with everything in them; the user has confirmed. */
 	"files.delete": Keyed<{ paths: string[] }>;
+	/** Unpacks a .zip beside it. */
+	"files.unzip": Keyed<{ path: string }>;
 	/** The user edited the open visual's source and saved it. */
 	"visual.save": Keyed<{ source: string }>;
 	"editor.update": Keyed<{ content: string }>;

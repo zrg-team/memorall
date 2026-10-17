@@ -61,7 +61,10 @@ import {
 	MEMON_DOWNLOADS_DIR,
 	MEMON_PICTURES_DIR,
 } from "./download";
-import type { FolderZip } from "@/services/filesystem/folder-zip";
+import type {
+	FolderZip,
+	ZipExtraction,
+} from "@/services/filesystem/folder-zip";
 import {
 	listFileRefs,
 	type MemonWindowScrollDirection,
@@ -118,6 +121,7 @@ import type {
 	MemonFileClipboard,
 	MemonFileExport,
 	MemonFileEntry,
+	MemonFileUnzip,
 	MemonMachineSnapshot,
 	MemonSchedule,
 	MemonScheduleStatus,
@@ -210,6 +214,15 @@ export interface MemonFilesPort {
 	remove(path: string): Promise<void>;
 	/** A folder with everything in it, as one zip. */
 	zip(folder: string): Promise<FolderZip>;
+	/**
+	 * Unpacks a .zip into a folder; one top entry comes out as itself.
+	 * `onProgress` hears how far it has got, 0 to 100.
+	 */
+	unzip(
+		archive: string,
+		into: string,
+		onProgress?: (percent: number) => void,
+	): Promise<ZipExtraction>;
 	subscribe(listener: () => void): () => void;
 	/** What the agent reads of a file the Viewer shows. */
 	preview(
@@ -505,6 +518,7 @@ export class MemonMachine {
 	private filesError: string | undefined;
 	private fileClipboard: MemonFileClipboard | null = null;
 	private fileExport: MemonFileExport | null = null;
+	private fileUnzip: MemonFileUnzip | null = null;
 	private visualPath: string | null = null;
 	private visualSource = "";
 	private visualScreenLine = 0;
@@ -2484,6 +2498,47 @@ export class MemonMachine {
 		return { path, size: zip.bytes.byteLength, fileCount: zip.fileCount };
 	}
 
+	/**
+	 * Unpacks a .zip in Files beside it, or into the folder `to`: a zip of one
+	 * folder gives that folder back, loose entries land in a folder named
+	 * after the zip. Nothing is overwritten.
+	 */
+	async extractZip(path: string, to?: string): Promise<ZipExtraction> {
+		this.requireApp("files");
+		const archive = this.resolvePath(path);
+		if (await this.ports.files.isDirectory(archive)) {
+			throw new Error(`${path} is a folder: unzip takes a .zip file.`);
+		}
+		if (!(await this.ports.files.exists(archive))) {
+			throw new Error(`${path} does not exist.`);
+		}
+		const into = to?.trim() ? this.resolvePath(to) : parentOf(archive);
+		if (!(await this.ports.files.isDirectory(into))) {
+			throw new Error(`${into} is not a folder.`);
+		}
+		const name = archive.slice(archive.lastIndexOf("/") + 1);
+		this.fileUnzip = { name, percent: 0 };
+		this.changed();
+		try {
+			const extracted = await this.ports.files.unzip(
+				archive,
+				into,
+				(percent) => {
+					// A redraw a percent: a zip of thousands of small files
+					// would otherwise redraw for each one.
+					if (percent === this.fileUnzip?.percent) return;
+					this.fileUnzip = { name, percent };
+					this.changed();
+				},
+			);
+			await this.refreshFiles();
+			return extracted;
+		} finally {
+			this.fileUnzip = null;
+			this.changed();
+		}
+	}
+
 	/** Checks the sources and the folder they go to. */
 	private async fileTransfer(
 		paths: readonly string[],
@@ -3424,6 +3479,7 @@ export class MemonMachine {
 						}
 					: null,
 				exported: this.fileExport ? { ...this.fileExport } : null,
+				unzipping: this.fileUnzip ? { ...this.fileUnzip } : null,
 			},
 			editor: {
 				path: this.editorPath,

@@ -25,7 +25,9 @@
 		"renameItemError": "Không thể đổi tên mục",
 		"deleteFileError": "Không thể xóa tệp",
 		"downloadFileError": "Không thể tải xuống tệp",
-		"downloadFolderError": "Không thể tải xuống thư mục"
+		"downloadFolderError": "Không thể tải xuống thư mục",
+		"unzipError": "Không thể giải nén tệp",
+		"unzipping": "Đang giải nén {{name}}… {{percent}}%"
 	},
 	"upload": {
 		"uploadFiles": "Tải lên tệp",
@@ -39,6 +41,8 @@
 		"rename": "Đổi tên",
 		"deleteFolder": "Xóa thư mục",
 		"downloadZip": "Tải xuống dạng ZIP",
+		"unzip": "Giải nén",
+		"copyPath": "Sao chép đường dẫn",
 		"manageTopics": "Quản lý chủ đề",
 		"converting": "Đang chuyển đổi...",
 		"convertToKnowledge": "Chuyển đổi thành kiến thức",
@@ -82,7 +86,9 @@
 		"dropToRoot": "Thả để di chuyển đến thư mục gốc",
 		"rootFolder": "Thư mục gốc",
 		"rename": "Đổi tên",
-		"delete": "Xóa"
+		"delete": "Xóa",
+		"unzip": "Giải nén",
+		"copyPath": "Sao chép đường dẫn"
 	},
 	"excelSelector": {
 		"title": "Chuyển đổi bảng tính Excel thành nội dung đã nhớ",

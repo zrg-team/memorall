@@ -44,6 +44,8 @@ interface DocumentLibraryContentProps {
 	onRenameItem: (item: DocumentLibraryItem, newName: string) => void;
 	onDownloadFile: (id: string) => void;
 	onDownloadFolder?: (folderPath: string) => void;
+	/** Unpacks a .zip beside it. */
+	onUnzip?: (archivePath: string) => void;
 	onDownloadSelectedFile: () => void;
 	onManageTopics: (file: DocumentFile) => void;
 	onConvertToKnowledge: (file: DocumentFile) => void;
@@ -71,6 +73,7 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 	onRenameItem,
 	onDownloadFile,
 	onDownloadFolder,
+	onUnzip,
 	onDownloadSelectedFile,
 	onManageTopics,
 	onConvertToKnowledge,
@@ -127,6 +130,7 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 		? undefined
 		: onConvertToKnowledge;
 	const effectiveDownloadFile = isWorkspaceSection ? undefined : onDownloadFile;
+	const effectiveUnzip = isWorkspaceSection ? undefined : onUnzip;
 	const effectiveFileTopicMap = isWorkspaceSection
 		? EMPTY_TOPIC_MAP
 		: fileTopicMap;
@@ -187,6 +191,7 @@ export const DocumentLibraryContent = memo(function DocumentLibraryContent({
 						onDownloadFolder={
 							onDownloadFolder ? handleDownloadFolder : undefined
 						}
+						onUnzip={effectiveUnzip}
 						onManageTopics={effectiveManageTopics}
 						onConvertToKnowledge={effectiveConvertToKnowledge}
 						fileTopicMap={effectiveFileTopicMap}

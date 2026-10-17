@@ -245,6 +245,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/files/modals/UploadProgressDialog.tsx",
   "../modules/files/modals/index.ts",
   "../modules/files/utils/change-touches.ts",
+  "../modules/files/utils/copy-paths.ts",
   "../modules/files/utils/hosted-file-look.ts",
   "../modules/files/utils/save-download.ts",
   "../modules/files/utils/tree-utils.ts",

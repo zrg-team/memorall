@@ -18,6 +18,8 @@ import {
 	FileCode,
 	File,
 	Home,
+	Link,
+	PackageOpen,
 	Pencil,
 	Trash2,
 	FileAudio,
@@ -51,6 +53,8 @@ import { cn } from "@/lib/utils";
 import { contentVisibilityAuto } from "@/main/components/atoms/content-visibility";
 import { FolderIndexMenuItems } from "../folder-index";
 import { hostedFileLook } from "../utils/hosted-file-look";
+import { copyPathsToClipboard } from "../utils/copy-paths";
+import { isZipFileName } from "@/services/filesystem/folder-zip";
 
 interface DocumentTreeProps {
 	tree: DocumentTreeNode[];
@@ -66,6 +70,8 @@ interface DocumentTreeProps {
 	onDelete?: (node: DocumentTreeNode) => void;
 	/** A folder, with everything in it, as one .zip download. */
 	onDownloadFolder?: (node: DocumentTreeNode) => void;
+	/** A .zip, unpacked beside it. */
+	onUnzip?: (node: DocumentTreeNode) => void;
 	/**
 	 * Top-level paths that are folders on the user's disk rather than in the
 	 * library. They behave identically; only the icon says otherwise.
@@ -124,6 +130,7 @@ interface TreeItemProps {
 	onRename?: (node: DocumentTreeNode, newName: string) => void;
 	onDelete?: (node: DocumentTreeNode) => void;
 	onDownloadFolder?: (node: DocumentTreeNode) => void;
+	onUnzip?: (node: DocumentTreeNode) => void;
 	mappedPaths?: ReadonlySet<string>;
 	onUnmap?: (path: string) => void;
 }
@@ -141,6 +148,7 @@ const TreeItem = React.memo(function TreeItemRow({
 	onRename,
 	onDelete,
 	onDownloadFolder,
+	onUnzip,
 	mappedPaths,
 	onUnmap,
 }: TreeItemProps) {
@@ -158,6 +166,7 @@ const TreeItem = React.memo(function TreeItemRow({
 	const isSelected = node.id === selectedId;
 	// Zipping only reads, so a mapped folder can be downloaded too.
 	const canDownload = isFolder && Boolean(onDownloadFolder);
+	const canUnzip = !isFolder && Boolean(onUnzip) && isZipFileName(node.name);
 
 	// Use draggable for all items
 	const {
@@ -254,13 +263,7 @@ const TreeItem = React.memo(function TreeItemRow({
 							}
 						}}
 						onContextMenu={(e) => {
-							if (
-								!onRename &&
-								!onDelete &&
-								!canDownload &&
-								!(isMapped && onUnmap)
-							)
-								return;
+							// Every row has Copy path, so the menu always opens.
 							e.preventDefault();
 							e.stopPropagation();
 							const rect = e.currentTarget.getBoundingClientRect();
@@ -326,16 +329,24 @@ const TreeItem = React.memo(function TreeItemRow({
 				</div>
 				<DropdownMenuContent align="start">
 					{node.type === "folder" && <FolderIndexMenuItems path={node.path} />}
+					{canUnzip && (
+						<DropdownMenuItem onClick={() => onUnzip?.(node)}>
+							<PackageOpen className="h-4 w-4" />
+							{t("tree.unzip")}
+						</DropdownMenuItem>
+					)}
+					<DropdownMenuItem onClick={() => copyPathsToClipboard([node.path])}>
+						<Link className="h-4 w-4" />
+						{t("tree.copyPath")}
+					</DropdownMenuItem>
 					{canDownload && (
-						<>
-							<DropdownMenuItem onClick={() => onDownloadFolder?.(node)}>
-								<FileArchive className="h-4 w-4" />
-								{t("list.downloadZip")}
-							</DropdownMenuItem>
-							{(isMapped ? onUnmap : onRename || onDelete) && (
-								<DropdownMenuSeparator />
-							)}
-						</>
+						<DropdownMenuItem onClick={() => onDownloadFolder?.(node)}>
+							<FileArchive className="h-4 w-4" />
+							{t("list.downloadZip")}
+						</DropdownMenuItem>
+					)}
+					{(isMapped ? onUnmap : onRename || onDelete) && (
+						<DropdownMenuSeparator />
 					)}
 					{/*
 					 * A mapped folder offers neither rename nor delete: both would act
@@ -395,6 +406,7 @@ const TreeItem = React.memo(function TreeItemRow({
 								onRename={onRename}
 								onDelete={onDelete}
 								onDownloadFolder={onDownloadFolder}
+								onUnzip={onUnzip}
 								mappedPaths={mappedPaths}
 								onUnmap={onUnmap}
 							/>
@@ -452,6 +464,7 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 	onRename,
 	onDelete,
 	onDownloadFolder,
+	onUnzip,
 	mappedPaths,
 	onUnmap,
 }) => {
@@ -571,6 +584,7 @@ export const DocumentTreeDraggable: React.FC<DocumentTreeProps> = ({
 				onRename={onRename}
 				onDelete={onDelete}
 				onDownloadFolder={onDownloadFolder}
+				onUnzip={onUnzip}
 				mappedPaths={mappedPaths}
 				onUnmap={onUnmap}
 			/>

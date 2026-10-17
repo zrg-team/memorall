@@ -76,6 +76,7 @@ import { isHostedAppId } from "@/services/memon/apps/hosted/catalog";
 import { useDeleteConfirm } from "./use-delete-confirm";
 import { useMemonAskMenu } from "./use-memon-ask-menu";
 import { useMemonExportDownloads } from "./use-export-downloads";
+import { isZipFileName } from "@/services/filesystem/folder-zip";
 
 const COMPACT_WIDTH = 600;
 /** Where the app shell stacks chat and the right panel instead. */
@@ -379,6 +380,11 @@ export const MemonComputerPanel = React.memo<{
 					if (snapshotKey) void send("files.paste", { key: snapshotKey, to });
 				},
 				remove: confirmDelete,
+				unzip:
+					entry.type === "file" && isZipFileName(entry.name) && snapshotKey
+						? () =>
+								void send("files.unzip", { key: snapshotKey, path: entry.path })
+						: undefined,
 			}),
 		[t, hasClipboard, openDesktopEntry, send, snapshotKey, confirmDelete],
 	);

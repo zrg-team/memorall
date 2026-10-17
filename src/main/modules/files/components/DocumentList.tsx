@@ -25,6 +25,8 @@ import {
 	FileArchive,
 	Trash2,
 	Brain,
+	Link,
+	PackageOpen,
 	FileAudio,
 	FileVideo,
 	Presentation,
@@ -66,6 +68,8 @@ import {
 	useFolderIndex,
 } from "../folder-index";
 import { hostedFileLook } from "../utils/hosted-file-look";
+import { copyPathsToClipboard } from "../utils/copy-paths";
+import { isZipFileName } from "@/services/filesystem/folder-zip";
 
 interface DocumentListProps {
 	items: DocumentLibraryItem[];
@@ -78,6 +82,8 @@ interface DocumentListProps {
 	onDownloadFile?: (fileId: string) => void;
 	/** Downloads a folder, with everything in it, as one .zip. */
 	onDownloadFolder?: (folder: DocumentFolder) => void;
+	/** Unpacks a .zip beside it. */
+	onUnzip?: (archivePath: string) => void;
 	onManageTopics?: (file: DocumentFile) => void;
 	onRenameItem?: (item: DocumentLibraryItem, newName: string) => void;
 	onConvertToKnowledge?: (file: DocumentFile) => void;
@@ -160,6 +166,7 @@ interface EntryActions {
 	onDeleteItem?: (item: DocumentLibraryItem) => void;
 	onDownloadFile?: (fileId: string) => void;
 	onDownloadFolder?: (folder: DocumentFolder) => void;
+	onUnzip?: (archivePath: string) => void;
 	onManageTopics?: (file: DocumentFile) => void;
 	onConvertToKnowledge?: (file: DocumentFile) => void;
 	onTopicClick?: (topicId: string) => void;
@@ -224,6 +231,22 @@ const RenameInput: React.FC<{
 		onClick={(e) => e.stopPropagation()}
 	/>
 );
+
+/** Copies the entry's path, as the chat and the agent take it. */
+const CopyPathMenuItem: React.FC<{ path: string }> = ({ path }) => {
+	const { t } = useTranslation("documents");
+	return (
+		<DropdownMenuItem
+			onClick={(e) => {
+				e.stopPropagation();
+				copyPathsToClipboard([path]);
+			}}
+		>
+			<Link className="h-4 w-4 mr-2" />
+			{t("list.copyPath")}
+		</DropdownMenuItem>
+	);
+};
 
 // Rows are memoised: a status poll, a topic change or a rename elsewhere
 // redraws only the rows it touches, not every file in a large folder.
@@ -299,6 +322,8 @@ const FolderEntry = memo(function FolderEntry({
 								<DropdownMenuSeparator />
 							</>
 						)}
+						<CopyPathMenuItem path={folder.path} />
+						<DropdownMenuSeparator />
 						{onDownloadFolder && (
 							<>
 								<DropdownMenuItem
@@ -359,6 +384,8 @@ const FolderEntry = memo(function FolderEntry({
 								<DropdownMenuSeparator />
 							</>
 						)}
+						<CopyPathMenuItem path={folder.path} />
+						<DropdownMenuSeparator />
 						{onDownloadFolder && (
 							<>
 								<DropdownMenuItem
@@ -438,6 +465,7 @@ const FileEntry = memo(function FileEntry({
 		onManageTopics,
 		onConvertToKnowledge,
 		onDownloadFile,
+		onUnzip,
 		onDeleteItem,
 		onTopicClick,
 		onOpenCard,
@@ -488,6 +516,19 @@ const FileEntry = memo(function FileEntry({
 					<DropdownMenuSeparator />
 				</>
 			)}
+			{onUnzip && isZipFileName(file.name) && (
+				<DropdownMenuItem
+					onClick={(e) => {
+						e.stopPropagation();
+						onUnzip(file.path);
+					}}
+				>
+					<PackageOpen className="h-4 w-4 mr-2" />
+					{t("list.unzip")}
+				</DropdownMenuItem>
+			)}
+			<CopyPathMenuItem path={file.path} />
+			<DropdownMenuSeparator />
 			{withCard && indexEntries?.some((entry) => entry.typeId === "okf") && (
 				<>
 					<DropdownMenuItem
@@ -663,6 +704,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 	onDeleteItem,
 	onDownloadFile,
 	onDownloadFolder,
+	onUnzip,
 	onManageTopics,
 	onRenameItem,
 	onConvertToKnowledge,
@@ -790,6 +832,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 			onDeleteItem,
 			onDownloadFile,
 			onDownloadFolder,
+			onUnzip,
 			onManageTopics,
 			onConvertToKnowledge,
 			onTopicClick,
@@ -804,6 +847,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 			onDeleteItem,
 			onDownloadFile,
 			onDownloadFolder,
+			onUnzip,
 			onManageTopics,
 			onConvertToKnowledge,
 			onTopicClick,

@@ -152,6 +152,24 @@ const createPorts = () => {
 				).length,
 				totalBytes: 5,
 			})),
+			unzip: vi.fn(
+				async (
+					archive: string,
+					into: string,
+					onProgress?: (percent: number) => void,
+				) => {
+					onProgress?.(0);
+					onProgress?.(40);
+					onProgress?.(40);
+					onProgress?.(100);
+					const path = `${into}/${archive
+						.split("/")
+						.pop()
+						?.replace(/\.zip$/, "")}`;
+					files.set(`${path}/index.md`, "# Unzipped");
+					return { path, fileCount: 1, totalBytes: 10 };
+				},
+			),
 			preview: vi.fn(async (_path: string, kind: string) => ({
 				text:
 					kind === "pdf"
@@ -2729,6 +2747,63 @@ describe("MemonMachine", () => {
 		});
 		await expect(machine.openUrl("https://example.com")).rejects.toThrow(
 			/turned off/,
+		);
+	});
+});
+
+describe("MemonMachine unzipping a file in Files", () => {
+	it("unpacks beside the zip, or into the folder given", async () => {
+		const { machine, ports, files } = createMachine();
+		files.set("/notes/site.zip", "PK");
+		files.set("/projects/readme.md", "# Projects");
+
+		const extracted = await machine.extractZip("/notes/site.zip");
+		expect(ports.files.unzip).toHaveBeenCalledWith(
+			"/notes/site.zip",
+			"/notes",
+			expect.any(Function),
+		);
+		expect(extracted).toEqual({
+			path: "/notes/site",
+			fileCount: 1,
+			totalBytes: 10,
+		});
+
+		await machine.extractZip("/notes/site.zip", "/projects");
+		expect(ports.files.unzip).toHaveBeenLastCalledWith(
+			"/notes/site.zip",
+			"/projects",
+			expect.any(Function),
+		);
+	});
+
+	it("shows its progress while it unpacks, a step a percent", async () => {
+		const { machine, files } = createMachine();
+		files.set("/notes/site.zip", "PK");
+		const seen: Array<{ name: string; percent: number } | null | undefined> =
+			[];
+		machine.subscribe(() => {
+			const unzipping = machine.snapshot().files.unzipping;
+			if (seen.at(-1)?.percent !== unzipping?.percent || !unzipping) {
+				seen.push(unzipping);
+			}
+		});
+
+		await machine.extractZip("/notes/site.zip");
+
+		expect(seen.filter(Boolean)).toEqual([
+			{ name: "site.zip", percent: 0 },
+			{ name: "site.zip", percent: 40 },
+			{ name: "site.zip", percent: 100 },
+		]);
+		expect(machine.snapshot().files.unzipping).toBeNull();
+	});
+
+	it("takes a file that is there, not a folder", async () => {
+		const { machine } = createMachine();
+		await expect(machine.extractZip("/notes")).rejects.toThrow("is a folder");
+		await expect(machine.extractZip("/notes/gone.zip")).rejects.toThrow(
+			"does not exist",
 		);
 	});
 });

@@ -116,6 +116,15 @@ export interface MemonFilesState {
 	 * downloads each one to the user's machine once (by `id`).
 	 */
 	exported?: MemonFileExport | null;
+	/** A .zip being unpacked, for the window's progress bar. */
+	unzipping?: MemonFileUnzip | null;
+}
+
+export interface MemonFileUnzip {
+	/** The zip's name. */
+	name: string;
+	/** 0 to 100. */
+	percent: number;
 }
 
 export interface MemonFileExport {

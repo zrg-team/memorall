@@ -10,7 +10,11 @@ import {
 	toFlowFileSystem,
 } from "@/services/flow-service-adapters";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
-import { zipFolder } from "@/services/filesystem/folder-zip";
+import {
+	extractPercent,
+	extractZip,
+	zipFolder,
+} from "@/services/filesystem/folder-zip";
 import {
 	captureWebSessionScreenshot,
 	closeWebSession,
@@ -317,6 +321,12 @@ export const createMemonFilesPort = (
 	},
 	remove: (path) => fs.rm(path, { recursive: true }),
 	zip: (folder) => zipFolder(fs, folder),
+	unzip: (archive, into, onProgress) =>
+		extractZip(fs, archive, {
+			into,
+			onProgress:
+				onProgress && ((progress) => onProgress(extractPercent(progress))),
+		}),
 	subscribe: (listener) =>
 		documentFileSystemService.onFilesystemChanged(() => listener()),
 	async preview(path, kind) {

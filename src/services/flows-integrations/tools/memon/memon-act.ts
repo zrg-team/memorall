@@ -43,15 +43,16 @@ const schema = z
 				"paste",
 				"download",
 				"zip",
+				"unzip",
 			])
 			.describe(
-				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe to see a picture: a page ref (a canvas, an image or any part of the page; an image also gives its address), an image in Files (f3), or with no ref the image the Viewer shows, else the page as it shows; screenshot saves the page as the browser shows it as a PNG file into Files (~/Pictures, or to): the current view, the whole page (capture), a page ref, or a region; scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
+				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe to see a picture: a page ref (a canvas, an image or any part of the page; an image also gives its address), an image in Files (f3), or with no ref the image the Viewer shows, else the page as it shows; screenshot saves the page as the browser shows it as a PNG file into Files (~/Pictures, or to): the current view, the whole page (capture), a page ref, or a region; scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download. unzip: unpack a .zip (a Files ref, or its path in text) beside it, or into the folder in to.",
 			),
 		text: z
 			.string()
 			.optional()
 			.describe(
-				"type: the text (it replaces the field's value; in the editor e1, the whole file). press: the key. select: the option. toggle: on or off. move/copy: the folder to put the entry in. download: the file's address. zip: the folder's path.",
+				"type: the text (it replaces the field's value; in the editor e1, the whole file). press: the key. select: the option. toggle: on or off. move/copy: the folder to put the entry in. download: the file's address. zip: the folder's path. unzip: the .zip's path.",
 			),
 		path: z
 			.string()
@@ -92,7 +93,7 @@ const schema = z
 			.string()
 			.optional()
 			.describe(
-				"download/zip: a folder (the file keeps its name) or a file path; ~/Downloads by default. screenshot: a folder or a .png path; ~/Pictures by default.",
+				"download/zip: a folder (the file keeps its name) or a file path; ~/Downloads by default. unzip: the folder to unpack into; beside the zip by default. screenshot: a folder or a .png path; ~/Pictures by default.",
 			),
 		submit: z
 			.boolean()
@@ -392,6 +393,23 @@ const act = async (
 			}
 			const zipped = await machine.exportFolderZip(folder, input.to);
 			return `Zipped ${zipped.fileCount} files into ${memonDisplayPath(zipped.path, machine.home)} (${formatDownloadSize(zipped.size)}) and handed it to the user to download.`;
+		}
+		case "unzip": {
+			if (input.ref && app !== "files") {
+				throw new Error(
+					"unzip takes a .zip ref from Files (f3) or a path in text.",
+				);
+			}
+			const archive = input.ref
+				? machine.fileRefPath(input.ref)
+				: input.text?.trim();
+			if (!archive) {
+				throw new Error(
+					'Give the .zip: a Files ref or its path, like { action: "unzip", text: "~/Downloads/site.zip" }.',
+				);
+			}
+			const extracted = await machine.extractZip(archive, input.to);
+			return `Unzipped ${extracted.fileCount} files (${formatDownloadSize(extracted.totalBytes)}) into ${memonDisplayPath(extracted.path, machine.home)}.`;
 		}
 		case "paste": {
 			const to = input.ref ? machine.fileRefPath(input.ref) : undefined;

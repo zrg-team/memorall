@@ -6,6 +6,7 @@ import {
 	Folder,
 	HardDrive,
 	House,
+	Link,
 	Loader2,
 	Menu,
 	Plus,
@@ -26,7 +27,9 @@ import {
 import type { MemonSend } from "../types";
 import { pickFiles, uploadToComputer } from "../upload";
 import { useDeleteConfirm } from "../use-delete-confirm";
+import { copyPathsToClipboard } from "@/main/modules/files/utils/copy-paths";
 import { downloadFolderAsZip } from "@/main/modules/files/utils/save-download";
+import { isZipFileName } from "@/services/filesystem/folder-zip";
 import { cn } from "@/lib/utils";
 import {
 	DropdownMenu,
@@ -74,6 +77,7 @@ const FilesWindowView: React.FC<{
 		void send("files.ref", { key: machineKey, ref });
 	const [uploading, setUploading] = React.useState(false);
 	const [zipping, setZipping] = React.useState(false);
+	const [unzipping, setUnzipping] = React.useState(false);
 	const [dragging, setDragging] = React.useState(false);
 	const [selected, setSelected] = React.useState<string[]>([]);
 	const [anchor, setAnchor] = React.useState<string | null>(null);
@@ -109,6 +113,17 @@ const FilesWindowView: React.FC<{
 			logError("[MEMON] Zip failed:", error);
 		} finally {
 			setZipping(false);
+		}
+	};
+
+	/** Unpacks a .zip beside it; a failure shows as the panel's error. */
+	const unzip = async (path: string) => {
+		if (unzipping) return;
+		setUnzipping(true);
+		try {
+			await send("files.unzip", { key: machineKey, path });
+		} finally {
+			setUnzipping(false);
 		}
 	};
 
@@ -273,7 +288,7 @@ const FilesWindowView: React.FC<{
 							title={t("memonComputer.files.more")}
 							className={cn(TOOL_BUTTON, "relative")}
 						>
-							{zipping ? (
+							{zipping || unzipping ? (
 								<Loader2 size={13} className="animate-spin" />
 							) : (
 								<Menu size={13} />
@@ -301,6 +316,14 @@ const FilesWindowView: React.FC<{
 								<DropdownMenuItem onSelect={() => toClipboard("copy")}>
 									<Copy size={13} />
 									{t("memonComputer.files.copy")}
+								</DropdownMenuItem>
+								<DropdownMenuItem
+									onSelect={() => copyPathsToClipboard(selected)}
+								>
+									<Link size={13} />
+									{t("memonComputer.files.copyPath", {
+										count: selected.length,
+									})}
 								</DropdownMenuItem>
 								<DropdownMenuItem onSelect={() => confirmDelete(selected)}>
 									<Trash2 size={13} />
@@ -338,6 +361,25 @@ const FilesWindowView: React.FC<{
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</div>
+			{files.unzipping ? (
+				<div
+					role="status"
+					className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1 text-[11px] text-muted-foreground"
+				>
+					<span className="truncate">
+						{t("memonComputer.files.unzipping", {
+							name: files.unzipping.name,
+							percent: files.unzipping.percent,
+						})}
+					</span>
+					<div className="h-1 min-w-16 flex-1 overflow-hidden rounded-full bg-muted">
+						<div
+							className="h-full rounded-full bg-cyan-500 transition-[width]"
+							style={{ width: `${files.unzipping.percent}%` }}
+						/>
+					</div>
+				</div>
+			) : null}
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: the list takes dropped files, keys and right-clicks; every action also has a button. */}
 			{/* biome-ignore lint/a11y/useKeyWithClickEvents: a click on empty space only clears the selection; Escape does too. */}
 			<div
@@ -451,6 +493,10 @@ const FilesWindowView: React.FC<{
 										toClipboard,
 										paste,
 										remove: confirmDelete,
+										unzip:
+											!isDir && isZipFileName(name)
+												? () => void unzip(path)
+												: undefined,
 									}),
 								);
 							}}

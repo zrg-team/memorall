@@ -1,5 +1,6 @@
 import { base64ToBytes } from "@/services/llm/utils/media-encoding";
 import type { WebOutlineActionRequest } from "@/services/web-browser/web-browser-protocol";
+import type { ZipExtraction } from "@/services/filesystem/folder-zip";
 import { MEMON_KIT_APPS } from "./apps";
 import { memonDisplayPath } from "./constants";
 import { HOSTED_APPS, isHostedAppId } from "./apps/hosted/catalog";
@@ -419,6 +420,15 @@ export const runMemonOperation = async (
 			const { key, paths } = job.payload;
 			return userAside(key, `deleted ${trim(names(paths))}`, (machine) =>
 				machine.deleteFiles(paths),
+			);
+		}
+		case "files.unzip": {
+			const { key, path } = job.payload;
+			return userAside(
+				key,
+				(extracted: ZipExtraction) =>
+					`unzipped ${trim(names([path]))} into ${extracted.path} (${extracted.fileCount} files)`,
+				(machine) => machine.extractZip(path),
 			);
 		}
 		case "visual.save": {
