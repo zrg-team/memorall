@@ -10,7 +10,15 @@ import { runMemonTool } from "./memon-tool-utils";
 const schema = z
 	.object({
 		app: z
-			.enum(["browser", "files", "editor", "terminal", "tasks", "visualize"])
+			.enum([
+				"browser",
+				"files",
+				"editor",
+				"terminal",
+				"tasks",
+				"visualize",
+				"video",
+			])
 			.describe("The app to open or bring to the front."),
 		url: z
 			.string()
@@ -32,7 +40,13 @@ const schema = z
 			.string()
 			.optional()
 			.describe(
-				'Files: the folder to show (default "/"), or a file to open in its app: a .terminal launcher runs in a new Terminal tab, a .studio app opens Studio set up, a .tasks file opens in Tasks. Editor: the file to open as text (a launcher or studio app too, to read or change it without running it); a missing file starts empty and is created on save. Visualize: the .openui file to open.',
+				'Files: the folder to show (default "/"), or a file to open in its app: a .terminal launcher runs in a new Terminal tab, a .studio app opens Studio set up, a .tasks file opens in Tasks. Editor: the file to open as text (a launcher or studio app too, to read or change it without running it); a missing file starts empty and is created on save. Visualize: the .openui file to open. Video: a HyperFrames project folder (or its index.html) or a video file to play.',
+			),
+		exportMp4: z
+			.boolean()
+			.optional()
+			.describe(
+				"Video: also export the project to MP4 in the Video window and wait for it; the file is saved as {project}/renders/{name}.mp4.",
 			),
 	})
 	.describe("Open an app on the computer, a page in the Browser, or a file.");
@@ -42,7 +56,7 @@ type Input = z.infer<typeof schema>;
 export const createMemonOpenTool: ToolFactory<Input> = (): Tool<Input> => ({
 	name: MEMON_OPEN_TOOL,
 	description:
-		"Open an app on the computer and return the screen. Browser opens a url (or a search) and waits for the page to finish drawing itself; Files shows a folder; Editor opens a file; Terminal brings up the shell.",
+		"Open an app on the computer and return the screen. Browser opens a url (or a search) and waits for the page to finish drawing itself; Files shows a folder; Editor opens a file; Terminal brings up the shell; Video plays a HyperFrames project or a video file, and with exportMp4 renders the project to an MP4.",
 	schema,
 	execute: (input, context) =>
 		runMemonTool(
@@ -91,6 +105,16 @@ export const createMemonOpenTool: ToolFactory<Input> = (): Tool<Input> => ({
 						}
 						machine.openWindow("visualize");
 						return "Brought Visualize to the front.";
+					case "video": {
+						if (!input.path) {
+							machine.openWindow("video");
+							return "Brought Video to the front.";
+						}
+						await machine.openVideo(input.path);
+						if (!input.exportMp4) return `Opened ${input.path} in Video.`;
+						const { path } = await machine.exportVideo();
+						return `Exported ${input.path} to ${path}.`;
+					}
 				}
 			},
 		),

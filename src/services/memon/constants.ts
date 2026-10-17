@@ -76,7 +76,8 @@ export const MEMON_APP_IDS = [
 export type MemonAppId = (typeof MEMON_APP_IDS)[number];
 /**
  * Apps every computer has: the agent's own settings (schedules, skills,
- * connections), the user's studios, and the coding agents pi code and fx.
+ * connections), the user's studios, the coding agents pi code and fx, and
+ * Video, which plays and exports HyperFrames projects (it needs Files).
  */
 export const MEMON_BUILTIN_APPS = [
 	"scheduler",
@@ -85,6 +86,7 @@ export const MEMON_BUILTIN_APPS = [
 	"connections",
 	"pi",
 	"fx",
+	"video",
 ] as const;
 export type MemonBuiltinApp = (typeof MEMON_BUILTIN_APPS)[number];
 

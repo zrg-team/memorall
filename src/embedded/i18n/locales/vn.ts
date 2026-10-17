@@ -215,6 +215,9 @@ export const vnEmbeddedLocale = {
 		thought: "Đã suy nghĩ",
 		urlArtifact: "Tạo tác URL",
 		htmlArtifact: "Tạo tác HTML",
+		videoArtifact: "Video",
+		videoArtifactHint:
+			"Phát, xuất và tải video này trong khung chat của Memorall hoặc trong MemonOS.",
 		open: "Mở",
 		imageAlt: "Hình ảnh {index}",
 		copiedTitle: "Đã sao chép!",

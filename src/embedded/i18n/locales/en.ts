@@ -212,6 +212,9 @@ export const enEmbeddedLocale = {
 		thought: "Thought",
 		urlArtifact: "URL artifact",
 		htmlArtifact: "HTML artifact",
+		videoArtifact: "Video",
+		videoArtifactHint:
+			"Play, export and download this video in Memorall's chat or in MemonOS.",
 		open: "Open",
 		imageAlt: "Image {index}",
 		copiedTitle: "Copied!",

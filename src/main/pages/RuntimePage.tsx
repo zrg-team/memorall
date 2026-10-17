@@ -271,6 +271,7 @@ const RuntimeArtifactViewer: React.FC<{
 						content={draft}
 						identifier={artifact.identifier}
 						title={title}
+						projectPath={artifact.projectPath}
 					/>
 				) : artifact.type === "lottie" && mode === "preview" ? (
 					<LottieArtifact

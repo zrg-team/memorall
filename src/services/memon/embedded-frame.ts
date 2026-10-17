@@ -10,6 +10,7 @@ import {
 	captureViewport,
 	type MemonCaptureRequest,
 	type MemonPageCapture,
+	pictureMaxSide,
 } from "./page-capture";
 import type {
 	WebOutlineActionRequest,
@@ -344,13 +345,15 @@ export const frameCapture = async (
 	request: MemonCaptureRequest,
 ): Promise<MemonPageCapture> => {
 	const doc = frameDocument(iframe);
-	// No ref: the page as its viewport shows it.
-	if (!request.ref) return captureViewport(doc);
+	const maxSide = pictureMaxSide(request);
+	// No ref: the page as its viewport shows it, a rectangle of it, or all of it.
+	if (!request.ref) return captureViewport(doc, maxSide, request);
 	// Brings it into view and reads an image's address.
 	const described = actOnRef(doc, { ...request, action: "describe" });
 	const source = (described.ok && described.detail) || undefined;
 	return captureElement(
 		elementOfRef(doc, request.ref, request.docToken),
 		source,
+		maxSide,
 	);
 };

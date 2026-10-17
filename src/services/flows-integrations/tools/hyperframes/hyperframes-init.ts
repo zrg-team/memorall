@@ -5,7 +5,15 @@ import type {
 } from "@memorall/agent-harness-flows/interfaces/engine/tool";
 import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
-import { compositionFile } from "./util";
+import { compositionFile, projectFile } from "./util";
+import {
+	designRootCss,
+	designTokens,
+	HYPERFRAMES_FRAME_PRESET_SLUGS,
+	HYPERFRAMES_FRAME_PRESETS,
+	loadFramePreset,
+	parseDesignSpec,
+} from "./frame-presets";
 import {
 	readFileBytes,
 	writeFileBytes,
@@ -100,7 +108,7 @@ const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
         <p id="s1-sub" class="max-w-[940px] font-hf-display ${supportSize} font-light leading-[1.32] text-hf-muted">${options.subtitle}</p>
       </div>
     </div>
-    <div id="s2" class="${sceneClass}" data-start="${s2}" data-duration="${d2}" data-track-index="0" style="visibility:hidden;">
+    <div id="s2" class="${sceneClass}" data-start="${s2}" data-duration="${d2}" data-track-index="0">
       ${gridDecor}<div class="grain"></div>
       <div class="${contentClass}">
         <p id="s2-label" class="font-hf-data text-[18px] uppercase tracking-[5px] text-hf-accent">THE FRICTION</p>
@@ -108,7 +116,7 @@ const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
         <p id="s2-sub" class="max-w-[820px] font-hf-display text-[36px] font-light leading-[1.38] text-hf-muted">Name the customer pain clearly, then make the next scene feel inevitable.</p>
       </div>
     </div>
-    <div id="s3" class="${sceneClass}" data-start="${s3}" data-duration="${d3}" data-track-index="0" style="opacity:0;">
+    <div id="s3" class="${sceneClass}" data-start="${s3}" data-duration="${d3}" data-track-index="0">
       ${vignetteDecor}<div class="grain"></div>
       <div class="glow h-[520px] w-[900px] bg-hf-accent-2 opacity-[0.14] bottom-[-120px] left-[260px]"></div>
       <div class="${contentClass}">
@@ -117,7 +125,7 @@ const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
         <p id="s3-sub" class="max-w-[900px] font-hf-display text-[36px] font-light leading-[1.38] text-hf-muted">Replace this line with the product promise or launch message.</p>
       </div>
     </div>
-    <div id="s4" class="${sceneClass}" data-start="${s4}" data-duration="${d4}" data-track-index="0" style="opacity:0;">
+    <div id="s4" class="${sceneClass}" data-start="${s4}" data-duration="${d4}" data-track-index="0">
       ${gridDecor}<div class="grain"></div>
       <div class="${contentClass} flex-row items-center gap-[120px]">
         <div class="min-w-[520px]">
@@ -128,7 +136,7 @@ const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
         <p id="s4-copy" class="max-w-[760px] font-hf-display text-[42px] font-light leading-[1.28] text-hf-ink">A proof point, customer quote, or metric makes the story credible.</p>
       </div>
     </div>
-    <div id="s5" class="${sceneClass}" data-start="${s5}" data-duration="${d5}" data-track-index="0" style="opacity:0;">
+    <div id="s5" class="${sceneClass}" data-start="${s5}" data-duration="${d5}" data-track-index="0">
       ${vignetteDecor}<div class="grain"></div>
       <div class="glow h-[560px] w-[1180px] bg-hf-accent opacity-[0.1] bottom-[-220px] left-1/2 -translate-x-1/2"></div>
       <div class="${contentClass} items-center text-center">
@@ -146,17 +154,12 @@ const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
     tl.from("#s1-title", { y:50, autoAlpha:0, duration:0.7, ease:"power4.out" }, 0.3);
     tl.from("#s1-sub", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, 0.7);
     tl.to("#s1-title", { y:-6, duration:1.5, ease:"sine.inOut", yoyo:true, repeat:1 }, 1.0);
-    tl.set("#s1", { autoAlpha:0 }, ${s2});
-    tl.set("#s2", { autoAlpha:1 }, ${s2});
     tl.from("#s2-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, ${s2 + 0.2});
     tl.from("#s2-title", { y:60, autoAlpha:0, duration:0.7, ease:"power4.out" }, ${s2 + 0.4});
     tl.from("#s2-sub", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, ${s2 + 0.8});
-    tl.set("#s2", { autoAlpha:0 }, ${s3});
-    tl.set("#s3", { opacity:1 }, ${s3});
     tl.from("#s3-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, ${s3 + 0.2});
     tl.from("#s3-title", { y:60, autoAlpha:0, duration:0.7, ease:"power4.out" }, ${s3 + 0.4});
     tl.from("#s3-sub", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, ${s3 + 0.8});
-    tl.set("#s4", { opacity:1 }, ${s4});
     tl.from("#s4-label", { x:-30, autoAlpha:0, duration:0.4, ease:"power2.out" }, ${s4 + 0.2});
     var c={v:0};
     tl.to(c, { v:${options.statValue}, duration:2.0, ease:"power2.out", onUpdate:function(){
@@ -164,7 +167,6 @@ const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
       document.getElementById("s4-stat").textContent = value + "${options.statSuffix}";
     }}, ${s4 + 0.5});
     tl.from("#s4-copy", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, ${s4 + 0.8});
-    tl.set("#s5", { opacity:1 }, ${s5});
     tl.from("#s5-label", { y:20, autoAlpha:0, duration:0.4, ease:"power2.out" }, ${s5 + 0.2});
     tl.from("#s5-cta", { y:50, autoAlpha:0, duration:0.7, ease:"power4.out" }, ${s5 + 0.4});
     tl.from("#s5-sub", { y:30, autoAlpha:0, duration:0.5, ease:"power2.out" }, ${s5 + 0.8});
@@ -172,6 +174,7 @@ const makeTailwindTemplate = (options: TailwindTemplateOptions): string => {
       bgColor:"${options.bg}", scenes:["s3","s4","s5"], timeline:tl,
       transitions:[{time:${transition1},shader:"cinematic-zoom",duration:0.5},{time:${transition2},shader:"light-leak",duration:0.5}],
     });
+    tl.set({}, {}, ${options.duration});
     window.__timelines["main"] = tl;
   </script>
 </body>
@@ -188,7 +191,7 @@ const TPL_NEON_LAUNCH = makeTailwindTemplate({
 	accent: "#c840f0",
 	accent2: "#7c6cff",
 	muted: "#8a86a4",
-	fontDisplay: '"Space Grotesk",sans-serif',
+	fontDisplay: '"Montserrat",sans-serif',
 	fontData: '"JetBrains Mono",monospace',
 	eyebrow: "INTRODUCING",
 	title: "Your Product\nName Here",
@@ -213,7 +216,7 @@ const TPL_SOCIAL_REEL = makeTailwindTemplate({
 	accent: "#ff3c3c",
 	accent2: "#ffffff",
 	muted: "#8d8d8d",
-	fontDisplay: '"Barlow Condensed",sans-serif',
+	fontDisplay: '"Oswald",sans-serif',
 	fontData: '"JetBrains Mono",monospace',
 	eyebrow: "STOP SCROLLING",
 	title: "This changes\nhow you work",
@@ -237,8 +240,8 @@ const TPL_CLEAN_MINIMAL = makeTailwindTemplate({
 	accent: "#d97b2a",
 	accent2: "#1a1814",
 	muted: "#8a8278",
-	fontDisplay: '"DM Serif Display",serif',
-	fontData: '"Space Grotesk",sans-serif',
+	fontDisplay: '"Playfair Display",serif',
+	fontData: '"Montserrat",sans-serif',
 	eyebrow: "EDITORIAL STORY",
 	title: "Beautiful products\ndeserve a story",
 	subtitle: "A restrained template for premium announcements.",
@@ -261,8 +264,8 @@ const TPL_TECH_DATA = makeTailwindTemplate({
 	accent: "#00e5c0",
 	accent2: "#0066ff",
 	muted: "#5b807b",
-	fontDisplay: '"Space Grotesk",sans-serif',
-	fontData: '"JetBrains Mono",monospace',
+	fontDisplay: '"Montserrat",sans-serif',
+	fontData: '"IBM Plex Mono",monospace',
 	eyebrow: "// PRODUCT.LAUNCH",
 	title: "Built for teams\nwho ship fast",
 	subtitle: "A metrics-forward launch draft with technical energy.",
@@ -286,8 +289,8 @@ const TPL_WARM_CINEMA = makeTailwindTemplate({
 	accent: "#c9892a",
 	accent2: "#e8b86d",
 	muted: "#9a8460",
-	fontDisplay: '"Cormorant",serif',
-	fontData: '"Space Grotesk",sans-serif',
+	fontDisplay: '"EB Garamond",serif',
+	fontData: '"Montserrat",sans-serif',
 	eyebrow: "EST. 2024",
 	title: "Every great product\nbegins with a story",
 	subtitle: "A warm cinematic structure for founder-led launches.",
@@ -309,7 +312,12 @@ interface ScaffoldOptions {
 	height: number;
 	durations: number[];
 	fills: string[];
-	shaderGroups: Array<{ indices: [number, number]; shader: string }>;
+	/**
+	 * The shader transitions: one per boundary of a run of consecutive scenes,
+	 * starting at scene index `from`. HyperShader supports one init call per
+	 * composition (calls share one canvas), so they form a single run.
+	 */
+	shaderRun: { from: number; shaders: string[] };
 }
 
 const makeScaffoldHTML = ({
@@ -317,7 +325,7 @@ const makeScaffoldHTML = ({
 	height,
 	durations,
 	fills,
-	shaderGroups,
+	shaderRun,
 }: ScaffoldOptions): string => {
 	let t = 0;
 	const starts = durations.map((d) => {
@@ -327,20 +335,14 @@ const makeScaffoldHTML = ({
 	});
 	const total = t;
 
-	const firstAnchors = new Set(shaderGroups.map((g) => g.indices[0]));
-	const secondAnchors = new Set(shaderGroups.map((g) => g.indices[1]));
 	const pad = height > width ? "120px 80px" : "80px 160px";
 
+	// Each scene shows only inside its data-start/data-duration window: the
+	// HyperFrames runtime mounts and unmounts it, so no script toggles it.
 	const scenesHtml = durations
 		.map((d, i) => {
 			const id = `s${i + 1}`;
-			const style =
-				i === 0
-					? ""
-					: firstAnchors.has(i) || secondAnchors.has(i)
-						? ` style="opacity:0;"`
-						: ` style="visibility:hidden;"`;
-			return `      <div class="scene clip" id="${id}" data-start="${starts[i]}" data-duration="${d}" data-track-index="0"${style}>\n        <div class="grain"></div><div class="scene-content"><!-- FILL: ${fills[i] ?? `scene ${i + 1}`} --></div>\n      </div>`;
+			return `      <div class="scene clip" id="${id}" data-start="${starts[i]}" data-duration="${d}" data-track-index="0">\n        <div class="grain"></div><div class="scene-content"><!-- FILL: ${fills[i] ?? `scene ${i + 1}`} --></div>\n      </div>`;
 		})
 		.join("\n");
 
@@ -348,38 +350,21 @@ const makeScaffoldHTML = ({
 		"      window.__timelines = window.__timelines || {};",
 		"      if (window.lucide) window.lucide.createIcons();",
 		"      var tl = gsap.timeline({ paused: true });",
-		`      tl.set("#s1", { autoAlpha:0 }, ${starts[1]});`,
+		"      // === FILL: scene animations ===",
 	];
 
-	for (let i = 1; i < durations.length; i++) {
-		const id = `#s${i + 1}`;
-		const isLast = i === durations.length - 1;
-		if (firstAnchors.has(i)) {
-			js.push(
-				`      tl.set("${id}", { opacity:1 }, ${starts[i]}); // first anchor`,
-			);
-		} else if (!secondAnchors.has(i)) {
-			if (isLast) {
-				js.push(`      tl.set("${id}", { autoAlpha:1 }, ${starts[i]});`);
-			} else {
-				js.push(
-					`      tl.set("${id}", { autoAlpha:1 }, ${starts[i]}); tl.set("${id}", { autoAlpha:0 }, ${starts[i] + durations[i]});`,
-				);
-			}
-		}
-		// second anchors: HyperShader handles visibility — no explicit toggle needed
-	}
+	const { from, shaders } = shaderRun;
+	const shaderScenes = [...shaders, null].map((_, i) => `"s${from + i + 1}"`);
+	const transitions = shaders.map((shader, i) => {
+		const time = +(starts[from + i + 1] - 0.25).toFixed(2);
+		return `{ time: ${time}, shader: "${shader}", duration: 0.5 }`;
+	});
+	js.push(
+		`      window.HyperShader.init({ bgColor: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#0a0a0d", scenes: [${shaderScenes.join(", ")}], timeline: tl, transitions: [${transitions.join(", ")}] });`,
+	);
 
-	js.push("      // === FILL: scene animations ===");
-
-	for (const g of shaderGroups) {
-		const [a, b] = g.indices;
-		const transTime = +(starts[b] - 0.25).toFixed(2);
-		js.push(
-			`      window.HyperShader.init({ bgColor: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#0a0a0d", scenes: ["s${a + 1}", "s${b + 1}"], timeline: tl, transitions: [{ time: ${transTime}, shader: "${g.shader}", duration: 0.5 }] });`,
-		);
-	}
-
+	// The timeline sets the video's length: keep it running to the last scene's end.
+	js.push(`      tl.set({}, {}, ${total});`);
 	js.push('      window.__timelines["main"] = tl;');
 
 	return `<!doctype html>
@@ -388,7 +373,7 @@ const makeScaffoldHTML = ({
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=${width}, height=${height}" />
     <style>
-      :root { --bg:#0a0a0d; --ink:#f5f5f7; --accent:#7c6cff; --muted:#5a6270; --accent-dim:#3d3680; --font-display:"Space Grotesk",sans-serif; --font-data:"JetBrains Mono",monospace; }
+      :root { --bg:#0a0a0d; --ink:#f5f5f7; --accent:#7c6cff; --muted:#5a6270; --accent-dim:#3d3680; --font-display:"Montserrat",sans-serif; --font-data:"JetBrains Mono",monospace; }
       *,*::before,*::after { margin:0; padding:0; box-sizing:border-box }
       html,body { width:${width}px; height:${height}px; overflow:hidden; background:var(--bg); color:var(--ink) }
       .scene { position:absolute; top:0; left:0; width:${width}px; height:${height}px; overflow:hidden }
@@ -412,7 +397,7 @@ const SCAFFOLD_SOCIAL_REEL = makeScaffoldHTML({
 	height: 1920,
 	durations: [2.5, 2.5, 2.5, 2.5, 2.5, 2.5],
 	fills: ["hook", "context", "build-up", "hero", "proof", "CTA"],
-	shaderGroups: [{ indices: [2, 3], shader: "cinematic-zoom" }],
+	shaderRun: { from: 2, shaders: ["cinematic-zoom"] },
 });
 
 const SCAFFOLD_LAUNCH_TEASER = makeScaffoldHTML({
@@ -429,10 +414,7 @@ const SCAFFOLD_LAUNCH_TEASER = makeScaffoldHTML({
 		"momentum",
 		"CTA",
 	],
-	shaderGroups: [
-		{ indices: [3, 4], shader: "cinematic-zoom" },
-		{ indices: [6, 7], shader: "light-leak" },
-	],
+	shaderRun: { from: 3, shaders: ["cinematic-zoom", "light-leak"] },
 });
 
 const SCAFFOLD_EXPLAINER = makeScaffoldHTML({
@@ -453,10 +435,7 @@ const SCAFFOLD_EXPLAINER = makeScaffoldHTML({
 		"vision",
 		"CTA",
 	],
-	shaderGroups: [
-		{ indices: [2, 3], shader: "cinematic-zoom" },
-		{ indices: [8, 9], shader: "domain-warp" },
-	],
+	shaderRun: { from: 2, shaders: ["cinematic-zoom", "domain-warp"] },
 });
 
 const SCAFFOLD_CINEMATIC = makeScaffoldHTML({
@@ -472,10 +451,7 @@ const SCAFFOLD_CINEMATIC = makeScaffoldHTML({
 		"consequence",
 		"resolve",
 	],
-	shaderGroups: [
-		{ indices: [2, 3], shader: "cross-warp-morph" },
-		{ indices: [5, 6], shader: "thermal-distortion" },
-	],
+	shaderRun: { from: 2, shaders: ["cross-warp-morph", "thermal-distortion"] },
 });
 
 // ── Template registry ─────────────────────────────────────────────────────────
@@ -552,6 +528,8 @@ const TEMPLATE_NAMES = TEMPLATES.map((t) =>
 	t.filename.replace(".html", ""),
 ) as [string, ...string[]];
 
+export const HYPERFRAMES_TEMPLATE_NAMES: readonly string[] = TEMPLATE_NAMES;
+
 // ── Tool ──────────────────────────────────────────────────────────────────────
 
 const schema = z.object({
@@ -566,6 +544,18 @@ const schema = z.object({
 		.optional()
 		.describe(
 			`Template to use for index.html. Options: ${TEMPLATE_NAMES.join(", ")}. Defaults to neon-launch if omitted.`,
+		),
+	frame_preset: z
+		.enum(HYPERFRAMES_FRAME_PRESET_SLUGS)
+		.optional()
+		.describe(
+			`A HyperFrames design preset to direct the composition: saved as the project's frame.md (brand tokens + frame treatments + Do/Don't) and used to theme the scaffold. Options: ${HYPERFRAMES_FRAME_PRESETS.map((preset) => `${preset.slug} (${preset.look}; for ${preset.pickWhen})`).join(" | ")}.`,
+		),
+	design_path: z
+		.string()
+		.optional()
+		.describe(
+			"A design spec already in Files (the user's design.md, DESIGN.md or frame.md): copied into the project, its tokens theme the scaffold. With frame_preset too, the preset directs the composition and this design.md holds the brand.",
 		),
 	force: z
 		.boolean()
@@ -582,7 +572,7 @@ export const createHyperframesInitTool: ToolFactory<
 	HyperframesToolConfig
 > = (services, config): Tool<Input> => ({
 	name: TOOL_NAME,
-	description: `Initialise a new HyperFrames project. Writes index.html using the chosen Tailwind-first template. Available templates: ${TEMPLATES.map((t) => `${t.filename.replace(".html", "")} (${t.description})`).join(" | ")}. Use force: true to overwrite an existing project.`,
+	description: `Initialise a new HyperFrames project. Writes index.html using the chosen Tailwind-first template and returns it, ready to fill. Available templates: ${TEMPLATES.map((t) => `${t.filename.replace(".html", "")} (${t.description})`).join(" | ")}. Use force: true to overwrite an existing project.`,
 	schema,
 	execute: async (input) => {
 		const dfs = services.fs;
@@ -599,15 +589,115 @@ export const createHyperframesInitTool: ToolFactory<
 			}
 		}
 
+		// The design spec: a preset's frame.md, the user's spec, or both.
+		let preset: string | null = null;
+		if (input.frame_preset) {
+			preset = await loadFramePreset(input.frame_preset);
+			if (!preset) return `Error: unknown frame preset ${input.frame_preset}.`;
+		}
+		let userSpec: { text: string; name: "frame.md" | "design.md" } | null =
+			null;
+		if (input.design_path) {
+			try {
+				const text = new TextDecoder().decode(
+					await readFileBytes(dfs, input.design_path, config),
+				);
+				const isFrame =
+					input.design_path.split("/").pop()?.toLowerCase() === "frame.md";
+				userSpec = {
+					text,
+					name: isFrame && !preset ? "frame.md" : "design.md",
+				};
+			} catch {
+				return `Error: ${input.design_path} not found. Pass the path of a design.md, DESIGN.md or frame.md in Files.`;
+			}
+		}
+		const hasSpec = Boolean(preset || userSpec);
+
 		const chosen =
 			TEMPLATES.find((t) => t.filename === `${input.template}.html`) ??
+			(hasSpec
+				? TEMPLATES.find((t) => t.filename === DESIGN_DEFAULT_TEMPLATE)
+				: undefined) ??
 			TEMPLATES[0];
 
-		await writeFileBytes(dfs, indexFile, chosen.html, true, config);
+		// The brand: the user's tokens when given, else the preset's.
+		const brand = userSpec?.text ?? preset;
+		const tokens = brand ? designTokens(parseDesignSpec(brand)) : null;
+		const html =
+			tokens && Object.keys(tokens.colors).length + tokens.families.length > 0
+				? withDesignTokens(chosen.html, designRootCss(tokens))
+				: chosen.html;
 
-		return `Initialised: ${indexFile} with Tailwind template "${chosen.name}" (${chosen.description}). Edit with hyperframes_write, then hyperframes_validate and hyperframes_show.`;
+		await writeFileBytes(dfs, indexFile, html, true, config);
+		const written: string[] = [];
+		if (preset) {
+			const file = projectFile(
+				input.project_path,
+				"frame.md",
+				config?.rootPath,
+			);
+			await writeFileBytes(dfs, file, preset, true, config);
+			written.push(file);
+		}
+		if (userSpec) {
+			const file = projectFile(
+				input.project_path,
+				userSpec.name,
+				config?.rootPath,
+			);
+			await writeFileBytes(dfs, file, userSpec.text, true, config);
+			written.push(file);
+		}
+
+		// The scaffold comes back with the result, so the next call can be the
+		// write that fills it instead of a read.
+		const lines = [
+			`Initialised: ${indexFile} with Tailwind template "${chosen.name}" (${chosen.description}). Fill it with hyperframes_write (full rewrite) or hyperframes_edit, then hyperframes_show.`,
+		];
+		if (hasSpec) {
+			lines.push(
+				`Design spec saved: ${written.join(", ")}. ${designGuidance(Boolean(preset), userSpec?.name)} The scaffold's :root already carries its tokens (--bg, --ink, --accent, --accent2, --muted, --font-display, --font-body, --font-data, and every color as --c-<name>).`,
+			);
+			const spec = preset ?? userSpec?.text ?? "";
+			lines.push(`\n${written[0]} (${spec.length} chars):\n\n${spec}`);
+			if (preset && userSpec) {
+				lines.push(
+					`\n${written[1]} (${userSpec.text.length} chars):\n\n${userSpec.text}`,
+				);
+			}
+		}
+		lines.push(`\n${indexFile} (${html.length} chars):\n\n${html}`);
+		return lines.join("\n");
 	},
 });
+
+/** The structural scaffold a design spec themes when no template is named. */
+const DESIGN_DEFAULT_TEMPLATE = "scaffold-launch-teaser.html";
+
+/** A scaffold themed by a design spec: its tokens replace the template's :root. */
+const withDesignTokens = (html: string, rootCss: string): string => {
+	const root = /:root\s*\{[^}]*\}/;
+	return root.test(html)
+		? html.replace(root, () => rootCss)
+		: html.replace("</head>", `  <style>${rootCss}</style>\n</head>`);
+};
+
+const designGuidance = (
+	preset: boolean,
+	userSpec: "frame.md" | "design.md" | undefined,
+): string => {
+	if (preset && userSpec) {
+		return "frame.md (the preset) directs the composition; design.md is the brand. Rewrite frame.md's frontmatter colors and typography with design.md's values (hyperframes_edit file: frame.md), keep its frame treatments and rules, then compose to frame.md.";
+	}
+	if (preset) {
+		return "frame.md directs the composition: quote its frontmatter tokens verbatim (hex, font family, weight) and follow its frame treatments, Composition Rules and self-audit; layout is yours within them.";
+	}
+	if (userSpec === "frame.md") {
+		return "frame.md directs the composition: quote its frontmatter tokens verbatim and follow its rules; layout is yours within them.";
+	}
+	return "design.md describes the brand for the web. Write the project's frame.md first (hyperframes_write file: frame.md): the same frontmatter tokens verbatim, then the frame-scale direction (The Frame, a cqw type ramp, Frame Treatments, Composition Rules, Pre-Render Self-Audit), as the presets do; then compose to it.";
+};
 
 toolRegistry.register(TOOL_NAME, createHyperframesInitTool);
 

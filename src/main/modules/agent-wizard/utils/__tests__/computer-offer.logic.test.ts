@@ -16,6 +16,7 @@ const catalog = {
 	skillNames: [],
 	connections: [],
 	composioKeySaved: false,
+	agents: [],
 } as any;
 
 const draft = {

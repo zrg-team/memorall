@@ -243,7 +243,12 @@
 		"noDescription": "Chưa có mô tả",
 		"updatedAt": "Cập nhật {{value}}",
 		"updatedAtUnknown": "Không có thời gian cập nhật",
-		"selected": "Đã chọn"
+		"selected": "Đã chọn",
+		"star": "Thêm {{name}} vào yêu thích",
+		"unstar": "Bỏ {{name}} khỏi yêu thích",
+		"team_one": "Nhóm {{count}}",
+		"team_other": "Nhóm {{count}}",
+		"teamTooltip": "Giao việc cho {{names}}"
 	},
 	"overview": {
 		"eyebrow": "Tổng quan",
@@ -478,6 +483,13 @@
 			"title": "Cho agent này một chiếc máy tính?",
 			"description": "MemonOS Bot chạy agent trên máy tính riêng: bạn xem nó làm việc trực tiếp và có thể tiếp quản bất cứ lúc nào.",
 			"turnOn": "Bật",
+			"notNow": "Để sau"
+		},
+		"teamOffer": {
+			"title": "Tạo nhóm cho tác nhân này?",
+			"description": "Nó có thể giao việc cho các tác nhân bạn bật và dùng câu trả lời của họ.",
+			"add_one": "Thêm {{count}} tác nhân",
+			"add_other": "Thêm {{count}} tác nhân",
 			"notNow": "Để sau"
 		},
 		"chatPanel": {

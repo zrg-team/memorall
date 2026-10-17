@@ -38,7 +38,8 @@ import {
 	updateNodeByPath,
 	mergeTreeState,
 } from "../utils/tree-utils";
-import { downloadFolderAsZip } from "../utils/save-download";
+import { downloadFolderAsZip, unzipInFiles } from "../utils/save-download";
+import { extractPercent } from "@/services/filesystem/folder-zip";
 import {
 	HOSTED_APP_IDS,
 	HOSTED_APPS,
@@ -68,6 +69,8 @@ const UPLOAD_ACCEPT = [
 	// Audio and video play in the viewer.
 	".wav,.mp3,.ogg,.oga,.m4a,.flac,.mp4,.m4v,.mov,.webm,.ogv,.mkv",
 	"audio/*,video/*",
+	// Unzipped from its menu.
+	".zip",
 	...new Set(
 		HOSTED_APP_IDS.flatMap((id) =>
 			HOSTED_APPS[id].extensions.map((extension) => `.${extension}`),
@@ -132,6 +135,12 @@ export function useDocumentLibrary() {
 	>("documents");
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	/** The .zip being unpacked, for the header's progress bar. */
+	const [unzipProgress, setUnzipProgress] = useState<{
+		name: string;
+		percent: number;
+	} | null>(null);
+	const unzipping = useRef(false);
 	const [viewMode, setViewMode] = useState<"grid" | "list">("list");
 	const [searchQuery, setSearchQuery] = useState("");
 	// Not state: nothing on the page draws it, so a tick must not redraw the page.
@@ -743,22 +752,18 @@ export function useDocumentLibrary() {
 				} else {
 					await documentFileSystemService.deleteFolder(sp);
 				}
-				const newTree = await loadTree();
+				await loadTree();
+				// The open item is gone: back to the folder it was in, all of it.
 				if (selectedNodeRef.current?.id === item.item.id) {
-					const curPath = currentPathRef.current;
-					const parentPath =
-						curPath.substring(0, curPath.lastIndexOf("/")) || "/";
-					const parentNode = findNodeByPath(newTree, parentPath);
-					setSelectedNode(
-						parentNode ?? (newTree.length > 0 ? newTree[0] : null),
-					);
+					setSearchQuery("");
+					await handleOpenDocumentByPath(parentFolder(item.item.path) ?? "/");
 				}
 			} catch (err) {
 				logError("Failed to delete item:", err);
 				setError(t("library.deleteItemError"));
 			}
 		},
-		[loadTree, t],
+		[handleOpenDocumentByPath, loadTree, t],
 	);
 
 	const handleRenameItem = useCallback(
@@ -789,16 +794,16 @@ export function useDocumentLibrary() {
 
 		try {
 			await documentFileSystemService.deleteFile(toSandboxPath(node.path));
-			const newTree = await loadTree();
-			const curPath = currentPathRef.current;
-			const parentPath = curPath.substring(0, curPath.lastIndexOf("/")) || "/";
-			const parentNode = findNodeByPath(newTree, parentPath);
-			setSelectedNode(parentNode ?? (newTree.length > 0 ? newTree[0] : null));
+			await loadTree();
+			// Back to the folder it was in, however deep, all of it: a search
+			// that found this file now finds nothing, and left the folder empty.
+			setSearchQuery("");
+			await handleOpenDocumentByPath(parentFolder(node.path) ?? "/");
 		} catch (err) {
 			logError("Failed to delete file:", err);
 			setError(t("library.deleteFileError"));
 		}
-	}, [loadTree, t]);
+	}, [handleOpenDocumentByPath, loadTree, t]);
 
 	// ── Download ─────────────────────────────────────────────────────────────
 
@@ -863,6 +868,39 @@ export function useDocumentLibrary() {
 			}
 		},
 		[t],
+	);
+
+	/**
+	 * Unpacks a .zip beside it, one at a time, showing how far it has got;
+	 * the error says why one could not be.
+	 */
+	const handleUnzip = useCallback(
+		async (archivePath: string) => {
+			if (unzipping.current) return;
+			unzipping.current = true;
+			const name = archivePath.slice(archivePath.lastIndexOf("/") + 1);
+			setUnzipProgress({ name, percent: 0 });
+			try {
+				await unzipInFiles(archivePath, (progress) => {
+					const percent = extractPercent(progress);
+					setUnzipProgress((current) =>
+						current?.percent === percent ? current : { name, percent },
+					);
+				});
+				await loadTree();
+			} catch (err) {
+				logError("Failed to unzip:", err);
+				setError(
+					err instanceof Error
+						? `${t("library.unzipError")}: ${err.message}`
+						: t("library.unzipError"),
+				);
+			} finally {
+				unzipping.current = false;
+				setUnzipProgress(null);
+			}
+		},
+		[t, loadTree],
 	);
 
 	// ── Move ─────────────────────────────────────────────────────────────────
@@ -954,6 +992,7 @@ export function useDocumentLibrary() {
 		selectedSection,
 		loading,
 		error,
+		unzipProgress,
 		viewMode,
 		searchQuery,
 		topics,
@@ -991,6 +1030,7 @@ export function useDocumentLibrary() {
 		handleDownloadFile,
 		handleDownloadSelectedFile,
 		handleDownloadFolder,
+		handleUnzip,
 		handleMove,
 		handleTopicFilterChange,
 		handleRemoveTopicFilter,

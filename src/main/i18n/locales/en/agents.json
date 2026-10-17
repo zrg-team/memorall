@@ -243,7 +243,12 @@
 		"noDescription": "No description yet",
 		"updatedAt": "Updated {{value}}",
 		"updatedAtUnknown": "Updated date unavailable",
-		"selected": "Selected"
+		"selected": "Selected",
+		"star": "Add {{name}} to favorites",
+		"unstar": "Remove {{name}} from favorites",
+		"team_one": "Team of {{count}}",
+		"team_other": "Team of {{count}}",
+		"teamTooltip": "Hands tasks to {{names}}"
 	},
 	"overview": {
 		"eyebrow": "Overview",
@@ -484,6 +489,13 @@
 			"title": "Give this agent a computer?",
 			"description": "MemonOS Bot runs the agent on its own computer: you watch it work live and can take over at any time.",
 			"turnOn": "Turn on",
+			"notNow": "Not now"
+		},
+		"teamOffer": {
+			"title": "Give this agent a team?",
+			"description": "It can hand tasks to the agents you switch on and use their answers.",
+			"add_one": "Add {{count}} agent",
+			"add_other": "Add {{count}} agents",
 			"notNow": "Not now"
 		},
 		"chatPanel": {

@@ -11,7 +11,7 @@ export const EmbeddedArtifact: React.FC<{
 		(segment.type === "url"
 			? t("urlArtifact")
 			: segment.type === "hyperframes"
-				? "HyperFrames Composition"
+				? t("videoArtifact")
 				: t("htmlArtifact"));
 
 	const openUrl = () => {
@@ -34,7 +34,15 @@ export const EmbeddedArtifact: React.FC<{
 					</button>
 				)}
 			</div>
-			{segment.type === "html" || segment.type === "hyperframes" ? (
+			{segment.type === "hyperframes" ? (
+				// A video needs the packaged HyperFrames runtimes, which a page's
+				// dock cannot load: point to where it plays.
+				<div className="memorall-artifact-url">
+					<div className="memorall-artifact-url-text">
+						{t("videoArtifactHint")}
+					</div>
+				</div>
+			) : segment.type === "html" ? (
 				<iframe
 					className="memorall-artifact-frame"
 					title={title}

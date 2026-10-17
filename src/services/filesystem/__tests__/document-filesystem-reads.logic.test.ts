@@ -155,6 +155,70 @@ describe("reading the library tree", () => {
 	});
 });
 
+describe("folder listings after a change in this context", () => {
+	it("are read again all the way up, so a new folder's files are found", async () => {
+		const { files } = await load();
+		const names = async (path: string) =>
+			(await files.getFolderChildren(path)).map((node) => node.name).sort();
+		expect(await names("/")).toEqual(["notes.md"]);
+
+		// An agent writes into folders that did not exist; only the file is
+		// announced, as a write that creates its folders on the way does.
+		nodes.set("/home/files/content", { type: "dir" });
+		nodes.set("/home/files/content/ttv", { type: "dir" });
+		nodes.set("/home/files/content/ttv/script.md", {
+			type: "file",
+			data: new Uint8Array([1]),
+		});
+		await (
+			files as unknown as {
+				notifyFilesystemChanged(change: unknown): Promise<void>;
+			}
+		).notifyFilesystemChanged({
+			scope: "root",
+			operation: "write",
+			path: "/content/ttv/script.md",
+		});
+
+		expect(await names("/")).toEqual(["content", "notes.md"]);
+		expect(await names("/content")).toEqual(["ttv"]);
+		expect(await names("/content/ttv")).toEqual(["script.md"]);
+	});
+
+	it("are not kept when a change came in while they were read", async () => {
+		const { files } = await load();
+		// A slow listing: taken before the change, handed back after it.
+		const list = fakeFs.promises.readdir;
+		let release!: () => void;
+		const held = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let listed = false;
+		fakeFs.promises.readdir = async (path: string) => {
+			const entries = await list(path);
+			listed = true;
+			await held;
+			return entries;
+		};
+		try {
+			const reading = files.getFolderChildren("/");
+			while (!listed) await flush();
+			nodes.set("/home/files/new.md", {
+				type: "file",
+				data: new Uint8Array([1]),
+			});
+			files.forceRefresh();
+			release();
+			expect((await reading).map((node) => node.name)).not.toContain("new.md");
+		} finally {
+			fakeFs.promises.readdir = list;
+		}
+
+		const names = (await files.getFolderChildren("/")).map((node) => node.name);
+		expect(names).toContain("new.md");
+	});
+});
+
 describe("changes made by other contexts", () => {
 	it("are announced once per burst, after the reload that makes them visible", async () => {
 		const { files, deliver } = await load();

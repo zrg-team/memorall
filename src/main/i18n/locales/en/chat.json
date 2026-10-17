@@ -113,7 +113,14 @@
 	},
 	"flowSelector": {
 		"chat": "Chat",
-		"create": "Create new flow"
+		"create": "Create new flow",
+		"favorites": "Favorites",
+		"otherAgents": "Other agents",
+		"star": "Add {{name}} to favorites",
+		"unstar": "Remove {{name}} from favorites",
+		"starHint": "Star an agent to keep it at the top.",
+		"team": "Team of {{count}}: {{names}}",
+		"teamTooltip": "Hands tasks to {{names}}"
 	},
 	"agentBuilderCallout": {
 		"title": "Build an agent for your exact work",
@@ -270,7 +277,8 @@
 	"toolStatus": {
 		"running": "Running",
 		"error": "Error",
-		"done": "Done"
+		"done": "Done",
+		"stopped": "Stopped"
 	},
 	"childAgent": {
 		"title": "Message {{name}}",
@@ -288,6 +296,11 @@
 		"toolCalls_other": "{{count}} tool calls",
 		"working": "Working…",
 		"noReply": "No reply returned.",
+		"stepLimit": "{{name}} used all its steps before it could reply, so nothing came back.",
+		"stopped": "{{name}} was stopped before it replied.",
+		"unreported": "{{name}} has finished; its last steps were not reported, so they show as stopped.",
+		"omittedSteps_one": "{{count}} earlier step not shown",
+		"omittedSteps_other": "{{count}} earlier steps not shown",
 		"input": "{{value}} in",
 		"output": "{{value}} out",
 		"cached": "{{percent}}% cached",
@@ -402,7 +415,14 @@
 		"previewIssue": "Preview reported {{count}} issue",
 		"previewIssue_plural": "Preview reported {{count}} issues",
 		"sendToAgentTitle": "Send preview issue details to the agent",
-		"sendToAgent": "Send to agent"
+		"sendToAgent": "Send to agent",
+		"dismissIssues": "Dismiss issues",
+		"exportCancel": "Cancel",
+		"exportSaving": "Saving MP4",
+		"exportSaved": "Saved to {{path}}",
+		"exportSaveFailed": "Not saved to the project; you can still download it",
+		"exportAgain": "Export again",
+		"loadFailed": "Could not open the video: {{error}}"
 	},
 	"saveDialog": {
 		"title": "Select folder to store",
@@ -503,6 +523,10 @@
 		"toolCount": "{{count}} tools",
 		"hideDetail": "Hide",
 		"detail": "Detail",
+		"manageTeam": "Manage team",
+		"teamCount_one": "Team of {{count}} agent",
+		"teamCount_other": "Team of {{count}} agents",
+		"teamEmpty": "No agents yet: choose who it can hand tasks to",
 		"featureTools": "Tools",
 		"featureAccessibleAgents": "Accessible child agents",
 		"noAccessibleAgents": "No child agents selected.",
@@ -578,7 +602,8 @@
 				"skills": "Skills",
 				"connections": "Connections",
 				"pi": "pi code",
-				"fx": "fx"
+				"fx": "fx",
+				"video": "Video"
 			},
 			"appsShort": "Apps",
 			"apps": {

@@ -3,6 +3,7 @@ import type {
 	PageOutlineActionRequest,
 	PageOutlineActionResult,
 } from "@/co-agent/dom/page-outline";
+import type { WebScreenshotOptions } from "./page-screenshot";
 
 export type WebBrowserMode = "iframe" | "tab" | "window";
 export type BrowserBackedWebMode = Exclude<WebBrowserMode, "iframe">;
@@ -296,13 +297,15 @@ export type WebBrowserCommandRequest =
 			tabId?: number;
 			windowId?: number;
 	  }
-	| {
+	| ({
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
 			command: "screenshot";
 			sessionId: string;
 			tabId: number;
 			windowId?: number;
-	  }
+			/** A whole page takes longer than one capture of the viewport. */
+			timeoutMs?: number;
+	  } & WebScreenshotOptions)
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
 			command: "fetch-image";
@@ -440,6 +443,8 @@ export type WebBrowserCommandResponse =
 			dataUrl: string;
 			width: number;
 			height: number;
+			/** The page was too long to keep whole: the picture stops short of its end. */
+			cut?: boolean;
 	  }
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
@@ -523,6 +528,12 @@ export type WebBrowserCommandResponse =
 			sessionId: string;
 			error: string;
 	  };
+
+const isScreenshotRect = (value: unknown): boolean =>
+	isRecord(value) &&
+	["x", "y", "width", "height"].every((key) =>
+		Number.isFinite(value[key] as number),
+	);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -708,6 +719,12 @@ export const isWebBrowserCommandRequest = (
 		case "close":
 			return typeof value.sessionId === "string";
 		case "screenshot":
+			return (
+				typeof value.sessionId === "string" &&
+				typeof value.tabId === "number" &&
+				(value.fullPage === undefined || typeof value.fullPage === "boolean") &&
+				(value.clip === undefined || isScreenshotRect(value.clip))
+			);
 		case "bring-to-front":
 			return (
 				typeof value.sessionId === "string" && typeof value.tabId === "number"

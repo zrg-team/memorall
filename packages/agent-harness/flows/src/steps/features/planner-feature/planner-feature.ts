@@ -1,7 +1,4 @@
-import {
-	defineStep,
-	bindStep,
-} from "../../../interfaces/engine/step.js";
+import { defineStep, bindStep } from "../../../interfaces/engine/step.js";
 import type {
 	BoundStep,
 	StepFactoryFromSpec,
@@ -9,10 +6,7 @@ import type {
 } from "../../../interfaces/engine/step.js";
 import { logError } from "../../../logging/logger.js";
 import { stepRegistry } from "../../../registries/step-registry.js";
-import {
-	GraphBase,
-	type GraphTool,
-} from "../../../graph/graph.base.js";
+import { GraphBase, type GraphTool } from "../../../graph/graph.base.js";
 import type { ChatCompletionMessageParam } from "../../../interfaces/engine/messages.js";
 
 const STEP_NAME = "planner-feature" as const;
@@ -94,7 +88,7 @@ Once requirements are clear:
 
 - \`planner_create\` — Create the initial plan. Use a short title and a semicolon-separated \`items\` string.
 - \`planner_get\` — Read the current plan and completion status.
-- \`planner_check_item\` — Mark an item done after completing it.
+- \`planner_check_item\` — Mark an item done after completing it: \`{"item_id": "1"}\` (pass \`"checked": false\` to reopen it).
 - \`planner_add_item\` — Add newly discovered work.
 - \`planner_remove_item\` — Remove work that is no longer needed.
 `;

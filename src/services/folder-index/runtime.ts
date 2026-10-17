@@ -18,6 +18,11 @@ import { EmbeddingIndex } from "./embedding/embedding-index";
 
 /** How long to wait for more changes before re-indexing. */
 const CHANGE_DEBOUNCE_MS = 2_000;
+/**
+ * The longest a steady stream of changes can hold indexing off: an agent
+ * writing a file every second or so used to postpone it until it stopped.
+ */
+const CHANGE_MAX_WAIT_MS = 10_000;
 
 export interface FolderIndexRuntime {
 	indexer: FolderIndexer;
@@ -47,8 +52,11 @@ export const watchLibrary = (
 ): (() => void) => {
 	const pending = new Set<string>();
 	let timer: ReturnType<typeof setTimeout> | null = null;
+	/** When the first change still waiting was reported. */
+	let waitingSince = 0;
 	const flush = () => {
 		timer = null;
+		indexer.noteChangesWaiting?.(null);
 		const paths = [...pending];
 		pending.clear();
 		void indexer.syncPaths(paths).catch((error: unknown) => {
@@ -85,8 +93,15 @@ export const watchLibrary = (
 			});
 		}
 		for (const path of paths) pending.add(path);
+		const now = Date.now();
 		if (timer) clearTimeout(timer);
-		timer = setTimeout(flush, CHANGE_DEBOUNCE_MS);
+		else waitingSince = now;
+		const delay = Math.max(
+			0,
+			Math.min(CHANGE_DEBOUNCE_MS, waitingSince + CHANGE_MAX_WAIT_MS - now),
+		);
+		timer = setTimeout(flush, delay);
+		indexer.noteChangesWaiting?.(now + delay);
 	});
 	return () => {
 		if (timer) clearTimeout(timer);

@@ -26,6 +26,12 @@
  * A required field the model left out is named as missing, not as invalid:
  * "object: Invalid input" read alongside advice to omit fields led models to
  * leave the same field out again on the retry.
+ *
+ * **A value in a near-miss shape.** `planner_check_item` got `item_id: 1` for
+ * a string id; flags arrive as `"true"`, counts as `"3"`, one tag instead of a
+ * list, an option as `"Preference"`. Where a value has exactly one sensible
+ * reading it is read that way and the call retried; anything else is still
+ * reported for the model to fix.
  */
 
 import { z } from "zod";
@@ -42,6 +48,10 @@ interface ZodLikeIssue {
 	readonly message: string;
 	readonly minimum?: number | bigint;
 	readonly origin?: string;
+	/** invalid_type: the type the schema wanted. */
+	readonly expected?: string;
+	/** invalid_value: the options the schema accepts. */
+	readonly values?: ReadonlyArray<unknown>;
 }
 
 interface ZodLikeError {
@@ -163,6 +173,92 @@ const blankKeysToDrop = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** An option name as it is meant, whatever its case or separators. */
+const optionKey = (value: string): string =>
+	value
+		.trim()
+		.toLowerCase()
+		.replace(/[\s-]+/g, "_");
+
+/**
+ * The one sensible reading of a value sent in a near-miss shape: `1` for a
+ * string id, `"true"` for a flag, `"3"` for a count, one tag where a list was
+ * wanted, `"Project Context"` for the option `project_context`. Null when
+ * there is no single reading; the model is told to fix those itself.
+ */
+const nearMissValue = (
+	issue: ZodLikeIssue,
+	value: unknown,
+): { value: unknown } | null => {
+	if (issue.code === "invalid_type") {
+		switch (issue.expected) {
+			case "string":
+				return typeof value === "number" || typeof value === "boolean"
+					? { value: String(value) }
+					: null;
+			case "number": {
+				if (typeof value !== "string" || !value.trim()) return null;
+				const number = Number(value);
+				return Number.isFinite(number) ? { value: number } : null;
+			}
+			case "boolean": {
+				if (typeof value !== "string") return null;
+				const text = value.trim().toLowerCase();
+				if (text === "true") return { value: true };
+				if (text === "false") return { value: false };
+				return null;
+			}
+			case "array":
+				return value === undefined || value === null || Array.isArray(value)
+					? null
+					: { value: [value] };
+			default:
+				return null;
+		}
+	}
+	if (issue.code === "invalid_value" && typeof value === "string") {
+		const wanted = optionKey(value);
+		const matches = (issue.values ?? []).filter(
+			(option) => typeof option === "string" && optionKey(option) === wanted,
+		);
+		return matches.length === 1 ? { value: matches[0] } : null;
+	}
+	return null;
+};
+
+const valueAt = (root: unknown, path: ReadonlyArray<PropertyKey>): unknown => {
+	let value: unknown = root;
+	for (const segment of path) {
+		if (typeof value !== "object" || value === null) return undefined;
+		value = (value as Record<PropertyKey, unknown>)[segment];
+	}
+	return value;
+};
+
+/**
+ * The arguments with every near-miss value read the one way it can be read,
+ * or null when no issue had such a reading. The input is not changed.
+ */
+const repairNearMisses = (
+	error: unknown,
+	input: Record<string, unknown>,
+): Record<string, unknown> | null => {
+	if (!isZodLikeError(error)) return null;
+	let repaired: Record<string, unknown> | null = null;
+	for (const issue of error.issues) {
+		if (issue.path.length === 0) continue;
+		const fixed = nearMissValue(issue, valueAt(repaired ?? input, issue.path));
+		if (!fixed) continue;
+		repaired ??= structuredClone(input);
+		const parent = valueAt(repaired, issue.path.slice(0, -1));
+		if (typeof parent !== "object" || parent === null) continue;
+		(parent as Record<PropertyKey, unknown>)[
+			issue.path[issue.path.length - 1] as PropertyKey
+		] = fixed.value;
+	}
+	return repaired;
+};
+
 export class ToolInputError extends Error {
 	readonly issues: ReadonlyArray<ZodLikeIssue>;
 
@@ -186,14 +282,18 @@ export const parseToolInput = <T>(
 	if (first.success) return first.data as T;
 
 	if (isRecord(input)) {
+		let retried: Record<string, unknown> | null = null;
 		const drop = blankKeysToDrop(first.error, input);
 		if (drop.length > 0) {
-			const retried: Record<string, unknown> = { ...input };
+			retried = { ...input };
 			for (const key of drop) delete retried[key];
+		}
+		retried = repairNearMisses(first.error, retried ?? input) ?? retried;
+		if (retried) {
 			const second = schema.safeParse(retried);
 			if (second.success) return second.data as T;
 			// Still invalid — report the retry's issues, which no longer mention
-			// the empty fields the model can do nothing about.
+			// the empty fields and near misses the model can do nothing about.
 			throw new ToolInputError(
 				describeSchemaIssues(second.error, toolName, retried),
 				isZodLikeError(second.error) ? second.error.issues : [],

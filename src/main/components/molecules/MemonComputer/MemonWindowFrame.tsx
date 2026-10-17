@@ -1,6 +1,7 @@
 import {
 	BookOpenText,
 	CalendarClock,
+	Clapperboard,
 	Eye,
 	FileText,
 	FolderOpen,
@@ -46,6 +47,7 @@ export const MEMON_APP_ICONS: Record<
 	visualize: LayoutDashboard,
 	pi: Pi,
 	fx: SquareFunction,
+	video: Clapperboard,
 	spreadsheet: Sheet,
 	documents: NotebookText,
 	presentation: Presentation,
@@ -68,6 +70,7 @@ export const MEMON_APP_TINTS: Record<MemonWindowApp, string> = {
 	visualize: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
 	pi: "bg-lime-500/15 text-lime-700 dark:text-lime-300",
 	fx: "bg-neutral-500/20 text-neutral-800 dark:text-neutral-200",
+	video: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
 	spreadsheet: "bg-green-500/15 text-green-700 dark:text-green-300",
 	documents: "bg-blue-500/15 text-blue-700 dark:text-blue-300",
 	presentation: "bg-orange-500/15 text-orange-700 dark:text-orange-300",

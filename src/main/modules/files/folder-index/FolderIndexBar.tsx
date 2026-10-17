@@ -1,4 +1,5 @@
 import {
+	Clock,
 	Library,
 	Loader2,
 	RefreshCw,
@@ -22,11 +23,24 @@ import { EmbeddingSearchDialog } from "./EmbeddingSearchDialog";
  * files have an entry, and quick actions. Also loads the folder's entries for
  * the list.
  */
+/** "2 minutes ago", in the reader's language. */
+const timeAgo = (iso: string, language: string): string | null => {
+	const at = new Date(iso).getTime();
+	if (Number.isNaN(at)) return null;
+	const seconds = Math.round((at - Date.now()) / 1_000);
+	const format = new Intl.RelativeTimeFormat(language, { numeric: "auto" });
+	const abs = Math.abs(seconds);
+	if (abs < 60) return format.format(seconds, "second");
+	if (abs < 3_600) return format.format(Math.round(seconds / 60), "minute");
+	if (abs < 86_400) return format.format(Math.round(seconds / 3_600), "hour");
+	return format.format(Math.round(seconds / 86_400), "day");
+};
+
 export const FolderIndexBar: React.FC<{
 	folderPath: string;
 	fileCount: number;
 }> = ({ folderPath, fileCount }) => {
-	const { t } = useTranslation("documents");
+	const { t, i18n } = useTranslation("documents");
 	const index = useFolderIndex();
 	const [searchOpen, setSearchOpen] = React.useState(false);
 	const path = normalizeFolderPath(folderPath);
@@ -50,6 +64,9 @@ export const FolderIndexBar: React.FC<{
 	);
 	const checking =
 		activity.length > 0 && activity.every(([, phase]) => phase === "checking");
+	const waiting = !busy && index.isWaiting(path);
+	const indexedAt = index.lastIndexedAt(path);
+	const indexedAgo = indexedAt ? timeAgo(indexedAt, i18n.language) : null;
 
 	return (
 		<div className="m-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-xs">
@@ -70,8 +87,23 @@ export const FolderIndexBar: React.FC<{
 						<Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
 						{t(checking ? "folderIndex.checking" : "folderIndex.indexing")}
 					</span>
+				) : waiting ? (
+					<span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
+						<Clock className="h-3 w-3" />
+						{t("folderIndex.waiting")}
+					</span>
 				) : (
-					t("folderIndex.barStatus", { count: withEntry, total: fileCount })
+					<>
+						{fileCount > 0
+							? t("folderIndex.barStatus", {
+									count: withEntry,
+									total: fileCount,
+								})
+							: t("folderIndex.noDirectFiles")}
+						{indexedAgo
+							? ` · ${t("folderIndex.indexedAgo", { time: indexedAgo })}`
+							: null}
+					</>
 				)}
 			</span>
 			{effective.includes("okf") && (

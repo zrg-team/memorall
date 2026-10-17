@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { platform } from "@/platform/current";
-import { ALL_SITES_ORIGINS } from "@/services/web-browser/site-access";
+import {
+	ALL_SITES_ORIGINS,
+	SCREEN_CAPTURE_ORIGINS,
+} from "@/services/web-browser/site-access";
 
 export interface SiteAccess {
 	/**
@@ -55,4 +58,16 @@ export const useSiteAccess = (): SiteAccess => {
 	}, []);
 
 	return { withheld, requestAllSites };
+};
+
+/**
+ * Asks for screenshots of tabs: the extension's optional `<all_urls>`, which
+ * the browser grants without a prompt where every site is held already. Call
+ * it straight from a click handler, before any other await. Elsewhere there
+ * is nothing to ask: the desktop app drives a browser of its own.
+ */
+export const requestScreenCapture = async (): Promise<boolean> => {
+	const hostAccess = platform.hostAccess;
+	if (!hostAccess || platform.environment !== "extension") return true;
+	return hostAccess.request(SCREEN_CAPTURE_ORIGINS);
 };

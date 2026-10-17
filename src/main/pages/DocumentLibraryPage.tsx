@@ -57,6 +57,7 @@ export const DocumentLibraryPage: React.FC = () => {
 		handleRenameItem,
 		handleDeleteItem,
 		handleDownloadFolder,
+		handleUnzip,
 		handleOpenDocumentByPath,
 		loading,
 	} = lib;
@@ -179,6 +180,23 @@ export const DocumentLibraryPage: React.FC = () => {
 		[handleDownloadFolder],
 	);
 
+	const { unzipProgress } = lib;
+	const unzipStatus = useMemo(
+		() =>
+			unzipProgress && {
+				label: t("library.unzipping", unzipProgress),
+				percent: unzipProgress.percent,
+			},
+		[unzipProgress, t],
+	);
+
+	const handleTreeUnzip = useCallback(
+		(node: DocumentTreeNode) => {
+			if (node.type === "file") void handleUnzip(node.path);
+		},
+		[handleUnzip],
+	);
+
 	if (loading) {
 		return <WorkspaceContentSkeleton />;
 	}
@@ -285,6 +303,7 @@ export const DocumentLibraryPage: React.FC = () => {
 										onRenameNode={handleTreeRename}
 										onDeleteNode={handleTreeDelete}
 										onDownloadFolderNode={handleTreeDownloadFolder}
+										onUnzipNode={handleTreeUnzip}
 									/>
 								</div>
 							)}
@@ -313,6 +332,7 @@ export const DocumentLibraryPage: React.FC = () => {
 									topics={lib.topics}
 									selectedTopicIds={lib.selectedTopicIds}
 									error={lib.error}
+									progress={unzipStatus}
 									onNavigate={lib.handleSelectNode}
 									homeOptions={homeOptions}
 									onViewModeChange={lib.setViewMode}
@@ -344,6 +364,7 @@ export const DocumentLibraryPage: React.FC = () => {
 										onRenameItem={lib.handleRenameItem}
 										onDownloadFile={lib.handleDownloadFile}
 										onDownloadFolder={lib.handleDownloadFolder}
+										onUnzip={lib.handleUnzip}
 										onDownloadSelectedFile={lib.handleDownloadSelectedFile}
 										onManageTopics={lib.handleManageFileTopic}
 										onConvertToKnowledge={lib.handleConvertToKnowledge}
@@ -370,6 +391,7 @@ export const DocumentLibraryPage: React.FC = () => {
 							topics={lib.topics}
 							selectedTopicIds={lib.selectedTopicIds}
 							error={lib.error}
+							progress={unzipStatus}
 							onNavigate={lib.handleSelectNode}
 							homeOptions={homeOptions}
 							onViewModeChange={lib.setViewMode}
@@ -400,6 +422,7 @@ export const DocumentLibraryPage: React.FC = () => {
 								onRenameNode={handleTreeRename}
 								onDeleteNode={handleTreeDelete}
 								onDownloadFolderNode={handleTreeDownloadFolder}
+								onUnzipNode={handleTreeUnzip}
 							/>
 							<div className="min-w-0 flex-1 overflow-hidden">
 								<DocumentLibraryContent
@@ -425,6 +448,7 @@ export const DocumentLibraryPage: React.FC = () => {
 									onRenameItem={lib.handleRenameItem}
 									onDownloadFile={lib.handleDownloadFile}
 									onDownloadFolder={lib.handleDownloadFolder}
+									onUnzip={lib.handleUnzip}
 									onDownloadSelectedFile={lib.handleDownloadSelectedFile}
 									onManageTopics={lib.handleManageFileTopic}
 									onConvertToKnowledge={lib.handleConvertToKnowledge}

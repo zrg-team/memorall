@@ -141,7 +141,8 @@ describe("tool registry execution", () => {
 		await expect(
 			registry.executeToolByName(
 				"validated_tool",
-				{ value: 123 } as unknown as { value: string },
+				// An object has no reading as a string; a number would be read as one.
+				{ value: { nested: true } } as unknown as { value: string },
 				undefined,
 			),
 		).rejects.toThrow();

@@ -71,6 +71,8 @@ export const memonWindowSource = (
 				: "pi code";
 		case "fx":
 			return snapshot.fx?.cwd ? `fx · ${snapshot.fx.cwd}` : "fx";
+		case "video":
+			return snapshot.video?.path ? `Video · ${snapshot.video.path}` : "Video";
 	}
 };
 
@@ -213,6 +215,14 @@ export const memonWindowTarget = (
 		case "fx": {
 			const cwd = snapshot.fx?.cwd;
 			return cwd ? { kind: "folder", source, path: cwd } : null;
+		}
+		case "video": {
+			// A project is its folder; a video is the file itself.
+			const video = snapshot.video;
+			if (!video?.path) return null;
+			return video.kind === "video"
+				? { kind: "file", source, path: video.path }
+				: { kind: "folder", source, path: video.path };
 		}
 	}
 };

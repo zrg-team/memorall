@@ -2,8 +2,10 @@ import {
 	AppWindow,
 	ArrowLeft,
 	ArrowRight,
+	Camera,
 	Globe,
 	ImageIcon,
+	ImageDown,
 	Loader2,
 	LockKeyhole,
 	Plus,
@@ -27,10 +29,15 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
-import { useSiteAccess } from "@/main/hooks/use-site-access";
+import {
+	requestScreenCapture,
+	useSiteAccess,
+} from "@/main/hooks/use-site-access";
+import { memonDisplayPath } from "@/services/memon/constants";
 import { sandboxTargetOf } from "@/services/memon/embedded-frame";
 import { isSiteAccessWithheldMessage } from "@/services/web-browser/site-access";
 import type {
+	MemonBrowserShot,
 	MemonBrowserState,
 	MemonBrowserTab,
 } from "@/services/memon/types";
@@ -354,13 +361,98 @@ const SiteAccessBar: React.FC<{
 	);
 };
 
+/**
+ * The browser refused the agent a screenshot of a tab: it needs the user to
+ * allow it once, from a click. Gone once allowed.
+ */
+const CaptureAccessBar: React.FC<{ onAllowed: () => void }> = ({
+	onAllowed,
+}) => {
+	const { t } = useTranslation("common");
+	const [asking, setAsking] = React.useState(false);
+	const [declined, setDeclined] = React.useState(false);
+
+	const handleAllow = async () => {
+		setAsking(true);
+		setDeclined(false);
+		try {
+			const granted = await requestScreenCapture();
+			setDeclined(!granted);
+			if (granted) onAllowed();
+		} finally {
+			setAsking(false);
+		}
+	};
+
+	return (
+		<div
+			role="alert"
+			className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100"
+			data-testid="memon-capture-access"
+		>
+			<Camera size={16} className="shrink-0" />
+			<div className="min-w-0 flex-1">
+				<div className="font-semibold">
+					{t("memonComputer.captureAccess.title")}
+				</div>
+				<div className="text-amber-800/90 dark:text-amber-100/80">
+					{declined
+						? t("memonComputer.captureAccess.declined")
+						: t("memonComputer.captureAccess.description")}
+				</div>
+			</div>
+			<button
+				type="button"
+				disabled={asking}
+				onClick={() => void handleAllow()}
+				className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded border border-transparent bg-amber-600 px-2.5 text-[11px] font-medium text-white hover:bg-amber-500 disabled:opacity-60"
+			>
+				{asking ? (
+					<Loader2 size={12} className="animate-spin" />
+				) : (
+					<Camera size={12} />
+				)}
+				{t("memonComputer.captureAccess.allow")}
+			</button>
+		</div>
+	);
+};
+
+/** How long the footer says where a screenshot was saved. */
+const SHOT_NOTE_MS = 8_000;
+
+/**
+ * The screenshot saved last, by the user or the agent, while it is new: one
+ * saved before the window opened is not news.
+ */
+const useNewShot = (
+	shot: MemonBrowserShot | undefined,
+): MemonBrowserShot | null => {
+	const [shown, setShown] = React.useState<MemonBrowserShot | null>(null);
+	const seenId = React.useRef(shot?.id ?? 0);
+	const latest = React.useRef(shot);
+	latest.current = shot;
+	const shotId = shot?.id ?? 0;
+	React.useEffect(() => {
+		const current = latest.current;
+		if (!current || shotId <= seenId.current) return;
+		seenId.current = shotId;
+		setShown(current);
+		const timer = setTimeout(() => setShown(null), SHOT_NOTE_MS);
+		return () => clearTimeout(timer);
+	}, [shotId]);
+	return shown;
+};
+
 const BrowserWindowView: React.FC<{
 	machineKey: string;
+	/** The agent's home, shown as ~ in the paths the Browser saves to. */
+	home: string;
 	browser: MemonBrowserState;
 	/** Ports of servers running in the computer, to open embedded. */
 	servers: number[];
 	send: MemonSend;
-}> = ({ machineKey, browser, servers, send }) => {
+}> = ({ machineKey, home, browser, servers, send }) => {
 	const { t } = useTranslation("common");
 	const activeIndex = browser.tabs.findIndex(
 		(tab) => tab.id === browser.activeTabId,
@@ -417,6 +509,25 @@ const BrowserWindowView: React.FC<{
 		action: "click" | "input" | "submit",
 		value?: string,
 	) => void send("browser.act", { key: machineKey, ref, action, value });
+
+	// The browser's own picture of the page, saved in Files.
+	const [shooting, setShooting] = React.useState(false);
+	const shot = useNewShot(browser.shot);
+	const takeScreenshot = async (fullPage: boolean) => {
+		if (shooting) return;
+		setShooting(true);
+		try {
+			// First, while the click still counts as one: the browser grants it
+			// only from a user gesture. Embedded pages are the computer's own.
+			if (realTabOpen) await requestScreenCapture();
+			await send(
+				"browser.screenshot",
+				fullPage ? { key: machineKey, fullPage } : { key: machineKey },
+			);
+		} finally {
+			setShooting(false);
+		}
+	};
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
@@ -591,6 +702,35 @@ const BrowserWindowView: React.FC<{
 					spellCheck={false}
 					className="h-7 min-w-0 flex-1 rounded border border-border bg-background px-2 font-mono text-[11px]"
 				/>
+				{tab ? (
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<button
+								type="button"
+								title={t("memonComputer.browser.screenshot")}
+								aria-label={t("memonComputer.browser.screenshot")}
+								disabled={shooting}
+								className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-60"
+							>
+								{shooting ? (
+									<Loader2 size={13} className="animate-spin" />
+								) : (
+									<Camera size={13} />
+								)}
+							</button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem onSelect={() => void takeScreenshot(false)}>
+								<Camera size={14} />
+								{t("memonComputer.browser.screenshotView")}
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={() => void takeScreenshot(true)}>
+								<ImageDown size={14} />
+								{t("memonComputer.browser.screenshotFullPage")}
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				) : null}
 				{embedded ? (
 					<div className="flex h-7 shrink-0 items-center rounded border border-border p-0.5 text-[11px]">
 						{[false, true].map((showOutline) => (
@@ -627,6 +767,13 @@ const BrowserWindowView: React.FC<{
 			</form>
 			{siteAccessBlocked ? (
 				<SiteAccessBar requestAllSites={siteAccess.requestAllSites} />
+			) : null}
+			{browser.captureBlocked && !siteAccessBlocked ? (
+				<CaptureAccessBar
+					onAllowed={() =>
+						void send("browser.captureAllowed", { key: machineKey })
+					}
+				/>
 			) : null}
 			{tab?.wall ? (
 				<WallNotice
@@ -699,11 +846,28 @@ const BrowserWindowView: React.FC<{
 				</div>
 			</div>
 			<div className="flex shrink-0 justify-between gap-2 border-t border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-				<span className="truncate">
-					{t("memonComputer.outlineFooter", {
-						count: tab?.outline?.blocks.length ?? 0,
-					})}
-				</span>
+				{shot ? (
+					<button
+						type="button"
+						title={t("memonComputer.browser.openScreenshot")}
+						onClick={() =>
+							void send("files.open", { key: machineKey, path: shot.path })
+						}
+						className="truncate text-left text-foreground hover:underline"
+						data-testid="memon-screenshot-saved"
+					>
+						{t("memonComputer.browser.screenshotSaved", {
+							path: memonDisplayPath(shot.path, home),
+							size: `${shot.width}×${shot.height}`,
+						})}
+					</button>
+				) : (
+					<span className="truncate">
+						{t("memonComputer.outlineFooter", {
+							count: tab?.outline?.blocks.length ?? 0,
+						})}
+					</span>
+				)}
 				<span className="truncate">
 					{tab
 						? `${embedded ? `${t("memonComputer.browser.embeddedTab")} · ` : ""}${shortUrl(tab.url).split("/")[0]}`

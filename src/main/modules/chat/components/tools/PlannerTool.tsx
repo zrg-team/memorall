@@ -244,7 +244,8 @@ const getPlannerActionSummary = (
 			};
 		}
 		case "planner_check_item": {
-			const checked = getBoolean(args ?? {}, "checked");
+			// Left out, it means done: the tool defaults to it.
+			const checked = getBoolean(args ?? {}, "checked") !== false;
 			const notes = getString(args ?? {}, "notes");
 			const targetItemId = getString(args ?? {}, "item_id");
 			return {

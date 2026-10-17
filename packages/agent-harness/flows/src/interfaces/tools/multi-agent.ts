@@ -11,9 +11,14 @@ export type ChildAgentStep =
 			name: string;
 			/** The call's arguments, clipped for display. */
 			input?: string;
-			/** The result, clipped for display; absent while the call runs. */
+			/**
+			 * The result, clipped for display; absent while the call runs. JSON
+			 * stays JSON, with long strings and lists cut, so it still reads as
+			 * the tool's result.
+			 */
 			output?: string;
-			status: "running" | "completed" | "failed";
+			/** stopped: the run ended while the call was still going. */
+			status: "running" | "completed" | "failed" | "stopped";
 			startedAt?: string;
 			durationMs?: number;
 	  };
@@ -43,8 +48,19 @@ export interface ChildAgentRun {
 	 * them, tool calls included, before it reads this one.
 	 */
 	history: ChildAgentExchange[];
-	status: "running" | "completed";
+	/**
+	 * completed: it ran to the end. stopped: cut off before it could reply, by
+	 * its step limit or a stop. failed: an error ended it.
+	 */
+	status: "running" | "completed" | "stopped" | "failed";
+	/** Why a stopped or failed run ended. */
+	endReason?: "step_limit" | "aborted" | "error";
+	/** The error that ended a failed run, clipped. */
+	error?: string;
+	endedAt?: string;
 	steps: ChildAgentStep[];
+	/** Earliest steps left out to keep the run small enough to report. */
+	omittedSteps?: number;
 	/** Model requests the child made, summed; absent until one reports. */
 	usage?: ChatCompletionUsage;
 	requests: number;

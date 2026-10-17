@@ -1,6 +1,8 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import NiceModal from "@ebay/nice-modal-react";
+import { ChevronDown, ChevronUp, Sparkles, UserPlus } from "lucide-react";
+import { MULTI_AGENT_FEATURE_NAME } from "@memorall/agent-harness-flows/steps/features/multi-agent-feature/index";
 import { Button } from "@/main/components/ui/button";
 import { Badge } from "@/main/components/ui/badge";
 import {
@@ -29,6 +31,9 @@ import { CursorPoint } from "@/components/AgentCursor";
 import { AGENT_WIZARD_CURSOR_KEYS } from "@/main/modules/agent-wizard";
 import type { AgentConfigSummary } from "../types";
 import { platform } from "@/platform/current";
+import { AgentFeatureDetailModal } from "../modals/AgentFeatureDetailModal";
+import { AgentTeamAvatars } from "./AgentTeamAvatars";
+import { agentTeamNames } from "../utils/agent-display";
 
 const FEATURES_DEFAULT_VISIBLE = 4;
 
@@ -57,9 +62,20 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 		draftMultiAgentAccessibleAgentIds,
 		featureDefinitions,
 		availableTools,
+		availableAgents,
+		currentFlowId,
 		toggleFeature,
 		savedUnifiedConfig,
 	} = useAgentConfigStore();
+
+	// Multi-Agent Delegation shows its team on the card, in the order chosen.
+	const team = React.useMemo(() => {
+		const byId = new Map(availableAgents.map((agent) => [agent.id, agent]));
+		return draftMultiAgentAccessibleAgentIds
+			.filter((id) => id !== currentFlowId)
+			.map((id) => byId.get(id))
+			.filter((agent): agent is NonNullable<typeof agent> => Boolean(agent));
+	}, [availableAgents, currentFlowId, draftMultiAgentAccessibleAgentIds]);
 
 	const [showAll, setShowAll] = React.useState(false);
 	const [collapsed, setCollapsed] = React.useState(false);
@@ -223,6 +239,13 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 			);
 		}
 
+		const isTeamFeature = feature.name === MULTI_AGENT_FEATURE_NAME;
+		const enabled = Boolean(draftFeatures[feature.name]);
+		const openDetail = () =>
+			void NiceModal.show(AgentFeatureDetailModal, {
+				featureName: feature.name,
+			});
+
 		return (
 			<CursorPoint
 				key={feature.name}
@@ -230,7 +253,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 			>
 				<FeatureCard
 					feature={feature}
-					enabled={Boolean(draftFeatures[feature.name])}
+					enabled={enabled}
 					onToggle={() => toggleFeature(feature.name)}
 					displayName={displayName}
 					displayDesc={displayDesc}
@@ -238,7 +261,43 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 					appOfName={
 						absorber ? getAgentFeatureDisplayName(absorber, t) : undefined
 					}
-				/>
+					detailLabel={
+						isTeamFeature ? t("agentSettings.manageTeam") : undefined
+					}
+				>
+					{isTeamFeature && enabled ? (
+						team.length > 0 ? (
+							<button
+								type="button"
+								onClick={openDetail}
+								title={team.map((agent) => agent.name).join(", ")}
+								className="flex w-full items-center gap-2.5 rounded-xl border border-border/60 bg-background/50 px-2.5 py-2 text-left transition-colors hover:bg-muted/40"
+							>
+								<AgentTeamAvatars agents={team} max={4} size={20} />
+								<span className="min-w-0 flex-1">
+									<span className="block text-[11px] font-medium leading-tight">
+										{t("agentSettings.teamCount", { count: team.length })}
+									</span>
+									<span className="block truncate text-[10px] leading-tight text-muted-foreground">
+										{agentTeamNames(
+											team.map((agent) => agent.name),
+											3,
+										)}
+									</span>
+								</span>
+							</button>
+						) : (
+							<button
+								type="button"
+								onClick={openDetail}
+								className="flex w-full items-center gap-2 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 px-2.5 py-2 text-left text-[11px] text-amber-700 transition-colors hover:bg-amber-500/10 dark:text-amber-300"
+							>
+								<UserPlus size={14} className="shrink-0" />
+								{t("agentSettings.teamEmpty")}
+							</button>
+						)
+					) : null}
+				</FeatureCard>
 			</CursorPoint>
 		);
 	};

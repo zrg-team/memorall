@@ -30,7 +30,13 @@ const browser = (wallTabId?: string): MemonBrowserState => ({
 const setup = (state: MemonBrowserState) => {
 	const send = vi.fn(async () => undefined);
 	render(
-		<BrowserWindow machineKey="k" browser={state} servers={[]} send={send} />,
+		<BrowserWindow
+			machineKey="k"
+			home="/agents/Bot"
+			browser={state}
+			servers={[]}
+			send={send}
+		/>,
 	);
 	return { send, notice: screen.getByRole("alert") };
 };

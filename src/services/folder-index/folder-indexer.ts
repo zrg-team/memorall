@@ -48,6 +48,8 @@ export class FolderIndexer {
 	private configWrite: Promise<unknown> = Promise.resolve();
 	/** Work started by a change and not awaited by its caller. */
 	private readonly pending = new Set<Promise<unknown>>();
+	/** When changes the library reported are due to be indexed, if any are. */
+	private changesDueAt: number | null = null;
 
 	constructor(
 		private readonly store: IndexStoreIO,
@@ -65,6 +67,14 @@ export class FolderIndexer {
 			})
 			.finally(() => this.pending.delete(tracked));
 		this.pending.add(tracked);
+	}
+
+	/**
+	 * Changes are waiting to be indexed, due at `dueAt` (null: none are), so
+	 * the Files page can say indexing is coming rather than look idle.
+	 */
+	noteChangesWaiting(dueAt: number | null): void {
+		this.changesDueAt = dueAt;
 	}
 
 	/** Resolves once no indexing is left running. */
@@ -392,6 +402,8 @@ export class FolderIndexer {
 		FolderIndexState & {
 			running: string[];
 			activity: Record<string, "checking" | "indexing">;
+			queued: string[];
+			changesDueAt?: number;
 		}
 	> {
 		const config = await this.loadConfig();
@@ -433,6 +445,10 @@ export class FolderIndexer {
 			folders,
 			running: [...this.running],
 			activity: Object.fromEntries(this.activity),
+			queued: [...this.queued.keys()],
+			...(this.changesDueAt !== null
+				? { changesDueAt: this.changesDueAt }
+				: {}),
 		};
 	}
 }

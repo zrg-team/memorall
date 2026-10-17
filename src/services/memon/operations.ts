@@ -1,6 +1,8 @@
 import { base64ToBytes } from "@/services/llm/utils/media-encoding";
 import type { WebOutlineActionRequest } from "@/services/web-browser/web-browser-protocol";
+import type { ZipExtraction } from "@/services/filesystem/folder-zip";
 import { MEMON_KIT_APPS } from "./apps";
+import { memonDisplayPath } from "./constants";
 import { HOSTED_APPS, isHostedAppId } from "./apps/hosted/catalog";
 import { normalizeMemonFeatureConfig } from "./feature-config";
 import {
@@ -219,6 +221,25 @@ export const runMemonOperation = async (
 				"let the agent continue past the page's verification check",
 				(machine) => machine.continuePastWall(),
 			);
+		case "browser.screenshot": {
+			const { key, fullPage } = job.payload;
+			return userAside(
+				key,
+				(saved: string) =>
+					`saved a screenshot of ${fullPage ? "the whole page" : "the page"} to ${saved}`,
+				async (machine) =>
+					memonDisplayPath(
+						(await machine.saveScreenshot({ fullPage })).path,
+						machine.home,
+					),
+			);
+		}
+		case "browser.captureAllowed":
+			return userAside(
+				job.payload.key,
+				"allowed screenshots of browser tabs",
+				(machine) => machine.allowCapture(),
+			);
 		case "scheduler.refresh": {
 			const machine = findMemonMachine(job.payload.key);
 			if (!machine) return null;
@@ -399,6 +420,15 @@ export const runMemonOperation = async (
 			const { key, paths } = job.payload;
 			return userAside(key, `deleted ${trim(names(paths))}`, (machine) =>
 				machine.deleteFiles(paths),
+			);
+		}
+		case "files.unzip": {
+			const { key, path } = job.payload;
+			return userAside(
+				key,
+				(extracted: ZipExtraction) =>
+					`unzipped ${trim(names([path]))} into ${extracted.path} (${extracted.fileCount} files)`,
+				(machine) => machine.extractZip(path),
 			);
 		}
 		case "visual.save": {
@@ -644,6 +674,40 @@ export const runMemonOperation = async (
 		case "fx.resize": {
 			const { key, columns, rows } = job.payload;
 			await findMemonMachine(key)?.fx.resize(columns, rows);
+			return null;
+		}
+		case "video.projects":
+			return (await findMemonMachine(job.payload.key)?.video.projects()) ?? [];
+		case "video.open": {
+			const { key, path } = job.payload;
+			return userInput(key, `opened ${path} in Video`, (machine) =>
+				machine.openVideo(path),
+			);
+		}
+		case "video.close":
+			return userInput(
+				job.payload.key,
+				"went back to the Video projects",
+				(machine) => machine.video.close(),
+			);
+		case "video.exported": {
+			const { key, path, requestId } = job.payload;
+			const machine = await getMemonMachine(key);
+			await machine.video.exported(path, requestId);
+			// The agent's own request is answered through its tool call.
+			if (requestId === undefined) {
+				machine.noteUserChange(`exported the video to ${path}`);
+			}
+			return machine.snapshot();
+		}
+		case "video.exportStarted":
+			findMemonMachine(job.payload.key)?.video.exportStarted(
+				job.payload.requestId,
+			);
+			return null;
+		case "video.exportFailed": {
+			const { key, requestId, error } = job.payload;
+			findMemonMachine(key)?.video.exportFailed(requestId, error);
 			return null;
 		}
 	}

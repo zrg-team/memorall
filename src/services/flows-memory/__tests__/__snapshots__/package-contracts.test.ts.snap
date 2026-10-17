@@ -611,6 +611,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     "parameters": {
       "properties": {
         "confidence": {
+          "description": "How sure, from 0 to 1, e.g. 0.9",
           "type": "number",
         },
         "factText": {
@@ -618,6 +619,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "string",
         },
         "memoryKind": {
+          "description": "One of: fact, preference, project_context",
           "enum": [
             "fact",
             "preference",
@@ -650,6 +652,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "string",
         },
         "tags": {
+          "description": "A list of short labels, e.g. ["work", "ui"]",
           "items": {
             "type": "string",
           },
@@ -737,6 +740,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
     "parameters": {
       "properties": {
         "confidence": {
+          "description": "How sure, from 0 to 1, e.g. 0.9",
           "type": "number",
         },
         "edgeId": {
@@ -748,6 +752,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "string",
         },
         "memoryKind": {
+          "description": "One of: fact, preference, project_context",
           "enum": [
             "fact",
             "preference",
@@ -784,6 +789,7 @@ exports[`flows-memory registered contracts > registers every memory tool contrac
           "type": "string",
         },
         "tags": {
+          "description": "A list of short labels, e.g. ["work", "ui"]",
           "items": {
             "type": "string",
           },

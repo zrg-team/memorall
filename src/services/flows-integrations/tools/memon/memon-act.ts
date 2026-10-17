@@ -30,6 +30,7 @@ const schema = z
 				"toggle",
 				"select",
 				"describe",
+				"screenshot",
 				"focus",
 				"scroll",
 				"back",
@@ -42,15 +43,16 @@ const schema = z
 				"paste",
 				"download",
 				"zip",
+				"unzip",
 			])
 			.describe(
-				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe to see a picture: a page ref (a canvas, an image or any part of the page; an image also gives its address), an image in Files (f3), or with no ref the image the Viewer shows, else the page as it shows; scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
+				"click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe to see a picture: a page ref (a canvas, an image or any part of the page; an image also gives its address), an image in Files (f3), or with no ref the image the Viewer shows, else the page as it shows; screenshot saves the page as the browser shows it as a PNG file into Files (~/Pictures, or to): the current view, the whole page (capture), a page ref, or a region; scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download. unzip: unpack a .zip (a Files ref, or its path in text) beside it, or into the folder in to.",
 			),
 		text: z
 			.string()
 			.optional()
 			.describe(
-				"type: the text (it replaces the field's value; in the editor e1, the whole file). press: the key. select: the option. toggle: on or off. move/copy: the folder to put the entry in. download: the file's address. zip: the folder's path.",
+				"type: the text (it replaces the field's value; in the editor e1, the whole file). press: the key. select: the option. toggle: on or off. move/copy: the folder to put the entry in. download: the file's address. zip: the folder's path. unzip: the .zip's path.",
 			),
 		path: z
 			.string()
@@ -70,11 +72,28 @@ const schema = z
 			.number()
 			.optional()
 			.describe("click/hover by position: from the top, like x."),
+		capture: z
+			.enum(["view", "page"])
+			.optional()
+			.describe(
+				'screenshot: "view" (the default) is what the page shows now; "page" is the whole page, top to bottom (a very long one is cut).',
+			),
+		region: z
+			.object({
+				x: z.number(),
+				y: z.number(),
+				width: z.number().min(1),
+				height: z.number().min(1),
+			})
+			.optional()
+			.describe(
+				'screenshot: only this part, in CSS pixels, as the screen gives places ("[b9] canvas 800×600 at 0,120" is { x: 0, y: 120, width: 800, height: 600 }): of the view, or with capture "page", of the page from its top.',
+			),
 		to: z
 			.string()
 			.optional()
 			.describe(
-				"download/zip: a folder (the file keeps its name) or a file path; ~/Downloads by default.",
+				"download/zip: a folder (the file keeps its name) or a file path; ~/Downloads by default. unzip: the folder to unpack into; beside the zip by default. screenshot: a folder or a .png path; ~/Pictures by default.",
 			),
 		submit: z
 			.boolean()
@@ -188,6 +207,48 @@ const describe = async (
 };
 
 /**
+ * screenshot: the page as the browser shows it, saved as a file: the current
+ * view, the whole page, a ref, or a region of the view or of the page.
+ */
+const screenshot = async (
+	machine: MemonMachine,
+	input: Input,
+	app: ReturnType<typeof refApp>,
+): Promise<string> => {
+	if (input.ref && app !== "browser") {
+		throw new Error(
+			"screenshot takes a page ref (b9), or no ref for the current view. To look at an image in Files, describe it.",
+		);
+	}
+	const capture = input.capture ?? "view";
+	const { region } = input;
+	if (input.ref && (region || input.capture === "page")) {
+		throw new Error(
+			'screenshot takes a ref, or capture "page" and a region, not both: a ref is all of that element already.',
+		);
+	}
+	requirePage(machine, "screenshot");
+	const shot = await machine.saveScreenshot({
+		ref: input.ref,
+		to: input.to,
+		fullPage: capture === "page",
+		area: region,
+	});
+	const of = capture === "page" ? "the page" : "the view";
+	const what = input.ref
+		? input.ref
+		: region
+			? `${of}'s region ${region.width}×${region.height} at ${region.x},${region.y}`
+			: capture === "page"
+				? "the whole page"
+				: "the current view";
+	const cut = shot.cut
+		? " The page is longer than a picture keeps: it stops before the page's end."
+		: "";
+	return `Saved a screenshot of ${what} (${shot.width}×${shot.height} px) to ${memonDisplayPath(shot.path, machine.home)}.${cut}`;
+};
+
+/**
  * A point or a bare key acts on the Browser's page. Without one, say what
  * acts on the window in front instead, so the next call is the right one.
  */
@@ -274,6 +335,8 @@ const act = async (
 		}
 		case "describe":
 			return describe(machine, input.ref, input.path ?? input.text);
+		case "screenshot":
+			return screenshot(machine, input, app);
 		case "back":
 		case "forward":
 			await machine.browserHistory(input.action);
@@ -330,6 +393,23 @@ const act = async (
 			}
 			const zipped = await machine.exportFolderZip(folder, input.to);
 			return `Zipped ${zipped.fileCount} files into ${memonDisplayPath(zipped.path, machine.home)} (${formatDownloadSize(zipped.size)}) and handed it to the user to download.`;
+		}
+		case "unzip": {
+			if (input.ref && app !== "files") {
+				throw new Error(
+					"unzip takes a .zip ref from Files (f3) or a path in text.",
+				);
+			}
+			const archive = input.ref
+				? machine.fileRefPath(input.ref)
+				: input.text?.trim();
+			if (!archive) {
+				throw new Error(
+					'Give the .zip: a Files ref or its path, like { action: "unzip", text: "~/Downloads/site.zip" }.',
+				);
+			}
+			const extracted = await machine.extractZip(archive, input.to);
+			return `Unzipped ${extracted.fileCount} files (${formatDownloadSize(extracted.totalBytes)}) into ${memonDisplayPath(extracted.path, machine.home)}.`;
 		}
 		case "paste": {
 			const to = input.ref ? machine.fileRefPath(input.ref) : undefined;
@@ -458,7 +538,7 @@ const act = async (
 export const createMemonActTool: ToolFactory<Input> = (): Tool<Input> => ({
 	name: MEMON_ACT_TOOL,
 	description:
-		"Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, or write and save in the Editor. Returns the new screen.",
+		"Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, save a screenshot of the page to Files, or write and save in the Editor. Returns the new screen.",
 	schema,
 	execute: (input, context) =>
 		runMemonTool(
@@ -466,15 +546,17 @@ export const createMemonActTool: ToolFactory<Input> = (): Tool<Input> => ({
 			context,
 			input.action === "download"
 				? "Downloading a file"
-				: input.action === "describe" && (input.path || input.text)
-					? `Looking at ${input.path ?? input.text}`
-					: input.action === "describe" && !input.ref
-						? "Looking at the screen"
-						: input.ref
-							? `${input.action === "type" ? "Typing into" : input.action === "describe" ? "Looking at" : "Clicking"} ${input.ref}`
-							: input.x !== undefined
-								? `${input.action} at (${input.x}, ${input.y})`
-								: `${input.action}`,
+				: input.action === "screenshot"
+					? "Taking a screenshot"
+					: input.action === "describe" && (input.path || input.text)
+						? `Looking at ${input.path ?? input.text}`
+						: input.action === "describe" && !input.ref
+							? "Looking at the screen"
+							: input.ref
+								? `${input.action === "type" ? "Typing into" : input.action === "describe" ? "Looking at" : "Clicking"} ${input.ref}`
+								: input.x !== undefined
+									? `${input.action} at (${input.x}, ${input.y})`
+									: `${input.action}`,
 			(machine) => {
 				const app =
 					input.action === "download" ||

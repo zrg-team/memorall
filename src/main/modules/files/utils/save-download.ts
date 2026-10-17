@@ -1,6 +1,10 @@
 import { toFlowFileSystem } from "@/services/flow-service-adapters";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
-import { zipFolder } from "@/services/filesystem/folder-zip";
+import {
+	extractZip,
+	type ZipExtractProgress,
+	zipFolder,
+} from "@/services/filesystem/folder-zip";
 
 /** Hands bytes to the browser as a download named `name`. */
 export const saveBytesAsDownload = (
@@ -28,3 +32,12 @@ export const downloadFolderAsZip = async (folderPath: string) => {
 	saveBytesAsDownload(zip.bytes, zip.name, "application/zip");
 	return zip;
 };
+
+/** Unpacks a .zip of Files beside it. */
+export const unzipInFiles = (
+	archivePath: string,
+	onProgress?: (progress: ZipExtractProgress) => void,
+) =>
+	extractZip(toFlowFileSystem(documentFileSystemService), archivePath, {
+		onProgress,
+	});

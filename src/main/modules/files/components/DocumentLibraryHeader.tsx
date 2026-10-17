@@ -21,6 +21,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
 import { Alert, AlertDescription } from "@/main/components/ui/alert";
+import { Progress } from "@/main/components/ui/progress";
 import { DocumentBreadcrumb } from "./DocumentBreadcrumb";
 import type { DocumentBreadcrumbHomeOption } from "./DocumentBreadcrumb";
 import {
@@ -45,6 +46,8 @@ interface DocumentLibraryHeaderProps {
 	topics: Array<Topic & { fileCount: number }>;
 	selectedTopicIds: string[];
 	error: string | null;
+	/** Work under way in this folder (an unzip), with how far it has got. */
+	progress?: { label: string; percent: number } | null;
 	onNavigate: (node: DocumentTreeNode | null) => void;
 	homeOptions?: DocumentBreadcrumbHomeOption[];
 	onViewModeChange: (mode: "grid" | "list") => void;
@@ -69,6 +72,7 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 	topics,
 	selectedTopicIds,
 	error,
+	progress,
 	onNavigate,
 	homeOptions,
 	onViewModeChange,
@@ -206,6 +210,15 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 					</div>
 				)}
 
+				{progress && (
+					<div
+						role="status"
+						className="flex items-center gap-3 px-2 pb-2 text-xs text-muted-foreground"
+					>
+						<span className="shrink-0">{progress.label}</span>
+						<Progress value={progress.percent} className="h-1.5" />
+					</div>
+				)}
 				{error && (
 					<div className="px-2 pb-2">
 						<Alert variant="destructive">
@@ -338,6 +351,15 @@ export const DocumentLibraryHeader = memo(function DocumentLibraryHeader({
 				</div>
 			)}
 
+			{progress && (
+				<div
+					role="status"
+					className="flex items-center gap-3 px-3 pb-2 text-xs text-muted-foreground"
+				>
+					<span className="shrink-0">{progress.label}</span>
+					<Progress value={progress.percent} className="h-1.5" />
+				</div>
+			)}
 			{error && (
 				<div className="px-3 pb-2">
 					<Alert variant="destructive">

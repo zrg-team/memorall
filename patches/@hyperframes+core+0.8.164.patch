@@ -1,0 +1,12 @@
+diff --git a/node_modules/@hyperframes/core/dist/gsapCdn.js b/node_modules/@hyperframes/core/dist/gsapCdn.js
+--- a/node_modules/@hyperframes/core/dist/gsapCdn.js
++++ b/node_modules/@hyperframes/core/dist/gsapCdn.js
+@@ -1,7 +1,6 @@
+ const GSAP_CDN_VERSION = "3.15.0";
+ export function gsapCdnDist(gsapVersion) {
+-    const version = gsapVersion && /^\d+(\.\d+)*$/.test(gsapVersion) ? gsapVersion : GSAP_CDN_VERSION;
+-    return `https://cdn.jsdelivr.net/npm/gsap@${version}/dist/`;
++    return "/vendors/hyperframes/";
+ }
+ /** MotionPathPlugin at the composition's own gsap version; a skew registers with a GSAP warning. */
+ export function motionPathPluginUrl(gsapVersion) {

@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { CreateFlowDialog } from "@/main/modules/flow-builder/components";
 import { Button } from "@/main/components/ui/button";
 import { Separator } from "@/main/components/ui/separator";
@@ -65,6 +65,21 @@ export const AgentsWorkspace: React.FC = () => {
 		setIsMemoryTypeDialogOpen,
 		sidebarOverlayWidth,
 	} = useAgentsWorkspaceController();
+
+	/**
+	 * The dialog stays open, its button spinning, until the wizard is ready:
+	 * closed first, the page sat unchanged while the draft was made.
+	 */
+	const [isOpeningWizard, setIsOpeningWizard] = React.useState(false);
+	const openAgentWizard = async () => {
+		setIsOpeningWizard(true);
+		try {
+			await handleOpenAgentWizard();
+		} finally {
+			setIsOpeningWizard(false);
+			setIsCreateDialogOpen(false);
+		}
+	};
 
 	// ── Panel sections ────────────────────────────────────────────────────────
 	const listSection = (
@@ -234,13 +249,15 @@ export const AgentsWorkspace: React.FC = () => {
 								type="button"
 								variant="secondary"
 								className="mt-3 h-9 w-full justify-center border border-border/70 bg-background/70 hover:bg-background"
-								onClick={() => {
-									setIsCreateDialogOpen(false);
-									void handleOpenAgentWizard();
-								}}
-								disabled={isCreating}
+								onClick={() => void openAgentWizard()}
+								disabled={isCreating || isOpeningWizard}
+								aria-busy={isOpeningWizard}
 							>
-								<Sparkles size={14} className="mr-1.5" />
+								{isOpeningWizard ? (
+									<Loader2 size={14} className="mr-1.5 animate-spin" />
+								) : (
+									<Sparkles size={14} className="mr-1.5" />
+								)}
 								{t("createDialog.aiAction")}
 							</Button>
 						</div>

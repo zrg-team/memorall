@@ -4,6 +4,7 @@ import {
 	AlertTriangle,
 	CheckCircle2,
 	ChevronDown,
+	CircleSlash,
 	Loader2,
 } from "lucide-react";
 import type { ComplexContentPartTool } from "@/types/chat";
@@ -46,6 +47,9 @@ export const AssistantToolTimelinePart: React.FC<{
 		const appMark = getComposioActionIcon(actionName, part.metadata);
 		const isRunning = part.state === "running";
 		const isError = part.state === "error";
+		// Cut off when its run ended (a child agent's step limit or a stop):
+		// neither done nor failed, and no longer running.
+		const isStopped = !isRunning && part.metadata?.status === "stopped";
 		const [nowMs, setNowMs] = useState(() => Date.now());
 		const startedAt =
 			typeof part.metadata?.startedAt === "string"
@@ -70,7 +74,9 @@ export const AssistantToolTimelinePart: React.FC<{
 			? t("toolStatus.running")
 			: isError
 				? t("toolStatus.error")
-				: t("toolStatus.done");
+				: isStopped
+					? t("toolStatus.stopped")
+					: t("toolStatus.done");
 		// Kept while the part is, so the details below skip rendering again.
 		const actionItem = useMemo(
 			() => ({
@@ -97,7 +103,9 @@ export const AssistantToolTimelinePart: React.FC<{
 								? "bg-destructive"
 								: isRunning
 									? "bg-primary"
-									: "bg-emerald-500",
+									: isStopped
+										? "bg-amber-500"
+										: "bg-emerald-500",
 						)}
 					/>
 				</div>
@@ -144,6 +152,8 @@ export const AssistantToolTimelinePart: React.FC<{
 										<Loader2 className="h-3.5 w-3.5 animate-spin" />
 									) : isError ? (
 										<AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+									) : isStopped ? (
+										<CircleSlash className="h-3.5 w-3.5 text-amber-500" />
 									) : (
 										<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
 									)}

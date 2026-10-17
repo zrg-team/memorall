@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { copyPathsToClipboard } from "@/main/modules/files/utils/copy-paths";
 import type { MemonFilesState } from "@/services/memon/types";
 import {
 	contextMenuActions,
@@ -14,6 +15,9 @@ vi.mock("../upload", () => ({
 vi.mock("@/main/modules/files/utils/save-download", () => ({
 	downloadFolderAsZip: vi.fn(),
 }));
+vi.mock("@/main/modules/files/utils/copy-paths", () => ({
+	copyPathsToClipboard: vi.fn(),
+}));
 
 const files: MemonFilesState = {
 	cwd: "/work",
@@ -21,6 +25,7 @@ const files: MemonFilesState = {
 		{ name: "docs", path: "/work/docs", type: "dir" },
 		{ name: "a.md", path: "/work/a.md", type: "file", size: 10 },
 		{ name: "b.md", path: "/work/b.md", type: "file", size: 20 },
+		{ name: "site.zip", path: "/work/site.zip", type: "file", size: 30 },
 	],
 	clipboard: { mode: "copy", paths: ["/elsewhere/c.md"] },
 };
@@ -80,6 +85,7 @@ describe("FilesWindow", () => {
 			"memonComputer.files.open",
 			"memonComputer.files.cut",
 			"memonComputer.files.copy",
+			"memonComputer.files.copyPath",
 			"memonComputer.files.pasteInto",
 			"buttons.delete",
 		]);
@@ -108,6 +114,39 @@ describe("FilesWindow", () => {
 		expect(labels()).toEqual(["memonComputer.files.paste"]);
 		run("memonComputer.files.paste");
 		expect(send).toHaveBeenLastCalledWith("files.paste", { key: "k" });
+	});
+
+	it("unzips a .zip, and copies the paths right-clicked", () => {
+		const { send, row, labels, run } = setup();
+		fireEvent.contextMenu(row("site.zip"));
+		expect(labels()?.slice(0, 2)).toEqual([
+			"memonComputer.files.open",
+			"memonComputer.files.unzip",
+		]);
+		run("memonComputer.files.unzip");
+		expect(send).toHaveBeenLastCalledWith("files.unzip", {
+			key: "k",
+			path: "/work/site.zip",
+		});
+
+		fireEvent.contextMenu(row("a.md"));
+		expect(labels()).not.toContain("memonComputer.files.unzip");
+		run("memonComputer.files.copyPath");
+		expect(copyPathsToClipboard).toHaveBeenLastCalledWith(["/work/a.md"]);
+	});
+
+	it("shows how far an unzip has got", () => {
+		render(
+			<FilesWindow
+				machineKey="k"
+				files={{ ...files, unzipping: { name: "site.zip", percent: 42 } }}
+				home="/agents/guest"
+				send={vi.fn(async () => undefined)}
+			/>,
+		);
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"memonComputer.files.unzipping",
+		);
 	});
 
 	it("deletes only once the user confirms", () => {

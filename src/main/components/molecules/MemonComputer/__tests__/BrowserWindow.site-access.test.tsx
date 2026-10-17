@@ -37,6 +37,7 @@ describe("the Browser when Memorall may not read web pages", () => {
 		render(
 			<BrowserWindow
 				machineKey="k"
+				home="/agents/Bot"
 				browser={browser()}
 				servers={[]}
 				send={send}
@@ -59,6 +60,7 @@ describe("the Browser when Memorall may not read web pages", () => {
 		render(
 			<BrowserWindow
 				machineKey="k"
+				home="/agents/Bot"
 				browser={browser("embedded")}
 				servers={[]}
 				send={vi.fn(async () => undefined)}

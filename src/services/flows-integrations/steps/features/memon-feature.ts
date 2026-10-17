@@ -346,6 +346,7 @@ export const buildMemonPrompt = (
 		"Connections",
 		config.piCode ? "pi code" : null,
 		config.fx ? "fx" : null,
+		config.apps.files ? "Video" : null,
 	].filter(Boolean);
 	const gates = [
 		config.askBefore.forms ? "submitting forms" : null,

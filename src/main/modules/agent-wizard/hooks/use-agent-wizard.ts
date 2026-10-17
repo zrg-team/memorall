@@ -25,18 +25,21 @@ import {
 	MEMON_APP_FEATURES,
 	MEMON_STEP_NAME,
 } from "@/services/memon/constants";
+import { MULTI_AGENT_FEATURE_NAME } from "@memorall/agent-harness-flows/steps/features/multi-agent-feature/index";
 import {
 	AGENT_WIZARD_TEMPLATES,
 	createBlankAgentWizardDraft,
 	draftFromTemplate,
 } from "../templates/agent-wizard-templates";
 import type {
+	AgentWizardAgentInfo,
 	AgentWizardCatalog,
 	AgentWizardComputerOffer,
 	AgentWizardConnectionInfo,
 	AgentWizardConnectionSetupKind,
 	AgentWizardDraft,
 	AgentWizardMessage,
+	AgentWizardTeamOffer,
 	AgentWizardTemplate,
 } from "../types";
 import {
@@ -64,6 +67,8 @@ interface UseAgentWizardOptions {
 	onDraftChange?: (draft: AgentWizardDraft) => void;
 	initialDraft?: AgentWizardDraft | null;
 	initialAssistantMessage?: string;
+	/** The agent being optimized, left out of the agents its team can have. */
+	agentId?: string | null;
 }
 
 /** Which setup surface the wizard asked to open, and for which app. */
@@ -77,6 +82,7 @@ const MAX_AGENT_WIZARD_TOOL_ROUNDS = 6;
 const getCatalog = (
 	connections: AgentWizardConnectionInfo[],
 	composioKeySaved: boolean,
+	agents: AgentWizardAgentInfo[],
 ): AgentWizardCatalog => {
 	const flowCatalog = serviceManager.flowBuilderService.getCatalog();
 	const featureNames = flowCatalog.steps
@@ -102,6 +108,7 @@ const getCatalog = (
 		skillNames: listDefaultSkills().map((skill) => skill.name),
 		connections,
 		composioKeySaved,
+		agents,
 	};
 };
 
@@ -123,11 +130,13 @@ const applyToolCallsToDraft = (
 	notes: string[];
 	setupRequest: AgentWizardConnectionSetupRequest | null;
 	computerOffer: AgentWizardComputerOffer | null;
+	teamOffer: AgentWizardTeamOffer | null;
 } => {
 	let nextDraft = draft;
 	const notes: string[] = [];
 	let setupRequest: AgentWizardConnectionSetupRequest | null = null;
 	let computerOffer: AgentWizardComputerOffer | null = null;
+	let teamOffer: AgentWizardTeamOffer | null = null;
 	for (const toolCall of toolCalls) {
 		if (!isAgentWizardToolName(toolCall.function.name)) continue;
 		try {
@@ -152,6 +161,25 @@ const applyToolCallsToDraft = (
 					"Showed the user a one-click card to turn on MemonOS Bot. Do not ask about it again; the draft shows it once they do.",
 				);
 			}
+			// A card too: every agent the user has, the proposed ones switched on.
+			if (patch.type === "offer_team") {
+				const known = new Set(catalog.agents.map((agent) => agent.id));
+				const unknown = patch.agentIds.filter((id) => !known.has(id));
+				if (catalog.agents.length > 0) {
+					teamOffer = {
+						agentIds: patch.agentIds.filter((id) => known.has(id)),
+						reason: patch.reason,
+					};
+					notes.push(
+						"Showed the user a card listing their agents to choose this agent's team. Do not ask about it again; the draft shows the team once they add it.",
+					);
+				}
+				if (unknown.length > 0) {
+					notes.push(
+						`Ignored unknown agents: ${unknown.join(", ")}. Use ids from the user's agents list.`,
+					);
+				}
+			}
 			const applied = applyAgentWizardToolPatch(nextDraft, patch, catalog);
 			nextDraft = applied.draft;
 			notes.push(...applied.notes);
@@ -160,7 +188,7 @@ const applyToolCallsToDraft = (
 			notes.push("Ignored an invalid draft update from the model.");
 		}
 	}
-	return { draft: nextDraft, notes, setupRequest, computerOffer };
+	return { draft: nextDraft, notes, setupRequest, computerOffer, teamOffer };
 };
 
 const createToolResultContent = (notes: string[]): string =>
@@ -298,6 +326,7 @@ export const useAgentWizard = ({
 	onDraftChange,
 	initialDraft,
 	initialAssistantMessage,
+	agentId = null,
 }: UseAgentWizardOptions) => {
 	const { model, isInitialized } = useCurrentModel();
 	const [draft, setDraft] = React.useState<AgentWizardDraft>(
@@ -328,6 +357,42 @@ export const useAgentWizard = ({
 		React.useState<AgentWizardComputerOffer | null>(null);
 	/** Dismissed once: a later offer in the same conversation stays hidden. */
 	const computerDeclinedRef = React.useRef(false);
+	const [teamOffer, setTeamOffer] = React.useState<AgentWizardTeamOffer | null>(
+		null,
+	);
+	const teamDeclinedRef = React.useRef(false);
+	// The user's other active agents: who this one can lead. Read when the
+	// wizard opens, so one made a moment ago is there.
+	const [otherAgents, setOtherAgents] = React.useState<Flow[]>([]);
+	React.useEffect(() => {
+		if (!open) return;
+		let cancelled = false;
+		void serviceManager.flowBuilderService
+			.listPredefinedFlows("foundation")
+			.then((flows) => {
+				if (cancelled) return;
+				setOtherAgents(
+					flows.filter(
+						(flow) => flow.status === "active" && flow.id !== agentId,
+					),
+				);
+			})
+			.catch(() => {
+				if (!cancelled) setOtherAgents([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open, agentId]);
+	const agentInfo = React.useMemo<AgentWizardAgentInfo[]>(
+		() =>
+			otherAgents.map((flow) => ({
+				id: flow.id,
+				name: flow.name,
+				description: flow.description ?? "",
+			})),
+		[otherAgents],
+	);
 
 	React.useEffect(() => {
 		void initializeConnections();
@@ -353,8 +418,8 @@ export const useAgentWizard = ({
 	);
 
 	const catalog = React.useMemo(
-		() => getCatalog(connectionInfo, composioKeySaved),
-		[connectionInfo, composioKeySaved],
+		() => getCatalog(connectionInfo, composioKeySaved, agentInfo),
+		[connectionInfo, composioKeySaved, agentInfo],
 	);
 
 	React.useEffect(() => {
@@ -554,6 +619,9 @@ export const useAgentWizard = ({
 						!applied.draft.enabledFeatureNames.includes(MEMON_STEP_NAME)
 					) {
 						setComputerOffer(applied.computerOffer);
+					}
+					if (applied.teamOffer && !teamDeclinedRef.current) {
+						setTeamOffer(applied.teamOffer);
 					}
 					visibleContent = appendVisibleContent(
 						visibleContent,
@@ -759,6 +827,55 @@ export const useAgentWizard = ({
 		]);
 	}, []);
 
+	/** One click: the agents chosen on the card become this agent's team. */
+	const acceptTeamOffer = React.useCallback(
+		(agentIds: string[]) => {
+			const known = new Set(otherAgents.map((agent) => agent.id));
+			const team = [...new Set(agentIds)].filter((id) => known.has(id));
+			if (!team.length) return;
+			const next: AgentWizardDraft = {
+				...draftRef.current,
+				enabledFeatureNames: catalog.featureNames.includes(
+					MULTI_AGENT_FEATURE_NAME,
+				)
+					? [
+							...new Set([
+								...draftRef.current.enabledFeatureNames,
+								MULTI_AGENT_FEATURE_NAME,
+							]),
+						]
+					: draftRef.current.enabledFeatureNames,
+				multiAgentAccessibleAgentIds: team,
+			};
+			draftRef.current = next;
+			setDraft(next);
+			onDraftChange?.(next);
+			setTeamOffer(null);
+			const names = otherAgents
+				.filter((agent) => team.includes(agent.id))
+				.map((agent) => `**${agent.name}**`)
+				.join(", ");
+			setMessages((current) => [
+				...current,
+				createAssistantMessage(
+					`**Team added** — this agent can hand tasks to ${names}. Change it any time in Multi-Agent Delegation.`,
+				),
+			]);
+		},
+		[catalog.featureNames, onDraftChange, otherAgents],
+	);
+
+	const dismissTeamOffer = React.useCallback(() => {
+		teamDeclinedRef.current = true;
+		setTeamOffer(null);
+		setMessages((current) => [
+			...current,
+			createAssistantMessage(
+				"Keeping this agent working on its own. You can give it a team later in Multi-Agent Delegation.",
+			),
+		]);
+	}, []);
+
 	const requestClose = React.useCallback(() => {
 		if (
 			shouldConfirmClose &&
@@ -793,5 +910,10 @@ export const useAgentWizard = ({
 		computerOffer,
 		acceptComputerOffer,
 		dismissComputerOffer,
+		/** The user's other active agents, for the team card. */
+		otherAgents,
+		teamOffer,
+		acceptTeamOffer,
+		dismissTeamOffer,
 	};
 };

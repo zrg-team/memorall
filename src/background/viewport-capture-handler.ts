@@ -10,15 +10,17 @@
  *
  * `captureVisibleTab` returns what the compositor already painted, so
  * cross-origin tiles, `<canvas>`, WebGL and iframes all come out, at zero extra
- * requests. The catch is permission: it needs `<all_urls>` or `activeTab`, and
- * this extension deliberately has neither as a blanket grant. `activeTab` is
- * granted when the user invokes Memorall from the context menu and lasts for
- * that tab until it navigates — which is exactly how the co-agent and smart
- * select are started. When the grant is not there the call fails, and saying so
- * is better than quietly returning a white rectangle.
+ * requests. The catch is permission: it needs `<all_urls>` or `activeTab`.
+ * `<all_urls>` is only optional in the manifest, held once the user allows
+ * screenshots from the MemonOS Browser. `activeTab` is granted when the user
+ * invokes Memorall from the context menu and lasts for that tab until it
+ * navigates — which is exactly how the co-agent and smart select are started.
+ * When neither is there the call fails, and saying so is better than quietly
+ * returning a white rectangle.
  */
 
 import { logError } from "@/utils/logger";
+import { nextCaptureSlot } from "./capture-slot";
 
 export const VIEWPORT_CAPTURE_SOURCE = "memorall:capture-visible-tab" as const;
 
@@ -68,6 +70,8 @@ const capture = async (
 		if (typeof tab?.windowId !== "number") {
 			throw new Error("The page has no window to capture.");
 		}
+		// In turn with the agent's screenshots: Chrome's quota is shared.
+		await nextCaptureSlot();
 		const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
 			format: "png",
 		});

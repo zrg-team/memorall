@@ -12,6 +12,14 @@ import {
 } from "@memorall/agent-harness-flows/graph/graph.base";
 import { compositionFile, normalizeProjectPath } from "./util";
 import { readFileBytes } from "@memorall/agent-harness-flows/tools/fs/util";
+import {
+	createHyperframesReference,
+	serializeHyperframesReference,
+} from "./reference";
+import {
+	formatLintResult,
+	lintHyperframesComposition,
+} from "./hyperframes-validate";
 
 const TOOL_NAME = "hyperframes_show" as const;
 
@@ -21,6 +29,12 @@ const schema = z.object({
 		.min(1)
 		.describe(
 			"Absolute path to the project directory, e.g. /projects/product-launch",
+		),
+	force: z
+		.boolean()
+		.optional()
+		.describe(
+			"Show the preview even though validation reports errors. Only when you are certain every reported error is a false positive.",
 		),
 });
 
@@ -41,7 +55,7 @@ export const createHyperframesShowTool: ToolFactory<
 > = (services, config): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Preview a HyperFrames composition with full player controls (play/pause, scrub bar). Reads the saved composition and renders it as an interactive player in chat.",
+		"Validate a HyperFrames composition and, when it has no errors, show it in chat as a video player (play/pause, scrub, MP4 export and download). Returns the validation errors instead of showing a broken composition.",
 	schema,
 	execute: async (input, context) => {
 		if (!context) return "Error: tool context unavailable.";
@@ -54,17 +68,36 @@ export const createHyperframesShowTool: ToolFactory<
 		try {
 			raw = await readFileBytes(dfs, file, config);
 		} catch {
-			return `Error: ${file} not found. Use hyperframes_write to create the project first.`;
+			return `Error: ${file} not found. Use hyperframes_init to create the project first.`;
 		}
 
-		const raw_html = new TextDecoder().decode(raw);
+		const html = new TextDecoder().decode(raw);
 		const projectPath = normalizeProjectPath(
 			input.project_path,
 			config?.rootPath,
 		);
+
+		let lintSummary = "";
+		try {
+			const lint = await lintHyperframesComposition(
+				html,
+				dfs,
+				projectPath,
+				config?.rootPath,
+				config?.resourceRoots,
+				config,
+			);
+			if (!lint.ok && !input.force) {
+				return `${formatLintResult(lint, file)}\n\nNot shown: fix the errors with hyperframes_edit, then call hyperframes_show again.`;
+			}
+			lintSummary = formatLintResult(lint, file);
+		} catch (error) {
+			lintSummary = `Linter error: ${error instanceof Error ? error.message : String(error)}`;
+		}
+
 		// Derive a display name from the last path segment
-		const name =
-			input.project_path.split("/").filter(Boolean).pop() ?? "composition";
+		const name = projectPath.split("/").filter(Boolean).pop() ?? "composition";
+		const reference = createHyperframesReference(projectPath, html);
 
 		const artifact = [
 			`\n\n<artifact`,
@@ -72,12 +105,12 @@ export const createHyperframesShowTool: ToolFactory<
 			` type="application/hyperframes"`,
 			` title="${escapeAttr(name)}"`,
 			` project-path="${escapeAttr(projectPath)}">`,
-			raw_html,
+			serializeHyperframesReference(reference),
 			`</artifact>\n\n`,
 		].join("");
 
 		appendAssistantOutputToState(context.state as BaseStateBase, artifact);
-		return "Composition displayed.";
+		return `Composition displayed (${file}). ${lintSummary}`.trim();
 	},
 });
 

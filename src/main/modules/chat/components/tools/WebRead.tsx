@@ -31,7 +31,13 @@ const extractWebReadPayload = (
 	item: MessageActionItem,
 ): WebReadPayload | null => {
 	const fromMetadata = item.metadata;
-	if (isRecord(fromMetadata)) {
+	// Only metadata that carries the read: every call has metadata, and one
+	// without the result's fields drew an empty card over a real result.
+	if (
+		isRecord(fromMetadata) &&
+		(typeof fromMetadata.url === "string" ||
+			typeof fromMetadata.content === "string")
+	) {
 		return {
 			requestedUrl:
 				typeof fromMetadata.requestedUrl === "string"

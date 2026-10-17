@@ -238,7 +238,9 @@ export const useAgentPresets = (): UseAgentPresetsResult => {
 						options.status ?? "active",
 					);
 				// The name may have a number added: agents' names are unique.
-				await prepareAgentHome(created.id);
+				// Not waited for: the folder is the offscreen runtime's job, which
+				// can sit behind other work for seconds, and nothing here needs it.
+				void prepareAgentHome(created.id);
 				if ((options.status ?? "active") === "active") {
 					try {
 						await topicService.createTopic({

@@ -1620,16 +1620,25 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Edit the composition HTML by replacing old_string with new_string inside index.html. Prefer this over hyperframes_write when changing a small portion of a large composition. By default only the first occurrence is replaced; set replace_all to true to replace every occurrence. Fails if old_string is not found.",
+    "description": "Edit a HyperFrames project file (the composition index.html by default, or frame.md / design.md) by replacing old_string with new_string. Prefer this over hyperframes_write when changing a small portion of a large composition. By default only the first occurrence is replaced; set replace_all to true to replace every occurrence. Fails if old_string is not found. Returns the validation report for the edited composition.",
     "name": "hyperframes_edit",
     "parameters": {
       "properties": {
+        "file": {
+          "description": "Which project file: index.html (the composition, default), frame.md or design.md (the design spec).",
+          "enum": [
+            "index.html",
+            "frame.md",
+            "design.md",
+          ],
+          "type": "string",
+        },
         "new_string": {
           "description": "Replacement text",
           "type": "string",
         },
         "old_string": {
-          "description": "Exact text to find and replace. Must be present in index.html.",
+          "description": "Exact text to find and replace. Must be present in the file.",
           "type": "string",
         },
         "project_path": {
@@ -1650,13 +1659,36 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Initialise a new HyperFrames project. Writes index.html using the chosen Tailwind-first template. Available templates: neon-launch (Dark purple/pink, 1920x1080, 18s - dramatic product launch) | social-reel (Bold vertical, 1080x1920, 15s - punchy social promo) | clean-minimal (Light editorial, 1920x1080, 15s - typography-forward) | tech-data (Dark/teal, 1920x1080, 20s - metrics and product proof) | warm-cinema (Amber/gold, 1920x1080, 18s - cinematic storytelling) | scaffold-social-reel (Structural scaffold: 1080x1920, 15s, 6 scenes, 1 shader group) | scaffold-launch-teaser (Structural scaffold: 1920x1080, 25s, 8 scenes, 2 shader groups) | scaffold-explainer (Structural scaffold: 1920x1080, 45s, 12 scenes, 2 shader groups) | scaffold-cinematic (Structural scaffold: 1920x1080, 60s, 7 scenes, 2 shader groups, long durations). Use force: true to overwrite an existing project.",
+    "description": "Initialise a new HyperFrames project. Writes index.html using the chosen Tailwind-first template and returns it, ready to fill. Available templates: neon-launch (Dark purple/pink, 1920x1080, 18s - dramatic product launch) | social-reel (Bold vertical, 1080x1920, 15s - punchy social promo) | clean-minimal (Light editorial, 1920x1080, 15s - typography-forward) | tech-data (Dark/teal, 1920x1080, 20s - metrics and product proof) | warm-cinema (Amber/gold, 1920x1080, 18s - cinematic storytelling) | scaffold-social-reel (Structural scaffold: 1080x1920, 15s, 6 scenes, 1 shader group) | scaffold-launch-teaser (Structural scaffold: 1920x1080, 25s, 8 scenes, 2 shader groups) | scaffold-explainer (Structural scaffold: 1920x1080, 45s, 12 scenes, 2 shader groups) | scaffold-cinematic (Structural scaffold: 1920x1080, 60s, 7 scenes, 2 shader groups, long durations). Use force: true to overwrite an existing project.",
     "name": "hyperframes_init",
     "parameters": {
       "properties": {
+        "design_path": {
+          "description": "A design spec already in Files (the user's design.md, DESIGN.md or frame.md): copied into the project, its tokens theme the scaffold. With frame_preset too, the preset directs the composition and this design.md holds the brand.",
+          "type": "string",
+        },
         "force": {
           "description": "Overwrite if the project already exists (default: false)",
           "type": "boolean",
+        },
+        "frame_preset": {
+          "description": "A HyperFrames design preset to direct the composition: saved as the project's frame.md (brand tokens + frame treatments + Do/Don't) and used to theme the scaffold. Options: biennale-yellow (warm parchment, solar-yellow blooms, indigo ink, Instrument Serif display, 1px hairlines; for confident, atmospheric, museum-catalogue elegance) | blockframe (maximalist neobrutalist: thick black borders, hard offset shadows, candy pastels; for bold, punchy, playful-loud) | blue-professional (corporate cream with one cobalt accent, Space Grotesk + Inter, soft tinted cards; for measured, executive, investment-research rigor) | bold-poster (tilted Shrikhand display, tomato red on cream, Libre Baskerville body, double-border grids; for printed, powerful, vintage editorial gravitas) | broadside (industrial newsprint poster: ink and fire-orange, massive lowercase Barlow 900; for bold, typographic, declarative) | capsule (every container a pill, cream paper, candy palette, Bodoni Moda headlines; for friendly, soft, warm editorial) | cartesian (sparse museum catalog: warm stone, Playfair Display, taupe hairline grid; for quiet authority, literary restraint) | cobalt-grid (two-color risograph: cream paper, cobalt ink graph grid, Newsreader + Hanken Grotesk; for systemic, editorial clarity) | code-editorial (warm cream brand book, terracotta coral accent, EB Garamond, navy code surface; for developer launches, code changes, docs with editorial calm) | coral (coral, ink and cream at hard edges, Bebas Neue caps, diagonal hatch, giant numerals; for graphic, structuralist magazine confidence) | creative-mode (neo-brutalist cream, 4px ink borders, Archivo Black caps, JetBrains Mono data; for sparse but punchy, geometric presence) | daisy-days (sunny-garden pastels, charcoal outlines, hard shadows, Fredoka One + Quicksand, doodles; for playful, childlike, sticker-sheet warmth) | editorial-forest (green, pink and cream triad, Source Serif 4 display, JetBrains Mono chrome; for spacious, literary, quiet confidence).",
+          "enum": [
+            "biennale-yellow",
+            "blockframe",
+            "blue-professional",
+            "bold-poster",
+            "broadside",
+            "capsule",
+            "cartesian",
+            "cobalt-grid",
+            "code-editorial",
+            "coral",
+            "creative-mode",
+            "daisy-days",
+            "editorial-forest",
+          ],
+          "type": "string",
         },
         "project_path": {
           "description": "Absolute path for the new project. Choose a meaningful slug that reflects the content (e.g. /projects/vietnam-travel or /projects/product-launch). Never use generic names like 'default', 'project', or 'untitled'.",
@@ -1693,10 +1725,19 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Read the current composition HTML for a HyperFrames project. Use this to inspect the current state before editing, or to verify the content after writing.",
+    "description": "Read a HyperFrames project file: the composition (index.html, the default) or its design spec (frame.md / design.md). Use it to inspect the current state before editing. Reading the composition also names the project's design spec when it has one.",
     "name": "hyperframes_read",
     "parameters": {
       "properties": {
+        "file": {
+          "description": "Which project file: index.html (the composition, default), frame.md or design.md (the design spec).",
+          "enum": [
+            "index.html",
+            "frame.md",
+            "design.md",
+          ],
+          "type": "string",
+        },
         "project_path": {
           "description": "Absolute path to the project directory. Call hyperframes_list first if you do not already know this path — never guess values like 'default'.",
           "type": "string",
@@ -1789,10 +1830,14 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Preview a HyperFrames composition with full player controls (play/pause, scrub bar). Reads the saved composition and renders it as an interactive player in chat.",
+    "description": "Validate a HyperFrames composition and, when it has no errors, show it in chat as a video player (play/pause, scrub, MP4 export and download). Returns the validation errors instead of showing a broken composition.",
     "name": "hyperframes_show",
     "parameters": {
       "properties": {
+        "force": {
+          "description": "Show the preview even though validation reports errors. Only when you are certain every reported error is a false positive.",
+          "type": "boolean",
+        },
         "project_path": {
           "description": "Absolute path to the project directory, e.g. /projects/product-launch",
           "type": "string",
@@ -1821,12 +1866,21 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Create or overwrite the composition HTML for a HyperFrames project. The file is always saved as index.html inside the project directory.",
+    "description": "Create or overwrite a HyperFrames project file: the composition (index.html, the default) or its design spec (frame.md / design.md). Returns the validation report for a saved composition.",
     "name": "hyperframes_write",
     "parameters": {
       "properties": {
         "content": {
-          "description": "Full HyperFrames composition HTML",
+          "description": "The file's full content: the composition HTML, or the design spec markdown",
+          "type": "string",
+        },
+        "file": {
+          "description": "Which project file: index.html (the composition, default), frame.md (the frame-scale design spec that directs the composition) or design.md (the brand spec).",
+          "enum": [
+            "index.html",
+            "frame.md",
+            "design.md",
+          ],
           "type": "string",
         },
         "project_path": {
@@ -2009,13 +2063,13 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, or write and save in the Editor. Returns the new screen.",
+    "description": "Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, save a screenshot of the page to Files, or write and save in the Editor. Returns the new screen.",
     "name": "memon_act",
     "parameters": {
       "description": "Act on the computer screen.",
       "properties": {
         "action": {
-          "description": "click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe to see a picture: a page ref (a canvas, an image or any part of the page; an image also gives its address), an image in Files (f3), or with no ref the image the Viewer shows, else the page as it shows; scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download.",
+          "description": "click a ref (a button, link, file or switch), or a page point with x and y; hover a page ref or point (menus that open on hover); press a key (text: Enter, Escape, Tab, ArrowDown, Control+a) on a page ref or the focused element; type text into a field or the editor (e1); toggle a switch or checkbox (text on/off sets it); select an option of a choice (text is the option); describe to see a picture: a page ref (a canvas, an image or any part of the page; an image also gives its address), an image in Files (f3), or with no ref the image the Viewer shows, else the page as it shows; screenshot saves the page as the browser shows it as a PNG file into Files (~/Pictures, or to): the current view, the whole page (capture), a page ref, or a region; scroll the focused window (the page, a file in the Editor or Viewer, or a long list: Files, Tasks, Skills, the Terminal's output, pi's conversation), or with a page ref the area it scrolls in; back/forward the page; select_tab/close_tab by number. Files entries: move/copy into the folder in text, or cut/copy without text to the clipboard, then paste (into the open folder, or into a folder ref). download: save the file at the address in text (or a page image ref) into Files. zip: zip a folder (a Files ref, or its path in text) into Files and hand it to the user to download. unzip: unpack a .zip (a Files ref, or its path in text) beside it, or into the folder in to.",
           "enum": [
             "click",
             "hover",
@@ -2024,6 +2078,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "toggle",
             "select",
             "describe",
+            "screenshot",
             "focus",
             "scroll",
             "back",
@@ -2036,6 +2091,15 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "paste",
             "download",
             "zip",
+            "unzip",
+          ],
+          "type": "string",
+        },
+        "capture": {
+          "description": "screenshot: "view" (the default) is what the page shows now; "page" is the whole page, top to bottom (a very long one is cut).",
+          "enum": [
+            "view",
+            "page",
           ],
           "type": "string",
         },
@@ -2059,6 +2123,30 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "description": "A ref from the latest screen: "b12" (browser), "f3" (files), "e1"/"e2" (editor), or a control of an app window such as "s5" (Studio), "n2" (Tasks), "k3" (Skills), "c1" (Connections), "h4" (Scheduler).",
           "type": "string",
         },
+        "region": {
+          "description": "screenshot: only this part, in CSS pixels, as the screen gives places ("[b9] canvas 800×600 at 0,120" is { x: 0, y: 120, width: 800, height: 600 }): of the view, or with capture "page", of the page from its top.",
+          "properties": {
+            "height": {
+              "type": "number",
+            },
+            "width": {
+              "type": "number",
+            },
+            "x": {
+              "type": "number",
+            },
+            "y": {
+              "type": "number",
+            },
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height",
+          ],
+          "type": "object",
+        },
         "submit": {
           "description": "type: press Enter after typing (submit a search box).",
           "type": "boolean",
@@ -2068,11 +2156,11 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "number",
         },
         "text": {
-          "description": "type: the text (it replaces the field's value; in the editor e1, the whole file). press: the key. select: the option. toggle: on or off. move/copy: the folder to put the entry in. download: the file's address. zip: the folder's path.",
+          "description": "type: the text (it replaces the field's value; in the editor e1, the whole file). press: the key. select: the option. toggle: on or off. move/copy: the folder to put the entry in. download: the file's address. zip: the folder's path. unzip: the .zip's path.",
           "type": "string",
         },
         "to": {
-          "description": "download/zip: a folder (the file keeps its name) or a file path; ~/Downloads by default.",
+          "description": "download/zip: a folder (the file keeps its name) or a file path; ~/Downloads by default. unzip: the folder to unpack into; beside the zip by default. screenshot: a folder or a .png path; ~/Pictures by default.",
           "type": "string",
         },
         "x": {
@@ -2262,7 +2350,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Open an app on the computer and return the screen. Browser opens a url (or a search) and waits for the page to finish drawing itself; Files shows a folder; Editor opens a file; Terminal brings up the shell.",
+    "description": "Open an app on the computer and return the screen. Browser opens a url (or a search) and waits for the page to finish drawing itself; Files shows a folder; Editor opens a file; Terminal brings up the shell; Video plays a HyperFrames project or a video file, and with exportMp4 renders the project to an MP4.",
     "name": "memon_open",
     "parameters": {
       "description": "Open an app on the computer, a page in the Browser, or a file.",
@@ -2276,6 +2364,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
             "terminal",
             "tasks",
             "visualize",
+            "video",
           ],
           "type": "string",
         },
@@ -2283,12 +2372,16 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "description": "Browser: a local address a Terminal server listens on (http://localhost:PORT) opens embedded; any other opens in a real browser tab, where the user's own servers are. true or false forces one.",
           "type": "boolean",
         },
+        "exportMp4": {
+          "description": "Video: also export the project to MP4 in the Video window and wait for it; the file is saved as {project}/renders/{name}.mp4.",
+          "type": "boolean",
+        },
         "newTab": {
           "description": "Browser: open in a new tab and keep the current page.",
           "type": "boolean",
         },
         "path": {
-          "description": "Files: the folder to show (default "/"), or a file to open in its app: a .terminal launcher runs in a new Terminal tab, a .studio app opens Studio set up, a .tasks file opens in Tasks. Editor: the file to open as text (a launcher or studio app too, to read or change it without running it); a missing file starts empty and is created on save. Visualize: the .openui file to open.",
+          "description": "Files: the folder to show (default "/"), or a file to open in its app: a .terminal launcher runs in a new Terminal tab, a .studio app opens Studio set up, a .tasks file opens in Tasks. Editor: the file to open as text (a launcher or studio app too, to read or change it without running it); a missing file starts empty and is created on save. Visualize: the .openui file to open. Video: a HyperFrames project folder (or its index.html) or a video file to play.",
           "type": "string",
         },
         "url": {

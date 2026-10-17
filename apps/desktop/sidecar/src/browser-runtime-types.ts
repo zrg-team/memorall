@@ -312,6 +312,111 @@ export const responseError = (request: BrowserCommand, error: unknown) => ({
 				: String(error),
 });
 
+/** Which part of the page a screenshot keeps, in CSS pixels. */
+export interface ScreenshotOptions {
+	/** The whole page, top to bottom, not only what the viewport shows. */
+	fullPage?: boolean;
+	/** Of the viewport, or with `fullPage`, of the page from its top-left. */
+	clip?: { x: number; y: number; width: number; height: number };
+}
+
+/** The tallest picture a screenshot makes, in pixels: a longer page is cut. */
+export const SCREENSHOT_MAX_HEIGHT = 16_384;
+
+export const screenshotOptions = (
+	request: BrowserCommand,
+): ScreenshotOptions => {
+	const options: ScreenshotOptions = {};
+	if (request.fullPage === true) options.fullPage = true;
+	const clip = request.clip;
+	if (clip !== undefined) {
+		if (
+			!isRecord(clip) ||
+			!["x", "y", "width", "height"].every((key) => Number.isFinite(clip[key]))
+		) {
+			throw new BrowserAutomationError(
+				"INVALID_BROWSER_REQUEST",
+				"A screenshot's clip needs x, y, width and height.",
+			);
+		}
+		options.clip = {
+			x: Number(clip.x),
+			y: Number(clip.y),
+			width: Number(clip.width),
+			height: Number(clip.height),
+		};
+	}
+	return options;
+};
+
+/** What `Page.getLayoutMetrics` says of the page, in CSS pixels. */
+export interface CdpLayoutMetrics {
+	cssLayoutViewport?: {
+		pageX?: number;
+		pageY?: number;
+		clientWidth?: number;
+		clientHeight?: number;
+	};
+	cssContentSize?: { width?: number; height?: number };
+}
+
+/**
+ * The CDP `clip` of a screenshot, in page coordinates as CDP takes it, and
+ * whether a page too long to keep was cut. Throws when the rectangle misses
+ * the viewport (or, with `fullPage`, the page).
+ */
+export const screenshotClip = (
+	options: ScreenshotOptions,
+	layout: CdpLayoutMetrics,
+): {
+	clip: { x: number; y: number; width: number; height: number; scale: 1 };
+	cut: boolean;
+} => {
+	const viewport = layout.cssLayoutViewport ?? {};
+	const scrollX = viewport.pageX ?? 0;
+	const scrollY = viewport.pageY ?? 0;
+	const width = viewport.clientWidth ?? 0;
+	const height = viewport.clientHeight ?? 0;
+	const bounds = options.fullPage
+		? {
+				x: 0,
+				y: 0,
+				width,
+				height: Math.max(layout.cssContentSize?.height ?? 0, height),
+			}
+		: { x: scrollX, y: scrollY, width, height };
+	const clip = options.clip;
+	const wanted =
+		clip && !options.fullPage
+			? { ...clip, x: clip.x + scrollX, y: clip.y + scrollY }
+			: (clip ?? bounds);
+	const x = Math.max(wanted.x, bounds.x);
+	const y = Math.max(wanted.y, bounds.y);
+	const keptWidth =
+		Math.min(wanted.x + wanted.width, bounds.x + bounds.width) - x;
+	const keptHeight =
+		Math.min(wanted.y + wanted.height, bounds.y + bounds.height) - y;
+	if (!(keptWidth >= 1 && keptHeight >= 1)) {
+		throw new BrowserAutomationError(
+			"SCREENSHOT_AREA_EMPTY",
+			options.fullPage
+				? "That rectangle is not on the page."
+				: "That rectangle is not in the viewport: give x, y within it, or take the whole page.",
+		);
+	}
+	const cut = keptHeight > SCREENSHOT_MAX_HEIGHT;
+	return {
+		clip: {
+			x,
+			y,
+			width: keptWidth,
+			height: cut ? SCREENSHOT_MAX_HEIGHT : keptHeight,
+			scale: 1,
+		},
+		cut,
+	};
+};
+
 export const pngDimensions = (
 	bytes: Buffer,
 ): { width: number; height: number } =>

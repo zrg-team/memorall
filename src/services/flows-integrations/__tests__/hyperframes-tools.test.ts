@@ -19,6 +19,31 @@ import {
 } from "@/services/flows-integrations/tools/hyperframes/hyperframes-remote-assets-explore";
 import { lintHyperframesComposition } from "@/services/flows-integrations/tools/hyperframes/hyperframes-validate";
 import { createHyperframesWriteTool } from "@/services/flows-integrations/tools/hyperframes/hyperframes-write";
+import {
+	createHyperframesInitTool,
+	HYPERFRAMES_TEMPLATE_NAMES,
+} from "@/services/flows-integrations/tools/hyperframes/hyperframes-init";
+import { createHyperframesShowTool } from "@/services/flows-integrations/tools/hyperframes/hyperframes-show";
+import { createHyperframesReadTool } from "@/services/flows-integrations/tools/hyperframes/hyperframes-read";
+import {
+	designTokens,
+	HYPERFRAMES_FRAME_PRESET_SLUGS,
+	loadFramePreset,
+	parseDesignSpec,
+} from "@/services/flows-integrations/tools/hyperframes/frame-presets";
+import {
+	bundledFontFaces,
+	HYPERFRAMES_BUNDLED_FONTS,
+	unbundledFontFamilies,
+	usedFontFamilies,
+} from "@/services/flows-integrations/tools/hyperframes/fonts";
+import {
+	createHyperframesReference,
+	hyperframesRenderPath,
+	hyperframesRevision,
+	parseHyperframesReference,
+	serializeHyperframesReference,
+} from "@/services/flows-integrations/tools/hyperframes/reference";
 import { stepRegistry } from "@memorall/agent-harness-flows/registries/step-registry";
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 
@@ -577,6 +602,30 @@ describe("HyperFrames validation", () => {
 		);
 	});
 
+	it("reports a second HyperShader.init call, which cancels the first", async () => {
+		const fs = new MemoryFs({});
+		const result = await lintHyperframesComposition(
+			`
+				<script>
+					window.HyperShader.init({ scenes:["s1","s2"], transitions:[{time:2.75}], timeline:tl });
+					window.HyperShader.init({ scenes:["s4","s5"], transitions:[{time:8.75}], timeline:tl });
+				</script>
+			`,
+			fs,
+			"/projects/demo",
+		);
+
+		expect(result.ok).toBe(false);
+		expect(result.findings).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "multiple_hypershader_init",
+					severity: "error",
+				}),
+			]),
+		);
+	});
+
 	it("reports unresolved local image assets", async () => {
 		const fs = new MemoryFs({});
 		const result = await lintHyperframesComposition(
@@ -655,5 +704,404 @@ describe("HyperFrames validation", () => {
 				}),
 			]),
 		);
+	});
+});
+
+const VALID_COMPOSITION = `<!doctype html>
+<html lang="en">
+	<head><meta charset="UTF-8" /><style>:root{--font-display:"Montserrat",sans-serif}</style></head>
+	<body>
+		<div id="main" data-composition-id="main" data-width="1080" data-height="1920" data-start="0" data-duration="4">
+			<div id="s1" class="scene clip" data-start="0" data-duration="4" data-track-index="0">
+				<h1 id="t" style="font-family:var(--font-display)">Hello</h1>
+			</div>
+		</div>
+		<script>
+			window.__timelines = window.__timelines || {};
+			var tl = gsap.timeline({ paused: true });
+			tl.from("#t", { y: 40, autoAlpha: 0, duration: 0.6 }, 0.2);
+			window.__timelines["main"] = tl;
+		</script>
+	</body>
+</html>`;
+
+const toolState = () => ({
+	state: { outputMessages: [] as { content: string }[] },
+});
+
+describe("HyperFrames init templates", () => {
+	it("scaffolds every template without validation errors and returns it", async () => {
+		for (const template of HYPERFRAMES_TEMPLATE_NAMES) {
+			const fs = new MemoryFs({});
+			const init = createHyperframesInitTool({ fs }, { rootPath: "/projects" });
+			const result = await init.execute({
+				project_path: `/projects/${template}`,
+				template,
+			});
+			const html = await fs.readFile(`/projects/${template}/index.html`, {
+				encoding: "utf8",
+			});
+			expect(result).toContain(html);
+
+			const lint = await lintHyperframesComposition(
+				html,
+				fs,
+				`/projects/${template}`,
+			);
+			expect(
+				lint.findings.filter((finding) => finding.severity === "error"),
+				template,
+			).toEqual([]);
+			const codes = lint.findings.map((finding) => finding.code);
+			expect(codes, template).not.toContain("font_family_without_font_face");
+			expect(codes, template).not.toContain("gsap_animates_clip_element");
+
+			// One HyperShader.init, over consecutive scenes, each transition
+			// centred on the boundary it crosses.
+			const inits = [...html.matchAll(/HyperShader\.init\(\{([\s\S]*?)\}\);/g)];
+			expect(inits, template).toHaveLength(1);
+			const config = inits[0][1];
+			const scenes = [
+				...(/scenes:\s*\[([^\]]*)\]/.exec(config)?.[1] ?? "").matchAll(
+					/"s(\d+)"/g,
+				),
+			].map((match) => Number(match[1]));
+			expect(scenes.length, template).toBeGreaterThanOrEqual(2);
+			scenes.forEach((scene, index) => {
+				if (index > 0) expect(scene, template).toBe(scenes[index - 1] + 1);
+			});
+			const times = [...config.matchAll(/time:\s*([\d.]+)/g)].map((match) =>
+				Number(match[1]),
+			);
+			expect(times, template).toHaveLength(scenes.length - 1);
+			times.forEach((time, index) => {
+				const next = html.match(
+					new RegExp(`id="s${scenes[index + 1]}"[^>]*data-start="([\\d.]+)"`),
+				);
+				if (next) {
+					const duration = Number(
+						/duration:\s*([\d.]+)/.exec(config.split("time:")[index + 1])?.[1],
+					);
+					expect(time + duration / 2, template).toBeCloseTo(Number(next[1]), 2);
+				}
+			});
+		}
+	});
+});
+
+describe("HyperFrames save tools report validation", () => {
+	it("returns the lint report with hyperframes_write", async () => {
+		const fs = new MemoryFs({});
+		const writer = createHyperframesWriteTool(
+			{ fs },
+			{ rootPath: "/projects" },
+		);
+		const result = await writer.execute({
+			project_path: "/projects/demo",
+			content: VALID_COMPOSITION,
+		});
+		expect(result).toContain("Saved: /projects/demo/index.html");
+		expect(result).toContain("HyperFrames lint");
+		expect(result).toContain("✓ Valid");
+	});
+
+	it("tells the agent to fix errors before showing", async () => {
+		const fs = new MemoryFs({});
+		const writer = createHyperframesWriteTool(
+			{ fs },
+			{ rootPath: "/projects" },
+		);
+		const result = await writer.execute({
+			project_path: "/projects/demo",
+			content: `<script>window.HyperShader.init({scenes:["s1"],transitions:[{time:1}],timeline:tl});</script>`,
+		});
+		expect(result).toContain("hypershader_scene_transition_count");
+		expect(result).toContain("before hyperframes_show");
+	});
+});
+
+describe("HyperFrames show", () => {
+	it("shows a project as a reference to its index.html, not its HTML", async () => {
+		const fs = new MemoryFs({ "/projects/demo/index.html": VALID_COMPOSITION });
+		const show = createHyperframesShowTool({ fs }, { rootPath: "/projects" });
+		const context = toolState();
+		const result = await show.execute(
+			{ project_path: "/projects/demo" },
+			context as never,
+		);
+
+		expect(result).toContain("Composition displayed");
+		expect(context.state.outputMessages).toHaveLength(1);
+		const content = context.state.outputMessages[0]?.content ?? "";
+		expect(content).toContain('type="application/hyperframes"');
+		expect(content).toContain('project-path="/projects/demo"');
+		expect(content).not.toContain("gsap.timeline");
+		const body =
+			/<artifact[^>]*>([\s\S]*)<\/artifact>/.exec(content)?.[1] ?? "";
+		expect(parseHyperframesReference(body)).toEqual({
+			kind: "hyperframes-project",
+			path: "/projects/demo",
+			revision: hyperframesRevision(VALID_COMPOSITION),
+			width: 1080,
+			height: 1920,
+			duration: 4,
+		});
+	});
+
+	it("returns validation errors instead of showing a broken composition", async () => {
+		const broken = `${VALID_COMPOSITION}<script>window.HyperShader.init({scenes:["s1"],transitions:[{time:1}],timeline:tl});</script>`;
+		const fs = new MemoryFs({ "/projects/demo/index.html": broken });
+		const show = createHyperframesShowTool({ fs }, { rootPath: "/projects" });
+		const context = toolState();
+
+		const refused = await show.execute(
+			{ project_path: "/projects/demo" },
+			context as never,
+		);
+		expect(refused).toContain("Not shown");
+		expect(context.state.outputMessages).toHaveLength(0);
+
+		await show.execute(
+			{ project_path: "/projects/demo", force: true },
+			context as never,
+		);
+		expect(context.state.outputMessages).toHaveLength(1);
+	});
+});
+
+describe("HyperFrames project references", () => {
+	it("round-trips and ignores composition HTML", () => {
+		const reference = createHyperframesReference(
+			"/projects/demo",
+			VALID_COMPOSITION,
+		);
+		expect(
+			parseHyperframesReference(serializeHyperframesReference(reference)),
+		).toEqual(reference);
+		expect(parseHyperframesReference(VALID_COMPOSITION)).toBeNull();
+		expect(
+			parseHyperframesReference('{"kind":"other","path":"/x"}'),
+		).toBeNull();
+	});
+
+	it("gives every version of a composition its own revision", () => {
+		expect(hyperframesRevision("a")).not.toBe(hyperframesRevision("b"));
+		expect(hyperframesRevision(VALID_COMPOSITION)).toBe(
+			hyperframesRevision(VALID_COMPOSITION),
+		);
+	});
+
+	it("saves renders inside the project", () => {
+		expect(hyperframesRenderPath("/projects/Launch Teaser/")).toBe(
+			"/projects/Launch Teaser/renders/Launch-Teaser.mp4",
+		);
+	});
+});
+
+describe("HyperFrames fonts", () => {
+	it("warns, without blocking, on fonts the renderer does not bundle", async () => {
+		const fs = new MemoryFs({});
+		const html = VALID_COMPOSITION.replace("Montserrat", "Gotham");
+		const result = await lintHyperframesComposition(html, fs, "/projects/demo");
+		expect(result.ok).toBe(true);
+		expect(result.findings).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "font_family_without_font_face",
+					severity: "warning",
+					fixHint: expect.stringContaining("Montserrat"),
+				}),
+			]),
+		);
+	});
+});
+
+describe("HyperFrames bundled font faces", () => {
+	it("finds families in declarations and custom properties, generic ones left out", () => {
+		expect(
+			usedFontFamilies(`<style>
+				:root { --font-display: "Archivo Black", sans-serif; --font-data: 'JetBrains Mono', monospace; }
+				h1 { font-family: Oswald, system-ui; }
+				@font-face { font-family: "Brand Sans"; src: url(data:font/woff2;base64,AA) }
+				p { font-family: "Brand Sans", serif; }
+			</style>`),
+		).toEqual(["Archivo Black", "JetBrains Mono", "Oswald"]);
+	});
+
+	it("embeds the bundled faces of the fonts a composition uses, aliases included", async () => {
+		const rules = await bundledFontFaces(
+			`<style>:root{--font-display:"Montserrat",sans-serif} p{font-family:Helvetica, "Space Grotesk"}</style>`,
+		);
+		expect(rules).toContain(
+			'font-family:"Montserrat";src:url("data:font/woff2;base64,',
+		);
+		expect(rules).toContain("font-weight:900");
+		// Helvetica renders with HyperFrames' Inter, as its renderer does.
+		expect(rules).toContain('font-family:"Helvetica"');
+		// A catalog font comes only with the catalog loader (the preview's).
+		expect(rules).not.toContain("Space Grotesk");
+		expect(await bundledFontFaces("<p>no fonts</p>")).toBe("");
+	});
+
+	it("lists HyperFrames' fonts and the presets' packaged ones", () => {
+		expect(HYPERFRAMES_BUNDLED_FONTS).toEqual(
+			expect.arrayContaining([
+				"Montserrat",
+				"JetBrains Mono",
+				"Playfair Display",
+				"Instrument Serif",
+				"Space Grotesk",
+			]),
+		);
+		expect(
+			unbundledFontFamilies(
+				`<style>h1{font-family:"Gotham"} h2{font-family:"Space Grotesk"}</style>`,
+			),
+		).toEqual(["Gotham"]);
+	});
+});
+
+describe("HyperFrames design presets (frame.md)", () => {
+	it("bundles every preset of hyperframes.dev/design with parseable tokens", async () => {
+		expect(HYPERFRAMES_FRAME_PRESET_SLUGS).toHaveLength(13);
+		for (const slug of HYPERFRAMES_FRAME_PRESET_SLUGS) {
+			const frame = await loadFramePreset(slug);
+			expect(frame, slug).toMatch(/^---\n/);
+			const tokens = designTokens(parseDesignSpec(frame ?? ""));
+			expect(Object.keys(tokens.colors).length, slug).toBeGreaterThan(2);
+			expect(tokens.fonts.display, slug).toBeTruthy();
+			// Every family the preset names renders in preview and export.
+			expect(
+				unbundledFontFamilies(
+					`<style>${tokens.families.map((f) => `p{font-family:"${f}"}`).join("")}</style>`,
+				),
+				slug,
+			).toEqual([]);
+		}
+	});
+
+	it("starts a project from a preset: frame.md saved, scaffold themed, no lint errors", async () => {
+		for (const slug of HYPERFRAMES_FRAME_PRESET_SLUGS) {
+			const fs = new MemoryFs({});
+			const init = createHyperframesInitTool({ fs }, { rootPath: "/projects" });
+			const result = await init.execute({
+				project_path: `/projects/${slug}`,
+				frame_preset: slug,
+			});
+			const frame = await fs.readFile(`/projects/${slug}/frame.md`, {
+				encoding: "utf8",
+			});
+			expect(frame).toBe(await loadFramePreset(slug));
+			expect(result).toContain("frame.md directs the composition");
+			const html = await fs.readFile(`/projects/${slug}/index.html`, {
+				encoding: "utf8",
+			});
+			const tokens = designTokens(parseDesignSpec(frame));
+			expect(html).toContain(`"${tokens.fonts.display}"`);
+			expect(html).toContain("--c-");
+			const lint = await lintHyperframesComposition(
+				html,
+				fs,
+				`/projects/${slug}`,
+			);
+			expect(
+				lint.findings.filter((f) => f.severity === "error"),
+				slug,
+			).toEqual([]);
+			expect(
+				lint.findings.map((f) => f.code),
+				slug,
+			).not.toContain("off_palette_color");
+		}
+	});
+
+	it("adopts the user's design.md as the brand and asks for a frame.md", async () => {
+		const fs = new MemoryFs({
+			"/brand/design.md": `---\nname: Acme\ncolors:\n  canvas: "#101820"\n  ink: "#F2F2F2"\n  primary: "#FF5A1F"\ntypography:\n  display: { fontFamily: "Bebas Neue", px: 96 }\n  body: { fontFamily: "Inter", px: 20 }\n---\n# Acme\n`,
+		});
+		const init = createHyperframesInitTool({ fs }, { rootPath: "/projects" });
+		const result = await init.execute({
+			project_path: "/projects/acme",
+			design_path: "/brand/design.md",
+		});
+		expect(result).toContain("Write the project's frame.md first");
+		await expect(
+			fs.readFile("/projects/acme/design.md", { encoding: "utf8" }),
+		).resolves.toContain("name: Acme");
+		const html = await fs.readFile("/projects/acme/index.html", {
+			encoding: "utf8",
+		});
+		expect(html).toContain("--bg:#101820");
+		expect(html).toContain("--accent:#FF5A1F");
+		expect(html).toContain('--font-display:"Bebas Neue"');
+	});
+
+	it("warns on colors and fonts outside the project's spec", async () => {
+		const fs = new MemoryFs({
+			"/projects/demo/frame.md": `---\ncolors:\n  paper: "#E9E5DB"\n  ink: "#1B2566"\ntypography:\n  display: { fontFamily: "Instrument Serif", cqw: 10 }\n---\n`,
+		});
+		const html = VALID_COMPOSITION.replace(
+			"<style>",
+			"<style>h1{color:#ff0000;background:#E9E5DB}",
+		);
+		const result = await lintHyperframesComposition(html, fs, "/projects/demo");
+		expect(result.ok).toBe(true);
+		expect(result.findings).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "off_palette_color",
+					message: expect.stringContaining("#ff0000"),
+				}),
+				expect.objectContaining({
+					code: "off_spec_font",
+					message: expect.stringContaining("Montserrat"),
+				}),
+			]),
+		);
+	});
+
+	it("reads and writes the design spec with the project tools", async () => {
+		const fs = new MemoryFs({ "/projects/demo/index.html": VALID_COMPOSITION });
+		const writer = createHyperframesWriteTool(
+			{ fs },
+			{ rootPath: "/projects" },
+		);
+		const saved = await writer.execute({
+			project_path: "/projects/demo",
+			file: "frame.md",
+			content: '---\ncolors:\n  ink: "#111111"\n---\n# Frame\n',
+		});
+		expect(saved).toBe("Saved: /projects/demo/frame.md");
+
+		const reader = createHyperframesReadTool({ fs }, { rootPath: "/projects" });
+		const composition = await reader.execute({
+			project_path: "/projects/demo",
+		});
+		expect(composition).toContain("Design spec: /projects/demo/frame.md");
+		await expect(
+			reader.execute({ project_path: "/projects/demo", file: "frame.md" }),
+		).resolves.toContain("# Frame");
+	});
+
+	it("embeds packaged catalog fonts with their unicode ranges", async () => {
+		const rules = await bundledFontFaces(
+			`<style>:root{--font-display:"Instrument Serif",serif}</style>`,
+			{
+				manifest: async () => ({
+					"Instrument Serif": [
+						{
+							weight: "400",
+							style: "normal",
+							unicodeRange: "U+0000-00FF",
+							file: "instrument-serif-latin-400-normal.woff2",
+						},
+					],
+				}),
+				file: async () => new Uint8Array([1, 2, 3]),
+			},
+		);
+		expect(rules).toContain('font-family:"Instrument Serif"');
+		expect(rules).toContain("data:font/woff2;base64,AQID");
+		expect(rules).toContain("unicode-range:U+0000-00FF");
 	});
 });

@@ -30,6 +30,8 @@ export interface ParsedMemoryOutput {
 	facts: ParsedMemoryFact[];
 	/** A plain sentence with no fields, e.g. "No matching memories found." */
 	message?: string;
+	/** The call failed: `message` is the whole error, line by line. */
+	error?: boolean;
 }
 
 const KNOWN_KEYS = new Set([
@@ -77,6 +79,13 @@ export const parseMemoryToolOutput = (
 ): ParsedMemoryOutput | null => {
 	const trimmed = output?.trim();
 	if (!trimmed) return null;
+
+	// "Error: `memory_remember` rejected the arguments:" reads as a field line,
+	// so an error used to show as "1 memory" holding that one line, with the
+	// list of what to fix underneath it dropped.
+	if (/^error\b/i.test(trimmed)) {
+		return { facts: [], message: trimmed, error: true };
+	}
 
 	let body = trimmed;
 	let lead: string | undefined;

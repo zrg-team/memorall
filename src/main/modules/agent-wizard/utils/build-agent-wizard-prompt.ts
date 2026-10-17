@@ -3,6 +3,7 @@ import {
 	MEMON_APP_IDS,
 	MEMON_STEP_NAME,
 } from "@/services/memon/constants";
+import { MULTI_AGENT_FEATURE_NAME } from "@memorall/agent-harness-flows/steps/features/multi-agent-feature/index";
 import type { AgentWizardCatalog, AgentWizardDraft } from "../types";
 
 export const AGENT_WIZARD_TOOL_NAMES = {
@@ -21,6 +22,7 @@ export const AGENT_WIZARD_TOOL_NAMES = {
 	useConnections: "use_agent_connections",
 	setupConnection: "setup_agent_connection",
 	offerComputer: "offer_agent_computer",
+	offerTeam: "offer_agent_team",
 } as const;
 
 export type AgentWizardToolName =
@@ -49,6 +51,41 @@ const buildComputerSection = (catalog: AgentWizardCatalog): string => {
 - Offer it once. If the current draft already lists "${MEMON_STEP_NAME}", it is on: write the instruction for an agent that works through its computer. If the user dismissed the card, do not offer it again.
 - Still enable the app features the agent needs (for example "web-feature" for browsing): with MemonOS Bot on they become the computer's apps.
 - Keep going while the card is shown; the rest of the draft does not wait for it.
+`;
+};
+
+/** Enough of an agent's description to tell what it is for. */
+const TEAM_DESCRIPTION_CHARS = 160;
+
+/**
+ * The user's other agents, and when to make this one their lead. Only where
+ * the catalog has Multi-Agent Delegation and there is someone to delegate to.
+ */
+const buildTeamSection = (catalog: AgentWizardCatalog): string => {
+	if (
+		!catalog.featureNames.includes(MULTI_AGENT_FEATURE_NAME) ||
+		catalog.agents.length === 0
+	) {
+		return "";
+	}
+	const agents = catalog.agents
+		.map((agent) => {
+			const about = agent.description.replace(/\s+/g, " ").trim();
+			return `- id: ${agent.id} | name: ${agent.name}${
+				about ? ` | does: ${about.slice(0, TEAM_DESCRIPTION_CHARS)}` : ""
+			}`;
+		})
+		.join("\n");
+	return `
+# Multi-Agent Teams — Other Agents To Hand Work To
+"${MULTI_AGENT_FEATURE_NAME}" lets this agent send tasks to other agents the user already has and use their answers. The user's agents:
+${agents}
+
+- Propose a team when this agent leads or coordinates work, or when part of its job is what an agent above already does (research, writing, video, code...). Call ${AGENT_WIZARD_TOOL_NAMES.offerTeam} with those agents' ids and one short reason. The user sees a card listing all their agents with yours switched on, changes it if they like, and adds the team with one click. Do NOT enable "${MULTI_AGENT_FEATURE_NAME}" yourself to propose a team.
+- When the user names the agents to add or remove, set the team directly: ${AGENT_WIZARD_TOOL_NAMES.enableFeature} with name "${MULTI_AGENT_FEATURE_NAME}" and config.accessibleAgentIds set to the whole team.
+- Use only ids from the list above. Never invent an agent.
+- With a team, the instruction must say which kinds of task go to which team member, by name, and that this agent combines their answers into its own.
+- Offer a team once. If the user dismissed the card, do not offer it again.
 `;
 };
 
@@ -141,6 +178,7 @@ Connection rules:
   finish it with ${AGENT_WIZARD_TOOL_NAMES.setupConnection} rather than starting over.
 - Explain what the agent will be able to do once connected, not the mechanics.
 ${buildComputerSection(catalog)}
+${buildTeamSection(catalog)}
 # CRITICAL: Structured Form Responses — MANDATORY
 
 NEVER ask the user questions using markdown text, bullet lists, or numbered lists.
@@ -546,6 +584,30 @@ ANTI-PATTERNS TO AVOID:
 					},
 				},
 				required: ["apps"],
+				additionalProperties: false,
+			},
+		},
+	},
+	{
+		type: "function" as const,
+		function: {
+			name: AGENT_WIZARD_TOOL_NAMES.offerTeam,
+			description:
+				"Propose a team of the user's existing agents that this agent can hand tasks to (Multi-Agent Delegation), as a one-click card in this conversation that lists every agent with the proposed ones switched on. The user adjusts it and adds the team; do not enable the feature yourself to propose. Offer once.",
+			parameters: {
+				type: "object",
+				properties: {
+					agentIds: {
+						...stringArraySchema,
+						description: "Ids from the user's agents list.",
+					},
+					reason: {
+						type: "string",
+						description:
+							"One short line for the card on why, e.g. 'It leads launches: Deep Web Researcher finds the facts and Content Writer drafts the posts.'",
+					},
+				},
+				required: ["agentIds"],
 				additionalProperties: false,
 			},
 		},

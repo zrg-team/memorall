@@ -36,7 +36,7 @@ export const MEMON_DOCK_GROUPS: ReadonlyArray<{
 		id: "office",
 		apps: ["spreadsheet", "documents", "presentation", "whiteboard", "pdf"],
 	},
-	{ id: "create", apps: ["studio", "visualize"] },
+	{ id: "create", apps: ["studio", "visualize", "video"] },
 	// The agent's own settings: its schedules, skills and connections.
 	{ id: "agent", apps: ["scheduler", "skills", "connections"] },
 ];

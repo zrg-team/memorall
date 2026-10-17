@@ -11,6 +11,7 @@ import type { DocumentFile } from "@/types/document-library";
 const mocks = vi.hoisted(() => ({
 	readFile: vi.fn(),
 	actionRenders: vi.fn(),
+	codeRenders: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -35,7 +36,12 @@ vi.mock("../../hooks/use-source-status", () => ({
 vi.mock("../../editors", () => ({
 	editorRegistry: { getEditorComponent: () => null },
 }));
-vi.mock("../../editors/CodeEditor", () => ({ CodeEditor: () => null }));
+vi.mock("../../editors/CodeEditor", () => ({
+	CodeEditor: () => {
+		mocks.codeRenders();
+		return null;
+	},
+}));
 vi.mock("../../folder-index", () => ({
 	useFileIndexActions: () => {
 		mocks.actionRenders();
@@ -74,6 +80,7 @@ beforeEach(() => {
 	urls = 0;
 	mocks.readFile.mockReset();
 	mocks.actionRenders.mockReset();
+	mocks.codeRenders.mockReset();
 	createObjectURL.mockClear();
 	revokeObjectURL.mockClear();
 	vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
@@ -147,5 +154,29 @@ describe("DocumentViewer previews", () => {
 			<DocumentViewer file={pdf} fileTopics={topics} onClose={onClose} />,
 		);
 		expect(mocks.actionRenders).toHaveBeenCalledTimes(renders);
+	});
+});
+
+describe("DocumentViewer and files that are not text", () => {
+	it("shows a note for a zip, not its bytes as code", async () => {
+		mocks.readFile.mockResolvedValue(
+			new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]),
+		);
+		const view = render(
+			<DocumentViewer file={fileOf("docs.zip", "other")} fileTopics={topics} />,
+		);
+		await act(async () => {});
+		expect(view.getByText("viewer.zipNoPreview")).toBeTruthy();
+		expect(mocks.codeRenders).not.toHaveBeenCalled();
+	});
+
+	it("still opens an unknown file that is text", async () => {
+		mocks.readFile.mockResolvedValue(new TextEncoder().encode("key = value"));
+		const view = render(
+			<DocumentViewer file={fileOf("app.conf", "other")} fileTopics={topics} />,
+		);
+		await act(async () => {});
+		expect(view.queryByText("viewer.binaryNoPreview")).toBeNull();
+		expect(mocks.codeRenders).toHaveBeenCalled();
 	});
 });

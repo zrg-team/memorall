@@ -4,6 +4,8 @@
  * element and scaled down until its longest side fits CAPTURE_MAX_SIDE.
  */
 
+import { screenshotArea } from "@/services/web-browser/page-screenshot";
+
 export interface MemonPageCapture {
 	/** A PNG data URL. */
 	dataUrl: string;
@@ -11,6 +13,8 @@ export interface MemonPageCapture {
 	height: number;
 	/** An image's own address, when the element is one. */
 	source?: string;
+	/** The page was too long to keep whole: the picture stops short of its end. */
+	cut?: boolean;
 }
 
 /**
@@ -20,6 +24,18 @@ export interface MemonPageCapture {
 export interface MemonCaptureRequest {
 	ref?: string;
 	docToken?: string;
+	/**
+	 * Keep the picture's own pixels, for a file, rather than scaling it down
+	 * to CAPTURE_MAX_SIDE for the model.
+	 */
+	fullSize?: boolean;
+	/** The whole page, top to bottom, not only what the viewport shows. */
+	fullPage?: boolean;
+	/**
+	 * A rectangle, in CSS pixels: of the viewport, or with `fullPage`, of the
+	 * page from its top-left corner. Not with a ref.
+	 */
+	area?: CaptureRect;
 }
 
 export interface CaptureRect {
@@ -77,24 +93,26 @@ const within = (
 	};
 };
 
+/** The longest side a picture keeps: the model's, or a file's own. */
+export const pictureMaxSide = (request?: MemonCaptureRequest): number =>
+	request?.fullSize ? Number.POSITIVE_INFINITY : CAPTURE_MAX_SIDE;
+
 /**
- * Draws `area` of `source` (all of it by default), scaled to fit. The draw
- * happens before the first await, so a caller can read a WebGL canvas in
- * the same task the page drew it in.
+ * Draws `area` of `source` (all of it by default), scaled to fit `maxSide`.
+ * The draw happens before the first await, so a caller can read a WebGL
+ * canvas in the same task the page drew it in.
  */
 export const fitPicture = async (
 	source: CanvasImageSource,
 	size: { width: number; height: number },
 	area?: CaptureRect,
+	maxSide = CAPTURE_MAX_SIDE,
 ): Promise<Picture> => {
 	const crop = within(area ?? { x: 0, y: 0, ...size }, size);
 	if (!(crop.width >= 1 && crop.height >= 1)) {
 		throw new Error("The element is not on screen: scroll it into view first.");
 	}
-	const scale = Math.min(
-		1,
-		CAPTURE_MAX_SIDE / Math.max(crop.width, crop.height),
-	);
+	const scale = Math.min(1, maxSide / Math.max(crop.width, crop.height));
 	const width = Math.max(1, Math.round(crop.width * scale));
 	const height = Math.max(1, Math.round(crop.height * scale));
 	const canvas = newCanvas(width, height);
@@ -121,6 +139,7 @@ export const fitPicture = async (
 export const cropScreenshot = async (
 	dataUrl: string,
 	area: CaptureRect,
+	maxSide = CAPTURE_MAX_SIDE,
 ): Promise<Picture> => {
 	const blob = await (await fetch(dataUrl)).blob();
 	const bitmap = await createImageBitmap(blob);
@@ -129,6 +148,7 @@ export const cropScreenshot = async (
 			bitmap,
 			{ width: bitmap.width, height: bitmap.height },
 			area,
+			maxSide,
 		);
 	} finally {
 		bitmap.close();
@@ -140,10 +160,13 @@ export const cropScreenshot = async (
  * frames, so it is read right after the page's next animation frame, in
  * the same task; a page that draws no frame is read after a moment anyway.
  */
-const readCanvas = (canvas: HTMLCanvasElement): Promise<Picture> => {
+const readCanvas = (
+	canvas: HTMLCanvasElement,
+	maxSide: number,
+): Promise<Picture> => {
 	const view = canvas.ownerDocument.defaultView;
 	const size = { width: canvas.width, height: canvas.height };
-	if (!view) return fitPicture(canvas, size);
+	if (!view) return fitPicture(canvas, size, undefined, maxSide);
 	return new Promise<Picture>((resolve, reject) => {
 		const original = view.requestAnimationFrame;
 		let read = false;
@@ -152,7 +175,7 @@ const readCanvas = (canvas: HTMLCanvasElement): Promise<Picture> => {
 			read = true;
 			clearTimeout(timer);
 			view.requestAnimationFrame = original;
-			fitPicture(canvas, size).then(resolve, reject);
+			fitPicture(canvas, size, undefined, maxSide).then(resolve, reject);
 		};
 		const timer = setTimeout(finish, FRAME_WAIT_MS);
 		view.requestAnimationFrame = (callback) =>
@@ -192,47 +215,79 @@ export const pictureOfImage = async (
 /** The part of a page this window can reach that its viewport shows. */
 export const captureViewport = async (
 	doc: Document,
+	maxSide = CAPTURE_MAX_SIDE,
+	{ fullPage, area }: Pick<MemonCaptureRequest, "fullPage" | "area"> = {},
 ): Promise<MemonPageCapture> => {
 	const view = doc.defaultView;
+	// The part of the page to draw: the viewport, a rectangle, or all of it.
+	const planned = view
+		? screenshotArea(
+				{ fullPage, clip: area },
+				{
+					scrollX: view.scrollX,
+					scrollY: view.scrollY,
+					viewportWidth: doc.documentElement.clientWidth || view.innerWidth,
+					viewportHeight: doc.documentElement.clientHeight || view.innerHeight,
+					pageHeight: Math.max(
+						doc.documentElement.scrollHeight,
+						doc.body?.scrollHeight ?? 0,
+					),
+					devicePixelRatio: 1,
+				},
+			)
+		: null;
+	if (view && !planned) {
+		throw new Error(
+			fullPage
+				? "That rectangle is not on the page."
+				: "That rectangle is not in the viewport: give x, y within it, or take the whole page.",
+		);
+	}
 	const { default: html2canvas } = await import("html2canvas");
 	const drawn = await html2canvas(doc.documentElement, {
 		backgroundColor: null,
 		logging: false,
 		useCORS: true,
 		scale: 1,
-		...(view
+		...(view && planned
 			? {
-					x: view.scrollX,
-					y: view.scrollY,
-					width: view.innerWidth,
-					height: view.innerHeight,
+					...planned.area,
 					windowWidth: view.innerWidth,
 					windowHeight: view.innerHeight,
 				}
 			: {}),
 	});
-	return fitPicture(drawn, { width: drawn.width, height: drawn.height });
+	const picture = await fitPicture(
+		drawn,
+		{ width: drawn.width, height: drawn.height },
+		undefined,
+		maxSide,
+	);
+	return planned?.cut ? { ...picture, cut: true } : picture;
 };
 
 /** A picture of an element of a page this window can reach (same origin). */
 export const captureElement = async (
 	element: Element,
 	source?: string,
+	maxSide = CAPTURE_MAX_SIDE,
 ): Promise<MemonPageCapture> => {
 	const tag = element.tagName.toLowerCase();
 	let picture: Picture;
 	if (tag === "canvas") {
-		picture = await readCanvas(element as HTMLCanvasElement);
+		picture = await readCanvas(element as HTMLCanvasElement, maxSide);
 	} else if (
 		tag === "img" &&
 		(element as HTMLImageElement).complete &&
 		(element as HTMLImageElement).naturalWidth > 0
 	) {
 		const image = element as HTMLImageElement;
-		picture = await fitPicture(image, {
-			width: image.naturalWidth,
-			height: image.naturalHeight,
-		});
+		picture = await fitPicture(
+			image,
+			{ width: image.naturalWidth, height: image.naturalHeight },
+			undefined,
+			maxSide,
+		);
 	} else {
 		const { default: html2canvas } = await import("html2canvas");
 		const drawn = await html2canvas(element as HTMLElement, {
@@ -241,10 +296,12 @@ export const captureElement = async (
 			useCORS: true,
 			scale: 1,
 		});
-		picture = await fitPicture(drawn, {
-			width: drawn.width,
-			height: drawn.height,
-		});
+		picture = await fitPicture(
+			drawn,
+			{ width: drawn.width, height: drawn.height },
+			undefined,
+			maxSide,
+		);
 	}
 	return source ? { ...picture, source } : picture;
 };

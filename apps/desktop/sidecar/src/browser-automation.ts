@@ -15,6 +15,7 @@ import {
 	requiredNumber,
 	requiredString,
 	responseError,
+	screenshotOptions,
 	WEB_BROWSER_COMMAND_SOURCE,
 	BLANK_PAGE_URL,
 } from "./browser-runtime-types";
@@ -834,7 +835,11 @@ export class BrowserAutomationManager {
 			command: "screenshot",
 			success: true,
 			sessionId: request.sessionId,
-			...(await session.backend.screenshot!(session.backendSession, signal)),
+			...(await session.backend.screenshot!(
+				session.backendSession,
+				signal,
+				screenshotOptions(request),
+			)),
 		};
 	}
 

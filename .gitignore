@@ -190,6 +190,7 @@ public/sandbox/pages/js/
 public/vendors/artifacts/
 public/vendors/chevrotain/
 public/vendors/hyperframes/CustomEase.min.js
+public/vendors/hyperframes/fonts/
 public/vendors/fx/
 # Hosted apps, built from a pinned upstream by tools/build-hosted-apps.mjs.
 public/vendors/apps/

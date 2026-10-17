@@ -3,11 +3,14 @@ import {
 	ClipboardPaste,
 	Copy,
 	FolderOpen,
+	Link,
 	type LucideIcon,
+	PackageOpen,
 	SquareArrowOutUpRight,
 	Scissors,
 	Trash2,
 } from "lucide-react";
+import { copyPathsToClipboard } from "@/main/modules/files/utils/copy-paths";
 
 /** What a right-click offers for the item under the pointer, e.g. Delete. */
 export interface MemonMenuAction {
@@ -54,9 +57,9 @@ export const modifierShortcut = (key: string): string =>
 const nameOf = (path: string): string => path.split("/").pop() || path;
 
 /**
- * Open, Cut, Copy, Paste into (a folder, when something is cut or copied)
- * and Delete for files and folders. `paths` are what the edits act on: the
- * whole selection when the item is part of it.
+ * Open, Unzip (a .zip), Cut, Copy, Copy path, Paste into (a folder, when
+ * something is cut or copied) and Delete for files and folders. `paths` are
+ * what the edits act on: the whole selection when the item is part of it.
  */
 export const fileMenuActions = ({
 	t,
@@ -67,6 +70,7 @@ export const fileMenuActions = ({
 	toClipboard,
 	paste,
 	remove,
+	unzip,
 }: {
 	t: TFunction;
 	paths: string[];
@@ -77,12 +81,17 @@ export const fileMenuActions = ({
 	toClipboard: (mode: "copy" | "cut", paths: string[]) => void;
 	paste: (folder: string) => void;
 	remove: (paths: string[]) => void;
+	/** Set when the item is a .zip: unpacks it beside itself. */
+	unzip?: () => void;
 }): MemonMenuAction[] => [
 	{
 		label: t("memonComputer.files.open"),
 		icon: folder ? FolderOpen : SquareArrowOutUpRight,
 		run: open,
 	},
+	...(unzip
+		? [{ label: t("memonComputer.files.unzip"), icon: PackageOpen, run: unzip }]
+		: []),
 	{
 		label: t("memonComputer.files.cut"),
 		icon: Scissors,
@@ -94,6 +103,11 @@ export const fileMenuActions = ({
 		icon: Copy,
 		shortcut: modifierShortcut("C"),
 		run: () => toClipboard("copy", paths),
+	},
+	{
+		label: t("memonComputer.files.copyPath", { count: paths.length }),
+		icon: Link,
+		run: () => copyPathsToClipboard(paths),
 	},
 	...(folder && canPaste
 		? [

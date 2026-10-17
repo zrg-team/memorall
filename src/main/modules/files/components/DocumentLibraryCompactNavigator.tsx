@@ -33,6 +33,8 @@ interface DocumentLibraryCompactNavigatorProps {
 	onDeleteNode?: (node: DocumentTreeNode) => void;
 	/** Downloads a folder of the documents tree as a .zip. */
 	onDownloadFolderNode?: (node: DocumentTreeNode) => void;
+	/** Unpacks a .zip of the documents tree beside it. */
+	onUnzipNode?: (node: DocumentTreeNode) => void;
 }
 
 export const DocumentLibraryCompactNavigator = memo(
@@ -54,6 +56,7 @@ export const DocumentLibraryCompactNavigator = memo(
 		onRenameNode,
 		onDeleteNode,
 		onDownloadFolderNode,
+		onUnzipNode,
 	}: DocumentLibraryCompactNavigatorProps) {
 		const { t } = useTranslation("documents");
 		const showWorkspaceSection = workspaceTree.length > 0;
@@ -71,6 +74,7 @@ export const DocumentLibraryCompactNavigator = memo(
 			const handleMove = section === "workspace" ? undefined : onMove;
 			const handleDownloadFolder =
 				section === "workspace" ? undefined : onDownloadFolderNode;
+			const handleUnzip = section === "workspace" ? undefined : onUnzipNode;
 
 			return (
 				<div
@@ -106,6 +110,7 @@ export const DocumentLibraryCompactNavigator = memo(
 								onRename={onRenameNode}
 								onDelete={onDeleteNode}
 								onDownloadFolder={handleDownloadFolder}
+								onUnzip={handleUnzip}
 							/>
 						</div>
 					)}

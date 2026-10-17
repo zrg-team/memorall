@@ -193,9 +193,14 @@ const applyFeatureConfig = (
 		);
 	}
 
+	// Only the user's own agents: a made-up id would be saved as a team member
+	// that can never answer.
 	if ("accessibleAgentIds" in config) {
-		draft.multiAgentAccessibleAgentIds = uniqueStrings(
+		draft.multiAgentAccessibleAgentIds = filterKnown(
 			config.accessibleAgentIds,
+			catalog.agents.map((agent) => agent.id),
+			rejected,
+			"agent",
 		);
 	}
 };
@@ -314,6 +319,7 @@ const announceToolPatchCursorMove = (patch: AgentWizardToolPatch): void => {
 			);
 			break;
 		case "offer_computer":
+		case "offer_team":
 			// A card for the user, not a change to the draft.
 			break;
 		case "enable_feature":
@@ -535,6 +541,7 @@ export const applyAgentWizardToolPatch = (
 		}
 		case "setup_connection":
 		case "offer_computer":
+		case "offer_team":
 			// Pure signals: the hook opens the panel or the card; nothing to patch.
 			break;
 		case "enable_feature":
@@ -675,6 +682,15 @@ export const agentWizardToolPatchFromCall = (
 						: undefined,
 			};
 		}
+		case AGENT_WIZARD_TOOL_NAMES.offerTeam:
+			return {
+				type: "offer_team",
+				agentIds: uniqueStrings(args.agentIds),
+				reason:
+					typeof args.reason === "string" && args.reason.trim()
+						? args.reason.trim()
+						: undefined,
+			};
 		case AGENT_WIZARD_TOOL_NAMES.setupConnection:
 			return args.kind === "composio" || args.kind === "custom"
 				? {

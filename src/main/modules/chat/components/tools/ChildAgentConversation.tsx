@@ -1,6 +1,12 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Bot, CornerDownRight, History } from "lucide-react";
+import {
+	AlertTriangle,
+	Bot,
+	CircleSlash,
+	CornerDownRight,
+	History,
+} from "lucide-react";
 import type {
 	ChildAgentExchange,
 	ChildAgentRun,
@@ -54,38 +60,75 @@ const useAgentName = (agentId: string | undefined): string | undefined => {
 	return name;
 };
 
-/** A child's tool call as the chat's own tool row reads it. */
-const toToolPart = (step: ToolStep): ComplexContentPartTool => ({
-	type: "tool",
-	id: step.id,
-	name: step.name,
-	description: step.output ?? "",
-	metadata: {
-		tool: step.name,
-		tool_call_id: step.id,
-		tool_call: {
-			id: step.id,
-			type: "function",
-			function: { name: step.name, arguments: step.input ?? "" },
+/** A JSON result as fields, the way a tool card reads its own result. */
+const parsedOutput = (
+	output: string | undefined,
+): Record<string, unknown> | undefined => {
+	const text = output?.trim();
+	if (!text?.startsWith("{")) return undefined;
+	try {
+		const value: unknown = JSON.parse(text);
+		return value && typeof value === "object" && !Array.isArray(value)
+			? (value as Record<string, unknown>)
+			: undefined;
+	} catch {
+		return undefined;
+	}
+};
+
+/**
+ * A child's tool call as the chat's own tool row reads it. Once the run is
+ * over (`ended`), a call still marked running was cut off: it shows as
+ * stopped, not as running for good.
+ */
+const toToolPart = (step: ToolStep, ended: boolean): ComplexContentPartTool => {
+	const status = ended && step.status === "running" ? "stopped" : step.status;
+	return {
+		type: "tool",
+		id: step.id,
+		name: step.name,
+		description: step.output ?? "",
+		metadata: {
+			// Its result's fields first, as for the chat's own calls: web searches
+			// and page reads are drawn from them.
+			...(parsedOutput(step.output) ?? {}),
+			tool: step.name,
+			tool_call_id: step.id,
+			tool_call: {
+				id: step.id,
+				type: "function",
+				function: { name: step.name, arguments: step.input ?? "" },
+			},
+			status,
+			...(step.startedAt ? { startedAt: step.startedAt } : {}),
+			...(step.durationMs !== undefined ? { durationMs: step.durationMs } : {}),
 		},
-		status: step.status,
-		...(step.startedAt ? { startedAt: step.startedAt } : {}),
-		...(step.durationMs !== undefined ? { durationMs: step.durationMs } : {}),
-	},
-	state:
-		step.status === "running"
-			? "running"
-			: step.status === "failed"
-				? "error"
-				: "complete",
-});
+		state:
+			status === "running"
+				? "running"
+				: status === "failed"
+					? "error"
+					: "complete",
+	};
+};
+
+/** Whether two texts open the same way: the reply and the run's last words. */
+const startsAlike = (
+	first: string | undefined,
+	second: string | undefined,
+): boolean => {
+	if (!first || !second) return false;
+	const opening = (text: string) =>
+		text.replace(/\s+/g, " ").trim().slice(0, 120);
+	return opening(first) === opening(second);
+};
 
 /** Text, or a run of tool calls shown together as one timeline. */
 type Segment =
 	| { type: "text"; key: string; content: string }
 	| { type: "tools"; key: string; parts: ComplexContentPartTool[] };
 
-const toSegments = (steps: ChildAgentStep[]): Segment[] => {
+const toSegments = (steps: ChildAgentStep[], ended: boolean): Segment[] => {
 	const segments: Segment[] = [];
 	for (const [index, step] of steps.entries()) {
 		if (step.type === "text") {
@@ -98,9 +141,13 @@ const toSegments = (steps: ChildAgentStep[]): Segment[] => {
 		}
 		const last = segments.at(-1);
 		if (last?.type === "tools") {
-			last.parts.push(toToolPart(step));
+			last.parts.push(toToolPart(step, ended));
 		} else {
-			segments.push({ type: "tools", key: step.id, parts: [toToolPart(step)] });
+			segments.push({
+				type: "tools",
+				key: step.id,
+				parts: [toToolPart(step, ended)],
+			});
 		}
 	}
 	return segments;
@@ -288,17 +335,48 @@ export const ChildAgentConversation: React.FC<{ item: MessageActionItem }> = ({
 	const parentMessage =
 		typeof args?.message === "string" ? args.message : undefined;
 	const callStatus = item.metadata?.status;
-	const failed = callStatus === "failed";
+	// The call is the authority: once it ended, nothing under it still runs,
+	// whatever the last report of the run said.
+	const callEnded = typeof callStatus === "string" && callStatus !== "running";
+	const failed = callStatus === "failed" || run?.status === "failed";
 	const running =
-		!failed && (callStatus === "running" || run?.status === "running");
+		!callEnded &&
+		!failed &&
+		(callStatus === "running" || run?.status === "running");
 	const output = item.description?.trim();
 	const steps = run?.steps;
-	const segments = React.useMemo(() => toSegments(steps ?? []), [steps]);
-	const toolRunning = (steps ?? []).some(
-		(step) => step.type === "tool" && step.status === "running",
+	const segments = React.useMemo(
+		() => toSegments(steps ?? [], !running),
+		[steps, running],
 	);
+	const toolRunning =
+		running &&
+		(steps ?? []).some(
+			(step) => step.type === "tool" && step.status === "running",
+		);
 	// A call from before runs were reported has only its reply to show.
 	const replyOnly = !run && !failed && output;
+	// The reply, when the run's own last words are not it (cut to fit, or
+	// never streamed as text).
+	const lastText = steps
+		?.filter((step) => step.type === "text")
+		.at(-1)
+		?.content.trim();
+	const showReply =
+		!running &&
+		!failed &&
+		run?.status === "completed" &&
+		Boolean(output) &&
+		!startsAlike(lastText, output);
+	const endNote = running
+		? null
+		: run?.status === "stopped"
+			? run.endReason === "step_limit"
+				? t("childAgent.stepLimit", { name })
+				: t("childAgent.stopped", { name })
+			: run?.status === "running" && callEnded
+				? t("childAgent.unreported", { name })
+				: null;
 
 	return (
 		<div className="space-y-3">
@@ -323,6 +401,11 @@ export const ChildAgentConversation: React.FC<{ item: MessageActionItem }> = ({
 								: undefined
 						}
 					/>
+					{run?.omittedSteps ? (
+						<p className="text-xs text-muted-foreground">
+							{t("childAgent.omittedSteps", { count: run.omittedSteps })}
+						</p>
+					) : null}
 					{segments.map((segment) =>
 						segment.type === "text" ? (
 							<MarkdownMessage key={segment.key} className="w-full text-sm">
@@ -341,10 +424,16 @@ export const ChildAgentConversation: React.FC<{ item: MessageActionItem }> = ({
 							</div>
 						),
 					)}
-					{replyOnly ? (
+					{replyOnly || showReply ? (
 						<MarkdownMessage className="w-full text-sm">
 							{output}
 						</MarkdownMessage>
+					) : null}
+					{endNote ? (
+						<div className="flex w-full items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+							<CircleSlash className="mt-0.5 h-4 w-4 shrink-0" />
+							<p className="min-w-0 break-words">{endNote}</p>
+						</div>
 					) : null}
 					{running && !toolRunning ? (
 						<div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
@@ -352,7 +441,7 @@ export const ChildAgentConversation: React.FC<{ item: MessageActionItem }> = ({
 							{t("childAgent.working")}
 						</div>
 					) : null}
-					{!running && !failed && run && run.steps.length === 0 ? (
+					{!running && !failed && !endNote && run && run.steps.length === 0 ? (
 						<p className="text-sm text-muted-foreground">
 							{t("childAgent.noReply")}
 						</p>
@@ -361,7 +450,7 @@ export const ChildAgentConversation: React.FC<{ item: MessageActionItem }> = ({
 						<div className="flex w-full items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
 							<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
 							<div className="min-w-0 whitespace-pre-wrap break-words">
-								{output}
+								{callStatus === "failed" ? output : (run?.error ?? output)}
 							</div>
 						</div>
 					) : null}

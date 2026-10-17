@@ -59,6 +59,21 @@ describe("parseMemoryToolOutput", () => {
 		expect(parsed?.message).toBe("No matching memories found.");
 	});
 
+	it("keeps a rejected call as one error, with every field to fix", () => {
+		const error = [
+			"Error: `memory_remember` rejected the arguments:",
+			"- object: required, but missing",
+			"- confidence: Too big: expected number to be <=1",
+			"",
+			"Fix those fields and call it again.",
+		].join("\n");
+		const parsed = parseMemoryToolOutput(error);
+
+		expect(parsed?.error).toBe(true);
+		expect(parsed?.facts).toHaveLength(0);
+		expect(parsed?.message).toBe(error);
+	});
+
 	it("returns null for nothing to show", () => {
 		expect(parseMemoryToolOutput("")).toBeNull();
 		expect(parseMemoryToolOutput("   ")).toBeNull();

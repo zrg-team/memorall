@@ -38,6 +38,8 @@ interface DocumentLibrarySidebarProps {
 	onDeleteNode?: (node: DocumentTreeNode) => void;
 	/** Downloads a folder of the documents tree as a .zip. */
 	onDownloadFolderNode?: (node: DocumentTreeNode) => void;
+	/** Unpacks a .zip of the documents tree beside it. */
+	onUnzipNode?: (node: DocumentTreeNode) => void;
 }
 
 export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
@@ -57,6 +59,7 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 	onRenameNode,
 	onDeleteNode,
 	onDownloadFolderNode,
+	onUnzipNode,
 }: DocumentLibrarySidebarProps) {
 	const { t } = useTranslation("documents");
 	const [docsExpanded, setDocsExpanded] = useState(true);
@@ -145,6 +148,7 @@ export const DocumentLibrarySidebar = memo(function DocumentLibrarySidebar({
 						onRename={onRenameNode}
 						onDelete={onDeleteNode}
 						onDownloadFolder={onDownloadFolderNode}
+						onUnzip={onUnzipNode}
 						mappedPaths={mappedPaths}
 						onUnmap={unmapByPath}
 					/>
