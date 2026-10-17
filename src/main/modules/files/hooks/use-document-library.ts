@@ -752,22 +752,18 @@ export function useDocumentLibrary() {
 				} else {
 					await documentFileSystemService.deleteFolder(sp);
 				}
-				const newTree = await loadTree();
+				await loadTree();
+				// The open item is gone: back to the folder it was in, all of it.
 				if (selectedNodeRef.current?.id === item.item.id) {
-					const curPath = currentPathRef.current;
-					const parentPath =
-						curPath.substring(0, curPath.lastIndexOf("/")) || "/";
-					const parentNode = findNodeByPath(newTree, parentPath);
-					setSelectedNode(
-						parentNode ?? (newTree.length > 0 ? newTree[0] : null),
-					);
+					setSearchQuery("");
+					await handleOpenDocumentByPath(parentFolder(item.item.path) ?? "/");
 				}
 			} catch (err) {
 				logError("Failed to delete item:", err);
 				setError(t("library.deleteItemError"));
 			}
 		},
-		[loadTree, t],
+		[handleOpenDocumentByPath, loadTree, t],
 	);
 
 	const handleRenameItem = useCallback(
@@ -798,16 +794,16 @@ export function useDocumentLibrary() {
 
 		try {
 			await documentFileSystemService.deleteFile(toSandboxPath(node.path));
-			const newTree = await loadTree();
-			const curPath = currentPathRef.current;
-			const parentPath = curPath.substring(0, curPath.lastIndexOf("/")) || "/";
-			const parentNode = findNodeByPath(newTree, parentPath);
-			setSelectedNode(parentNode ?? (newTree.length > 0 ? newTree[0] : null));
+			await loadTree();
+			// Back to the folder it was in, however deep, all of it: a search
+			// that found this file now finds nothing, and left the folder empty.
+			setSearchQuery("");
+			await handleOpenDocumentByPath(parentFolder(node.path) ?? "/");
 		} catch (err) {
 			logError("Failed to delete file:", err);
 			setError(t("library.deleteFileError"));
 		}
-	}, [loadTree, t]);
+	}, [handleOpenDocumentByPath, loadTree, t]);
 
 	// ── Download ─────────────────────────────────────────────────────────────
 

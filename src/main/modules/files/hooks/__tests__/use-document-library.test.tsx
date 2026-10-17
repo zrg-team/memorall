@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 	resolveNode: vi.fn(),
 	getFolderChildren: vi.fn(),
 	readFile: vi.fn(),
+	deleteFile: vi.fn(),
 	subscribe: vi.fn(),
 	topics: vi.fn(),
 	t: (key: string) => key,
@@ -22,6 +23,7 @@ vi.mock("@/services/filesystem/document-filesystem", () => ({
 		resolveNode: mocks.resolveNode,
 		getFolderChildren: mocks.getFolderChildren,
 		readFile: mocks.readFile,
+		deleteFile: mocks.deleteFile,
 		onFilesystemChanged: mocks.subscribe,
 	},
 }));
@@ -211,6 +213,38 @@ describe("opening Files search results", () => {
 		});
 		expect(result.current.currentPath).toBe("/");
 		expect(result.current.error).toBe("library.openItemError");
+	});
+});
+
+describe("deleting the open file", () => {
+	it("goes back to the whole folder it was in, however deep", async () => {
+		mocks.resolveNode.mockImplementation(async (path: string) =>
+			path === target.path
+				? target
+				: path === deep.path
+					? { ...deep, children: [], isLazy: false }
+					: null,
+		);
+		vi.stubGlobal("confirm", () => true);
+		const { result } = await renderLibrary();
+		await act(async () => {
+			await result.current.handleOpenDocumentByPath(target.path);
+		});
+		// Found by a search, which finds nothing once the file is gone.
+		act(() => result.current.handleSearchChange("capture"));
+		await act(async () => {
+			await result.current.handleOpenDocumentByPath(target.path);
+		});
+		await act(async () => {
+			await result.current.handleDeleteSelectedFile();
+		});
+
+		expect(mocks.deleteFile).toHaveBeenCalledWith(target.path);
+		// The whole folder, not an empty search result.
+		expect(result.current.searchQuery).toBe("");
+		// Not the first top-level folder: the deleted file's own folder.
+		await waitFor(() => expect(result.current.currentPath).toBe(deep.path));
+		expect(result.current.isFolderSelected).toBe(true);
 	});
 });
 
