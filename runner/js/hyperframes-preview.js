@@ -1621,6 +1621,56 @@ async function renderComposition(html, inlineScripts, options = {}) {
 	for (const src of managedScripts.runtime) await loadExternal(src);
 	currentFilenameBase = options.filenameBase || currentFilenameBase;
 	postExportStatus({ status: "idle" });
+	void holdAtStartWhilePreparing();
+}
+
+/** The longest the video is held at its start while it gets ready. */
+const PREPARE_HOLD_MAX_MS = 30_000;
+
+/**
+ * HyperShader prepares its transitions after load, behind its loading card,
+ * and fonts can still be arriving. The player's clock ran meanwhile, so the
+ * progress bar moved with nothing to see and the video first appeared
+ * halfway through. Until it is ready it stays at its start, paused; then it
+ * plays from the start if it was meant to (autoplay, or a press of play).
+ */
+async function holdAtStartWhilePreparing() {
+	const started = Date.now();
+	while (!window.__player && Date.now() - started < 5_000) {
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	const player = window.__player;
+	if (typeof player?.pause !== "function" || typeof player?.seek !== "function") {
+		return;
+	}
+	const usesShaderTransitions = shaderTransitionWindows.length > 0;
+	const preparing = () => {
+		const states = Object.values(window.__hf?.shaderTransitions ?? {});
+		return (
+			(usesShaderTransitions && states.length === 0) ||
+			states.some((state) => state && (!state.ready || state.loading)) ||
+			document.fonts?.status === "loading"
+		);
+	};
+	let wanted = false;
+	while (
+		preparing() &&
+		!exportInProgress &&
+		Date.now() - started < PREPARE_HOLD_MAX_MS
+	) {
+		if (player.isPlaying?.()) {
+			wanted = true;
+			player.pause();
+		}
+		if ((player.getTime?.() ?? 0) > 0) player.seek(0);
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	if (exportInProgress) return;
+	// Ready: from the very start, whatever the clock did before.
+	if (wanted || player.isPlaying?.()) {
+		player.seek(0);
+		player.play?.();
+	}
 }
 
 // For export QA harnesses (tools/hyperframes-export-parity-qa.mjs and
