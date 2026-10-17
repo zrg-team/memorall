@@ -167,8 +167,27 @@ export class MultiAgentManager {
 		);
 		recorder.start();
 
-		const result = await this.executeChildFlow(agentId, messages, recorder);
-		const response = result.response.trim() || "No response returned.";
+		let result: Awaited<ReturnType<typeof this.executeChildFlow>>;
+		try {
+			result = await this.executeChildFlow(agentId, messages, recorder);
+		} catch (error) {
+			// Ended, and said so: the card otherwise kept its last step running.
+			recorder.finish({
+				error,
+				aborted:
+					this.config.runConfig?.signal?.aborted === true ||
+					(error instanceof Error && error.name === "AbortError"),
+			});
+			throw error;
+		}
+		const reply = result.response.trim();
+		const run = recorder.finish({ replied: Boolean(reply) });
+		// Said plainly, so the parent does not take silence for "still working".
+		const response =
+			reply ||
+			(run.endReason === "step_limit"
+				? `${childAgent.name} used all its steps before it could reply, so nothing came back. Send it a smaller, more specific task, or carry on without it.`
+				: `${childAgent.name} finished without a reply.`);
 		this.conversations.set(agentId, {
 			// A flow that reports no transcript gets the conversation it was
 			// sent plus its answer: still a conversation, only without the work.
@@ -182,7 +201,7 @@ export class MultiAgentManager {
 			].slice(-MAX_LISTED_EXCHANGES),
 		});
 
-		return { response, run: recorder.finish() };
+		return { response, run };
 	}
 
 	dispose(): void {
