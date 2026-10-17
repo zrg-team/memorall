@@ -55,6 +55,23 @@ interface PendingChange {
 	typeId: string;
 }
 
+/**
+ * Whether a sync, as "type:/root", touches a folder: one the root covers
+ * with that type in effect there, or one inside the folder.
+ */
+const syncKeyCovers = (
+	key: string,
+	path: string,
+	config: Parameters<typeof effectiveIndexTypes>[0],
+): boolean => {
+	const split = key.indexOf(":");
+	const typeId = key.slice(0, split);
+	const root = key.slice(split + 1);
+	return isSameOrInside(path, root)
+		? effectiveIndexTypes(config, path).includes(typeId)
+		: isSameOrInside(root, path);
+};
+
 export interface FolderIndexContextValue {
 	state: FolderIndexStateView | null;
 	error: string | null;
@@ -66,6 +83,13 @@ export interface FolderIndexContextValue {
 	/** Types a folder sets itself, and inherited ones it turns off. */
 	ruleOf(path: string): { on: string[]; off: string[] };
 	isRunning(path?: string): boolean;
+	/**
+	 * Whether indexing is coming for a folder: changes noticed and not yet
+	 * indexed, or a sync waiting its turn.
+	 */
+	isWaiting(path: string): boolean;
+	/** When the index covering a folder last finished, if it ever did. */
+	lastIndexedAt(path: string): string | undefined;
 	/** Whether a folder lives on the user's own disk (a mapped folder). */
 	isMapped(path: string): boolean;
 	setFolderType(
@@ -238,6 +262,9 @@ export const FolderIndexProvider: React.FC<{
 
 	// An idle page must also notice jobs started outside its own buttons.
 	const running = (state?.running.length ?? 0) > 0;
+	// Indexing is coming: polled as often as a run, so it shows when it starts.
+	const waiting =
+		(state?.queued?.length ?? 0) > 0 || state?.changesDueAt !== undefined;
 	const hasIndexes =
 		state?.folders.some((folder) => folder.effective.length > 0) ?? false;
 	const indexRevision = JSON.stringify(
@@ -288,10 +315,10 @@ export const FolderIndexProvider: React.FC<{
 		if (!visible || (!hasIndexes && !running)) return;
 		const timer = setInterval(
 			() => void refresh(),
-			running ? RUNNING_POLL_MS : IDLE_POLL_MS,
+			running || waiting ? RUNNING_POLL_MS : IDLE_POLL_MS,
 		);
 		return () => clearInterval(timer);
-	}, [visible, running, hasIndexes, refresh]);
+	}, [visible, running, waiting, hasIndexes, refresh]);
 	// Polling stops while the page is hidden; catch up as soon as it is back.
 	const wasHidden = React.useRef(false);
 	React.useEffect(() => {
@@ -348,16 +375,21 @@ export const FolderIndexProvider: React.FC<{
 			isRunning: (path) =>
 				path
 					? (state?.running ?? []).some((key) =>
-							(() => {
-								const split = key.indexOf(":");
-								const typeId = key.slice(0, split),
-									root = key.slice(split + 1);
-								return isSameOrInside(path, root)
-									? effectiveIndexTypes(config, path).includes(typeId)
-									: isSameOrInside(root, path);
-							})(),
+							syncKeyCovers(key, path, config),
 						)
 					: (state?.running.length ?? 0) > 0,
+			isWaiting: (path) =>
+				(state?.queued ?? []).some((key) => syncKeyCovers(key, path, config)) ||
+				(state?.changesDueAt !== undefined &&
+					effectiveIndexTypes(config, path).length > 0),
+			lastIndexedAt: (path) =>
+				(state?.folders ?? [])
+					.filter((folder) => isSameOrInside(path, folder.path))
+					.flatMap((folder) => folder.status)
+					.map((status) => status.updatedAt)
+					.filter((value): value is string => Boolean(value))
+					.sort()
+					.at(-1),
 			isMapped,
 			setFolderType: async (path, typeId, enabled, options) => {
 				const mapped = options?.mapped ?? isMapped(path);

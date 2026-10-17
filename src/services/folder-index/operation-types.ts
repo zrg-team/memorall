@@ -20,6 +20,10 @@ export type FolderIndexStateView = FolderIndexState & {
 	/** Roots being indexed right now, as "type:/path". */
 	running: string[];
 	activity?: Record<string, "checking" | "indexing">;
+	/** Roots waiting their turn to be indexed, as "type:/path". */
+	queued?: string[];
+	/** When changes the library reported are due to be indexed (ms). */
+	changesDueAt?: number;
 };
 
 export interface FolderIndexCard {

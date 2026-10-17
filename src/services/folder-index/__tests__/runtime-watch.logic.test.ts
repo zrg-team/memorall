@@ -74,4 +74,44 @@ describe("index change scheduling", () => {
 		expect(f.syncPaths).toHaveBeenCalledWith(["/home/indexes/my-notes.txt"]);
 		f.stop();
 	});
+	it("indexes a steady stream of changes within ten seconds, and says when", async () => {
+		vi.useFakeTimers();
+		let notify!: (event: FilesystemChangeEvent) => void;
+		const syncPaths = vi.fn(async (_paths: string[]) => {});
+		const noteChangesWaiting = vi.fn();
+		const stop = watchLibrary(
+			{
+				onFilesystemChanged: (listener) => {
+					notify = listener;
+					return () => {};
+				},
+			},
+			{
+				syncPaths,
+				moveFolder: vi.fn(async () => {}),
+				forgetFolder: vi.fn(async () => {}),
+				noteChangesWaiting,
+			} as unknown as FolderIndexer,
+		);
+		const start = Date.now();
+		// An agent writing a file every second, for a minute.
+		for (
+			let second = 0;
+			second < 60 && !syncPaths.mock.calls.length;
+			second++
+		) {
+			notify({
+				scope: "root",
+				operation: "write",
+				path: `/content/${second}.md`,
+			});
+			await vi.advanceTimersByTimeAsync(1_000);
+		}
+		expect(syncPaths).toHaveBeenCalled();
+		expect(Date.now() - start).toBeLessThanOrEqual(11_000);
+		// Told when indexing is due, then that it has started.
+		expect(typeof noteChangesWaiting.mock.calls[0]?.[0]).toBe("number");
+		expect(noteChangesWaiting).toHaveBeenCalledWith(null);
+		stop();
+	});
 });

@@ -309,13 +309,18 @@ export class DocumentFileSystem {
 			return;
 		}
 
+		// The path and every folder above it: a write creates missing folders
+		// on its way without announcing them, so a listing further up can be
+		// missing a whole new subtree. The folder indexer walked such a stale
+		// listing and never saw the files an agent wrote into a new folder.
 		for (const path of paths) {
-			const normalized = normalizeSandboxPath(path);
-			this.lazyChildrenCache.delete(normalized);
-			const slash = normalized.lastIndexOf("/");
-			this.lazyChildrenCache.delete(
-				slash > 0 ? normalized.slice(0, slash) : "/",
-			);
+			let folder = normalizeSandboxPath(path);
+			this.lazyChildrenCache.delete(folder);
+			while (folder !== "/") {
+				const slash = folder.lastIndexOf("/");
+				folder = slash > 0 ? folder.slice(0, slash) : "/";
+				this.lazyChildrenCache.delete(folder);
+			}
 		}
 	}
 
@@ -1416,12 +1421,17 @@ export class DocumentFileSystem {
 		const normalized = normalizeSandboxPath(logicalPath);
 		const cached = this.lazyChildrenCache.get(normalized);
 		if (cached) return cached;
+		const generation = this.treeGeneration;
 		const children = await this.scanDirectory(
 			this.toFsPath(normalized),
 			normalized,
 			{ singleLevel: true },
 		);
-		this.lazyChildrenCache.set(normalized, children);
+		// Read while something changed: right for this caller, not worth
+		// keeping for the next one, as the tree cache does.
+		if (generation === this.treeGeneration) {
+			this.lazyChildrenCache.set(normalized, children);
+		}
 		return children;
 	}
 
