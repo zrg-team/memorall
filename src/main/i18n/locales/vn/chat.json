@@ -113,7 +113,14 @@
 	},
 	"flowSelector": {
 		"chat": "Trò chuyện",
-		"create": "Tạo flow mới"
+		"create": "Tạo flow mới",
+		"favorites": "Yêu thích",
+		"otherAgents": "Tác nhân khác",
+		"star": "Thêm {{name}} vào yêu thích",
+		"unstar": "Bỏ {{name}} khỏi yêu thích",
+		"starHint": "Gắn sao cho tác nhân để luôn hiện ở đầu.",
+		"team": "Nhóm {{count}}: {{names}}",
+		"teamTooltip": "Giao việc cho {{names}}"
 	},
 	"agentBuilderCallout": {
 		"title": "Tạo tác nhân cho đúng công việc của bạn",
@@ -270,7 +277,8 @@
 	"toolStatus": {
 		"running": "Đang chạy",
 		"error": "Lỗi",
-		"done": "Hoàn tất"
+		"done": "Hoàn tất",
+		"stopped": "Đã dừng"
 	},
 	"childAgent": {
 		"title": "Nhắn {{name}}",
@@ -288,6 +296,11 @@
 		"toolCalls_other": "{{count}} lần gọi công cụ",
 		"working": "Đang làm…",
 		"noReply": "Không có phản hồi.",
+		"stepLimit": "{{name}} đã dùng hết số bước trước khi kịp trả lời, nên không có kết quả.",
+		"stopped": "{{name}} đã bị dừng trước khi trả lời.",
+		"unreported": "{{name}} đã kết thúc; các bước cuối không được ghi lại nên hiện là đã dừng.",
+		"omittedSteps_one": "{{count}} bước trước đó không hiển thị",
+		"omittedSteps_other": "{{count}} bước trước đó không hiển thị",
 		"input": "{{value}} vào",
 		"output": "{{value}} ra",
 		"cached": "{{percent}}% từ bộ nhớ đệm",
@@ -510,6 +523,10 @@
 		"toolCount": "{{count}} công cụ",
 		"hideDetail": "Ẩn",
 		"detail": "Chi tiết",
+		"manageTeam": "Quản lý nhóm",
+		"teamCount_one": "Nhóm {{count}} tác nhân",
+		"teamCount_other": "Nhóm {{count}} tác nhân",
+		"teamEmpty": "Chưa có tác nhân: chọn ai sẽ nhận việc từ nó",
 		"featureTools": "Công cụ",
 		"featureAccessibleAgents": "Tác nhân con có thể truy cập",
 		"noAccessibleAgents": "Chưa chọn tác nhân con nào.",

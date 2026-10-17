@@ -1,7 +1,11 @@
 import React from "react";
 import NiceModal, { useModal } from "@ebay/nice-modal-react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Wrench } from "lucide-react";
+import { Search, Sparkles, Star, Wrench } from "lucide-react";
+import { AgentIcon, toAgentScreenContent } from "@/components/AgentIcon";
+import { useFavoriteAgentIds } from "@/main/stores/favorite-agents";
+import { getAgentIconScreenFromMetadata } from "../types";
+import { sortFavoritesFirst } from "../utils/agent-display";
 import { cn } from "@/lib/utils";
 import { useAgentConfigStore } from "@/main/stores/agent-config";
 import { TOOL_DISPLAY_INFO } from "@/main/modules/chat/utils/tool-display-info";
@@ -355,8 +359,11 @@ const AgentPickerSlot: React.FC = () => {
 		toggleAccessibleAgent,
 	} = useAgentConfigStore();
 
-	const selectableAgents = availableAgents.filter(
-		(agent) => agent.id !== currentFlowId,
+	// Starred agents first, as everywhere agents are chosen.
+	const favoriteIds = useFavoriteAgentIds();
+	const selectableAgents = sortFavoritesFirst(
+		availableAgents.filter((agent) => agent.id !== currentFlowId),
+		favoriteIds,
 	);
 	const selectedCount = draftMultiAgentAccessibleAgentIds.filter((id) =>
 		selectableAgents.some((agent) => agent.id === id),
@@ -424,18 +431,36 @@ const AgentPickerSlot: React.FC = () => {
 										: "border-border/50 bg-background/50 hover:bg-muted/40",
 								)}
 							>
+								<AgentIcon
+									size={26}
+									reactive={false}
+									aria-label={agent.name}
+									screenContent={toAgentScreenContent(
+										getAgentIconScreenFromMetadata(agent.metadata),
+										agent.name,
+									)}
+									className={cn(!isEnabled && "opacity-60")}
+								/>
 								<div className="min-w-0 flex-1">
 									<p
 										className={cn(
-											"truncate text-[11px] font-medium leading-tight",
+											"flex items-center gap-1 truncate text-[11px] font-medium leading-tight",
 											isEnabled ? "text-foreground" : "text-foreground/70",
 										)}
 									>
-										{agent.name}
+										<span className="truncate">{agent.name}</span>
+										{favoriteIds.includes(agent.id) ? (
+											<Star
+												size={10}
+												className="shrink-0 fill-amber-400 text-amber-400"
+											/>
+										) : null}
 									</p>
-									<p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground">
-										{agent.description?.trim() || agent.id}
-									</p>
+									{agent.description?.trim() ? (
+										<p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground">
+											{agent.description}
+										</p>
+									) : null}
 								</div>
 								<Switch
 									checked={isEnabled}

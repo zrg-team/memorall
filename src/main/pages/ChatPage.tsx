@@ -76,6 +76,12 @@ import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useWebChallengeHandoffStore } from "@/main/stores/web-challenge-handoff";
 import { serviceManager } from "@/services";
+import {
+	useFavoriteAgentIds,
+	useFavoriteAgentsStore,
+} from "@/main/stores/favorite-agents";
+import { useAgentTeams } from "@/main/modules/agents/hooks/use-agent-teams";
+import { agentTeamOf } from "@/main/modules/agents/utils/agent-teams";
 import type { Flow, Topic } from "@/services/database/types";
 import type { FeatureCatalogMetadata } from "@/services/flow-feature-catalog-service";
 import {
@@ -85,7 +91,7 @@ import {
 import type { AttachedDocumentRef } from "@/types/chat";
 import { isPopupSurface } from "@/utils/dom";
 
-type AgentFlowOption = Pick<Flow, "id" | "name" | "metadata">;
+type AgentFlowOption = Pick<Flow, "id" | "name" | "metadata" | "updatedAt">;
 
 const RETRIEVAL_STEP_NAMES = new Set([
 	"context-smart-retrieve",
@@ -142,6 +148,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 	>([]);
 	const [isLoadingTopics, setIsLoadingTopics] = React.useState(false);
 	const [agentFlows, setAgentFlows] = React.useState<AgentFlowOption[]>([]);
+	/** Every agent, drafts too: a team may name one that is not active. */
+	const [agentDirectory, setAgentDirectory] = React.useState<
+		ReadonlyMap<string, AgentFlowOption>
+	>(() => new Map());
 	const [selectedAgentFeatureNames, setSelectedAgentFeatureNames] =
 		React.useState<string[]>([]);
 	const [selectedAgentFeatureLabels, setSelectedAgentFeatureLabels] =
@@ -796,14 +806,19 @@ ${text}`
 					await serviceManager.flowBuilderService.listPredefinedFlows(
 						"foundation",
 					);
+				const toOption = (flow: Flow): AgentFlowOption => ({
+					id: flow.id,
+					name: flow.name,
+					metadata: flow.metadata,
+					updatedAt: flow.updatedAt,
+				});
 				const mapped = flows
 					.filter((flow) => flow.status === "active")
-					.map((flow) => ({
-						id: flow.id,
-						name: flow.name,
-						metadata: flow.metadata,
-					}));
+					.map(toOption);
 				setAgentFlows(mapped);
+				setAgentDirectory(
+					new Map(flows.map((flow) => [flow.id, toOption(flow)])),
+				);
 				if (!selectedAgentFlowId) {
 					// The agent picked last time, when it is still there.
 					await restoreSelectedAgentFlowId(mapped.map((flow) => flow.id));
@@ -999,7 +1014,12 @@ ${text}`
 					name,
 				);
 			const nextFlows = [
-				{ id: created.id, name: created.name, metadata: created.metadata },
+				{
+					id: created.id,
+					name: created.name,
+					metadata: created.metadata,
+					updatedAt: created.updatedAt,
+				},
 				...agentFlows,
 			];
 			setAgentFlows(nextFlows);
@@ -1075,6 +1095,32 @@ ${text}`
 		],
 	);
 	const shouldShowAgentBuilderCallout = agentFlows.length === 1;
+
+	// The picker stars agents and shows each one's team.
+	const favoriteAgentIds = useFavoriteAgentIds();
+	const toggleFavoriteAgent = useFavoriteAgentsStore((state) => state.toggle);
+	const agentTeams = useAgentTeams(agentFlows);
+	const agentPickerOptions = useMemo(
+		() =>
+			agentFlows.map((flow) => {
+				// Just saved in Agents: newer than the list this page read.
+				const teamIds =
+					flow.id === selectedAgentFlowId && savedAgentConfig
+						? agentTeamOf(savedAgentConfig)
+						: (agentTeams.get(flow.id) ?? []);
+				const team = teamIds
+					.map((id) => agentDirectory.get(id))
+					.filter((member): member is AgentFlowOption => Boolean(member));
+				return team.length ? { ...flow, team } : flow;
+			}),
+		[
+			agentFlows,
+			agentTeams,
+			agentDirectory,
+			selectedAgentFlowId,
+			savedAgentConfig,
+		],
+	);
 	const handleOpenAgentWizard = React.useCallback(() => {
 		navigate("/agents", { state: { openAgentWizard: true } });
 	}, [navigate]);
@@ -1278,7 +1324,9 @@ ${text}`
 				abortController={abortController}
 				isLoadingTopics={isLoadingTopics}
 				topics={topics}
-				agentFlows={agentFlows}
+				agentFlows={agentPickerOptions}
+				favoriteAgentIds={favoriteAgentIds}
+				onToggleFavoriteAgent={toggleFavoriteAgent}
 				selectedAgentFlowId={selectedAgentFlowId}
 				setSelectedAgentFlowId={handleSelectAgentFlow}
 				onCreateAgentFlow={handleCreateAgentFlow}

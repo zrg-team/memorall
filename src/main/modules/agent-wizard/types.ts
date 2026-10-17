@@ -117,7 +117,8 @@ export type AgentWizardToolPatch =
 			kind: AgentWizardConnectionSetupKind;
 			toolkit?: string;
 	  }
-	| { type: "offer_computer"; apps: MemonAppId[]; reason?: string };
+	| { type: "offer_computer"; apps: MemonAppId[]; reason?: string }
+	| { type: "offer_team"; agentIds: string[]; reason?: string };
 
 /** MemonOS Bot, offered to the user as a one-click card. */
 export interface AgentWizardComputerOffer {
@@ -125,6 +126,24 @@ export interface AgentWizardComputerOffer {
 	apps: MemonAppId[];
 	/** One line on why, shown on the card. */
 	reason?: string;
+}
+
+/**
+ * A team for the agent (Multi-Agent Delegation), proposed as a card: every
+ * agent the user has, the proposed ones switched on.
+ */
+export interface AgentWizardTeamOffer {
+	/** The agents proposed, all from the catalog. */
+	agentIds: string[];
+	/** One line on why, shown on the card. */
+	reason?: string;
+}
+
+/** Another agent the user has, which this one could hand work to. */
+export interface AgentWizardAgentInfo {
+	id: string;
+	name: string;
+	description: string;
 }
 
 /** What the wizard is told about a connection the user already has. */
@@ -151,6 +170,8 @@ export interface AgentWizardCatalog {
 	connections: AgentWizardConnectionInfo[];
 	/** A stored Composio key means new apps can be authorized without a key step. */
 	composioKeySaved: boolean;
+	/** The user's other active agents: the ones a team can be made of. */
+	agents: AgentWizardAgentInfo[];
 }
 
 /** Which in-chat setup surface the wizard asked to open. */

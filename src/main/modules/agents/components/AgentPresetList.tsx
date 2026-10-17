@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Bot, Plus, Search, Sparkles } from "lucide-react";
+import { Bot, Plus, Search, Sparkles, Users } from "lucide-react";
 import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
 import { Badge } from "@/main/components/ui/badge";
@@ -8,6 +8,13 @@ import { PageHeader } from "@/main/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { coerceDate, normalizeAgentPresetStatus } from "../types";
 import type { Flow } from "@/services/database/types";
+import {
+	useFavoriteAgentIds,
+	useFavoriteAgentsStore,
+} from "@/main/stores/favorite-agents";
+import { useAgentTeams } from "../hooks/use-agent-teams";
+import { sortFavoritesFirst } from "../utils/agent-display";
+import { FavoriteAgentStar } from "./FavoriteAgentStar";
 
 interface AgentPresetListProps {
 	presets: Flow[];
@@ -43,6 +50,18 @@ export const AgentPresetList: React.FC<AgentPresetListProps> = ({
 }) => {
 	const { t } = useTranslation("agents");
 	const itemRefs = React.useRef(new Map<string, HTMLButtonElement>());
+	// Starred agents lead the list, as they do in the chat's agent picker.
+	const favoriteIds = useFavoriteAgentIds();
+	const toggleFavorite = useFavoriteAgentsStore((state) => state.toggle);
+	const orderedPresets = React.useMemo(
+		() => sortFavoritesFirst(presets, favoriteIds),
+		[presets, favoriteIds],
+	);
+	const teams = useAgentTeams(presets);
+	const nameOf = React.useMemo(
+		() => new Map(presets.map((preset) => [preset.id, preset.name])),
+		[presets],
+	);
 
 	React.useEffect(() => {
 		if (!selectedPresetId) return;
@@ -120,70 +139,97 @@ export const AgentPresetList: React.FC<AgentPresetListProps> = ({
 							</p>
 						</div>
 					) : (
-						presets.map((preset) => {
+						orderedPresets.map((preset) => {
 							const normalizedStatus = normalizeAgentPresetStatus(
 								preset.status,
 							);
 							const updatedAt = coerceDate(preset.updatedAt);
 							const isSelected = preset.id === selectedPresetId;
+							const starred = favoriteIds.includes(preset.id);
+							const teamNames = (teams.get(preset.id) ?? [])
+								.map((id) => nameOf.get(id))
+								.filter((name): name is string => Boolean(name));
 
 							return (
-								<button
-									key={preset.id}
-									type="button"
-									ref={(element) => {
-										if (element) {
-											itemRefs.current.set(preset.id, element);
-											return;
-										}
-										itemRefs.current.delete(preset.id);
-									}}
-									onClick={() => onSelectPreset(preset.id)}
-									className={cn(
-										"w-full rounded-xl border px-3 py-3 text-left transition-colors",
-										"hover:border-foreground/20 hover:bg-muted/30",
-										isSelected
-											? "border-foreground/20 bg-muted/40 shadow-sm"
-											: "border-border bg-background",
-									)}
-								>
-									<div className="flex items-start justify-between gap-3">
-										<div className="min-w-0 flex-1 space-y-1">
-											<p className="truncate text-sm font-semibold">
-												{preset.name}
-											</p>
-											<p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-												{preset.description?.trim() || t("list.noDescription")}
-											</p>
-										</div>
-										<Badge
-											variant="outline"
-											className={cn(
-												"shrink-0 border text-[10px] uppercase",
-												getStatusBadgeClassName(normalizedStatus),
-											)}
-										>
-											{t(`status.${normalizedStatus}`)}
-										</Badge>
-									</div>
-									<div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
-										<span className="truncate">
-											{updatedAt
-												? t("list.updatedAt", {
-														value: updatedAt.toLocaleString(),
-													})
-												: t("list.updatedAtUnknown")}
-										</span>
-										{isSelected ? (
+								// The star sits over the card, not in it: a button cannot
+								// hold another button.
+								<div key={preset.id} className="group relative">
+									<button
+										type="button"
+										ref={(element) => {
+											if (element) {
+												itemRefs.current.set(preset.id, element);
+												return;
+											}
+											itemRefs.current.delete(preset.id);
+										}}
+										onClick={() => onSelectPreset(preset.id)}
+										className={cn(
+											"w-full rounded-xl border px-3 py-3 text-left transition-colors",
+											"hover:border-foreground/20 hover:bg-muted/30",
+											isSelected
+												? "border-foreground/20 bg-muted/40 shadow-sm"
+												: "border-border bg-background",
+										)}
+									>
+										<div className="flex items-start justify-between gap-3">
+											<div className="min-w-0 flex-1 space-y-1">
+												<p className="truncate text-sm font-semibold">
+													{preset.name}
+												</p>
+												<p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+													{preset.description?.trim() ||
+														t("list.noDescription")}
+												</p>
+											</div>
 											<Badge
-												variant="secondary"
-												className="shrink-0 text-[10px]"
+												variant="outline"
+												className={cn(
+													"shrink-0 border text-[10px] uppercase",
+													getStatusBadgeClassName(normalizedStatus),
+												)}
 											>
-												{t("list.selected")}
+												{t(`status.${normalizedStatus}`)}
 											</Badge>
-										) : null}
-									</div>
-								</button>
+										</div>
+										<div className="mt-3 flex items-center justify-between gap-2 pr-7 text-[11px] text-muted-foreground">
+											{teamNames.length > 0 ? (
+												<span
+													title={t("list.teamTooltip", {
+														names: teamNames.join(", "),
+													})}
+													className="inline-flex shrink-0 items-center gap-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-300"
+												>
+													<Users size={10} />
+													{t("list.team", { count: teamNames.length })}
+												</span>
+											) : null}
+											<span className="min-w-0 flex-1 truncate">
+												{updatedAt
+													? t("list.updatedAt", {
+															value: updatedAt.toLocaleString(),
+														})
+													: t("list.updatedAtUnknown")}
+											</span>
+											{isSelected ? (
+												<Badge
+													variant="secondary"
+													className="shrink-0 text-[10px]"
+												>
+													{t("list.selected")}
+												</Badge>
+											) : null}
+										</div>
+									</button>
+									<FavoriteAgentStar
+										starred={starred}
+										onToggle={() => toggleFavorite(preset.id)}
+										label={t(starred ? "list.unstar" : "list.star", {
+											name: preset.name,
+										})}
+										className="absolute bottom-2 right-2"
+									/>
+								</div>
 							);
 						})
 					)}

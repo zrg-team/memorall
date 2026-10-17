@@ -7,7 +7,10 @@ import { PromptInput } from "@/main/components/ui/shadcn-io/ai/prompt-input";
 import { TooltipProvider } from "@/main/components/ui/tooltip";
 import { AttachmentList } from "@/main/modules/chat/components/input/AttachmentList";
 import { ChatDictationButton } from "@/main/modules/chat/components/input/ChatDictationButton";
-import { ChatInputControls } from "@/main/modules/chat/components/input/ChatInputControls";
+import {
+	ChatInputControls,
+	type ChatInputControlsProps,
+} from "@/main/modules/chat/components/input/ChatInputControls";
 import {
 	collectFiles,
 	documentFileToMentionItem,
@@ -79,12 +82,9 @@ export interface ChatInputProps {
 	abortController: AbortController | null;
 	isLoadingTopics: boolean;
 	topics: Array<{ id: string; name: string; agentId?: string | null }>;
-	agentFlows: Array<{
-		id: string;
-		name: string;
-		/** Carries the agent's icon screen; drawn by AgentIcon. */
-		metadata?: FlowMetadata | null;
-	}>;
+	agentFlows: ChatInputControlsProps["agentFlows"];
+	favoriteAgentIds?: ChatInputControlsProps["favoriteAgentIds"];
+	onToggleFavoriteAgent?: ChatInputControlsProps["onToggleFavoriteAgent"];
 	selectedAgentFlowId: string | null;
 	setSelectedAgentFlowId: (flowId: string) => void;
 	onCreateAgentFlow?: () => void;
@@ -128,6 +128,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 	onDeleteChat,
 	topics,
 	agentFlows,
+	favoriteAgentIds,
+	onToggleFavoriteAgent,
 	selectedAgentFlowId,
 	setSelectedAgentFlowId,
 	onCreateAgentFlow,
@@ -540,6 +542,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 							isLoadingTopics={isLoadingTopics}
 							topics={topics}
 							agentFlows={agentFlows}
+							favoriteAgentIds={favoriteAgentIds}
+							onToggleFavoriteAgent={onToggleFavoriteAgent}
 							selectedAgentFlowId={selectedAgentFlowId}
 							setSelectedAgentFlowId={setSelectedAgentFlowId}
 							onCreateAgentFlow={onCreateAgentFlow}

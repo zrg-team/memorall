@@ -325,3 +325,96 @@ describe("ChatInputControls model selector", () => {
 		expect(container.querySelector(".max-w-14")).not.toBeNull();
 	});
 });
+
+describe("ChatInputControls agent picker", () => {
+	const agents = [
+		{ id: "alpha", name: "Alpha" },
+		{
+			id: "beta",
+			name: "Beta",
+			team: [
+				{ id: "alpha", name: "Alpha" },
+				{ id: "gamma", name: "Gamma" },
+			],
+		},
+		{ id: "gamma", name: "Gamma" },
+	];
+
+	const openPicker = async (overrides: Record<string, unknown> = {}) => {
+		const user = userEvent.setup();
+		const view = render(
+			<ChatInputControls
+				{...props({
+					agentFlows: agents,
+					selectedAgentFlowId: "beta",
+					...overrides,
+				})}
+			/>,
+		);
+		const chip = view.container.querySelector<HTMLElement>(
+			".flex.h-8.min-w-0.items-center.rounded-xl",
+		);
+		await user.click(within(chip as HTMLElement).getAllByRole("button")[0]);
+		return { user, view, menu: await screen.findByRole("menu") };
+	};
+
+	const optionNames = (menu: HTMLElement) =>
+		within(menu)
+			.getAllByRole("menuitem")
+			.map((item) => item.textContent ?? "");
+
+	it("lists starred agents first, under Favorites", async () => {
+		const { menu } = await openPicker({
+			favoriteAgentIds: ["gamma"],
+			onToggleFavoriteAgent: vi.fn(),
+		});
+		const names = optionNames(menu);
+		expect(names[0]).toContain("flowSelector.chat");
+		expect(names[1]).toContain("Gamma");
+		expect(names[2]).toContain("Alpha");
+		expect(names[3]).toContain("Beta");
+		expect(within(menu).getByText("flowSelector.favorites")).toBeTruthy();
+		expect(within(menu).getByText("flowSelector.otherAgents")).toBeTruthy();
+	});
+
+	it("stars an agent without choosing it, and keeps the menu open", async () => {
+		const onToggleFavoriteAgent = vi.fn();
+		const setSelectedAgentFlowId = vi.fn();
+		const { user, menu } = await openPicker({
+			onToggleFavoriteAgent,
+			setSelectedAgentFlowId,
+		});
+		// No favorites yet: the agents keep their order, Alpha first.
+		await user.click(
+			within(menu).getAllByRole("button", { name: "flowSelector.star" })[0],
+		);
+		expect(onToggleFavoriteAgent).toHaveBeenCalledWith("alpha");
+		expect(setSelectedAgentFlowId).not.toHaveBeenCalled();
+		expect(screen.queryByRole("menu")).not.toBeNull();
+	});
+
+	it("names a team lead's team, and marks it on the chip", async () => {
+		const { menu, view } = await openPicker();
+		const beta = within(menu)
+			.getAllByRole("menuitem")
+			.find((item) => item.textContent?.includes("Beta"));
+		expect(beta?.textContent).toContain("flowSelector.team");
+		expect(beta?.querySelector("[title]")?.getAttribute("title")).toBe(
+			"Alpha, Gamma",
+		);
+		// The chip stacks the lead's face in front of two of its team's.
+		const chip = view.container.querySelector<HTMLElement>(
+			".flex.h-8.min-w-0.items-center.rounded-xl",
+		);
+		// The open menu hides the rest of the page from role queries.
+		const trigger = chip?.querySelector("button") as HTMLElement;
+		expect(within(trigger).getAllByTestId("agent-icon")).toHaveLength(3);
+	});
+
+	it("shows no stars where agents cannot be starred", async () => {
+		const { menu } = await openPicker();
+		expect(
+			within(menu).queryAllByRole("button", { name: "flowSelector.star" }),
+		).toHaveLength(0);
+	});
+});

@@ -127,6 +127,10 @@ export interface FeatureCardProps {
 	 * while on, it runs as that app instead of adding its own tools.
 	 */
 	appOfName?: string;
+	/** What the feature is set to, between its description and its badges. */
+	children?: React.ReactNode;
+	/** The detail button's label, when "Detail" says too little. */
+	detailLabel?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +146,8 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 	displayName,
 	displayDesc,
 	appOfName,
+	children,
+	detailLabel,
 }) => {
 	const { t } = useTranslation("chat");
 	const accent = getFeatureAccent(feature);
@@ -219,6 +225,8 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 				)}
 			</div>
 
+			{children}
+
 			{/* Footer row: badge + detail */}
 			<div className="flex items-center justify-between gap-2">
 				<div className="flex items-center gap-1.5">
@@ -267,7 +275,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 						}
 					>
 						<ChevronRight size={10} className="mr-1" />
-						{t("agentSettings.detail")}
+						{detailLabel ?? t("agentSettings.detail")}
 					</Button>
 				)}
 			</div>

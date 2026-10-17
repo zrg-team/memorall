@@ -15,6 +15,7 @@ import {
 	Square,
 	Tags,
 	Trash2,
+	Users,
 } from "lucide-react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
@@ -41,6 +42,12 @@ import {
 } from "@/main/components/ui/tooltip";
 import type { SelectableModel } from "@/main/hooks/selectable-model";
 import { getAgentIconScreenFromMetadata } from "@/main/modules/agents/types";
+import { AgentTeamAvatars } from "@/main/modules/agents/components/AgentTeamAvatars";
+import { FavoriteAgentStar } from "@/main/modules/agents/components/FavoriteAgentStar";
+import {
+	agentTeamNames,
+	sortFavoritesFirst,
+} from "@/main/modules/agents/utils/agent-display";
 import type { ModelReasoning } from "@/services/llm/interfaces/base-llm";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import type { ReasoningEffort } from "@/types/openai";
@@ -53,6 +60,18 @@ import type { ChatStatus } from "@/types/chat";
 const CONTROL =
 	"h-8 rounded-xl text-xs text-muted-foreground hover:text-foreground";
 const ICON_CONTROL = `${CONTROL} w-8 px-0`;
+/** Headings inside the agent picker: Favorites, Other agents. */
+const GROUP_LABEL =
+	"pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground";
+const NO_FAVORITES: string[] = [];
+
+/** Another agent, as the picker draws it. */
+interface AgentFlowSummary {
+	id: string;
+	name: string;
+	/** Carries the agent's icon screen; drawn by AgentIcon. */
+	metadata?: FlowMetadata | null;
+}
 
 export interface ChatInputControlsProps {
 	isLoading: boolean;
@@ -65,12 +84,16 @@ export interface ChatInputControlsProps {
 	abortController: AbortController | null;
 	isLoadingTopics: boolean;
 	topics: Array<{ id: string; name: string; agentId?: string | null }>;
-	agentFlows: Array<{
-		id: string;
-		name: string;
-		/** Carries the agent's icon screen; drawn by AgentIcon. */
-		metadata?: FlowMetadata | null;
-	}>;
+	agentFlows: Array<
+		AgentFlowSummary & {
+			/** The agents it hands work to (Multi-Agent Delegation), if any. */
+			team?: AgentFlowSummary[];
+		}
+	>;
+	/** Starred agents: listed first, under Favorites. */
+	favoriteAgentIds?: string[];
+	/** Stars or unstars an agent; without it the picker shows no stars. */
+	onToggleFavoriteAgent?: (agentId: string) => void;
 	selectedAgentFlowId: string | null;
 	setSelectedAgentFlowId: (flowId: string) => void;
 	onCreateAgentFlow?: () => void;
@@ -131,6 +154,8 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 	isLoadingTopics,
 	topics,
 	agentFlows,
+	favoriteAgentIds = NO_FAVORITES,
+	onToggleFavoriteAgent,
 	selectedAgentFlowId,
 	setSelectedAgentFlowId,
 	onCreateAgentFlow,
@@ -162,13 +187,81 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 		reasoning && onReasoningEffortChange
 			? { reasoning, onChange: onReasoningEffortChange }
 			: null;
-	const flowOptions = [
+	const flowOptions: ChatInputControlsProps["agentFlows"] = [
 		{ id: "chat", name: t("flowSelector.chat") },
 		...agentFlows,
 	];
 	const selectedFlow = flowOptions.find(
 		(flow) => flow.id === selectedAgentFlowId,
 	);
+	const selectedTeam = selectedFlow?.team ?? [];
+	// Starred agents first, under their own heading; the rest keep their order.
+	const favoriteSet = new Set(favoriteAgentIds);
+	const orderedAgents = sortFavoritesFirst(agentFlows, favoriteAgentIds);
+	const favoriteAgents = orderedAgents.filter((flow) =>
+		favoriteSet.has(flow.id),
+	);
+	const otherAgents = orderedAgents.filter((flow) => !favoriteSet.has(flow.id));
+	const renderAgentOption = (
+		flow: ChatInputControlsProps["agentFlows"][number],
+	) => {
+		const isSelected = flow.id === selectedAgentFlowId;
+		const starred = favoriteSet.has(flow.id);
+		const team = flow.team ?? [];
+		return (
+			<DropdownMenuItem
+				key={flow.id}
+				onClick={() => setSelectedAgentFlowId(flow.id)}
+				className={cn(
+					"group flex items-center gap-2 py-1.5",
+					isSelected && "bg-accent/60 text-accent-foreground",
+				)}
+			>
+				<AgentIcon
+					size={24}
+					reactive={false}
+					aria-label={flow.name}
+					screenContent={toAgentScreenContent(
+						getAgentIconScreenFromMetadata(flow.metadata),
+						flow.name,
+					)}
+				/>
+				<span className="min-w-0 flex-1">
+					<span className="block truncate">{flow.name}</span>
+					{team.length > 0 ? (
+						<span
+							className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground"
+							title={team.map((member) => member.name).join(", ")}
+						>
+							<Users size={11} className="shrink-0" />
+							<span className="truncate">
+								{t("flowSelector.team", {
+									count: team.length,
+									names: agentTeamNames(team.map((member) => member.name)),
+								})}
+							</span>
+						</span>
+					) : null}
+				</span>
+				{onToggleFavoriteAgent ? (
+					<FavoriteAgentStar
+						starred={starred}
+						onToggle={() => onToggleFavoriteAgent(flow.id)}
+						label={t(starred ? "flowSelector.unstar" : "flowSelector.star", {
+							name: flow.name,
+						})}
+					/>
+				) : null}
+				<Check
+					size={13}
+					className={cn(
+						"shrink-0 text-primary",
+						isSelected ? "opacity-100" : "opacity-0",
+					)}
+				/>
+			</DropdownMenuItem>
+		);
+	};
 	const currentAgentTopicId = topics.find(
 		(topic) =>
 			selectedAgentFlowId &&
@@ -267,6 +360,16 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											>
 												{selectedFlow?.id === "chat" ? (
 													<MessageCircle size={14} />
+												) : selectedFlow && selectedTeam.length > 0 ? (
+													// A team lead: its face in front of two of its team's;
+													// the tooltip names everyone it hands work to.
+													<AgentTeamAvatars
+														agents={[selectedFlow, ...selectedTeam]}
+														max={3}
+														size={18}
+														showRest={false}
+														className="mr-0.5"
+													/>
 												) : (
 													<AgentIcon
 														size={18}
@@ -292,39 +395,56 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 											</Button>
 										</DropdownMenuTrigger>
 									</TooltipTrigger>
-									<DropdownMenuContent align="start">
+									<DropdownMenuContent
+										align="start"
+										className="max-h-[min(32rem,70vh)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto"
+									>
 										<DropdownMenuLabel>
 											{t("tooltips.flowSelector")}
 										</DropdownMenuLabel>
-										{flowOptions.map((flow) => (
-											<DropdownMenuItem
-												key={flow.id}
-												onClick={() => setSelectedAgentFlowId(flow.id)}
+										<DropdownMenuItem
+											onClick={() => setSelectedAgentFlowId("chat")}
+											className={cn(
+												"flex items-center gap-2",
+												selectedAgentFlowId === "chat" &&
+													"bg-accent/60 text-accent-foreground",
+											)}
+										>
+											<span className="flex h-6 w-6 shrink-0 items-center justify-center">
+												<MessageCircle size={14} />
+											</span>
+											<span className="flex-1">{t("flowSelector.chat")}</span>
+											<Check
+												size={13}
 												className={cn(
-													"flex items-center gap-2",
-													flow.id === selectedAgentFlowId &&
-														"bg-accent/60 text-accent-foreground",
+													"shrink-0 text-primary",
+													selectedAgentFlowId === "chat"
+														? "opacity-100"
+														: "opacity-0",
 												)}
-											>
-												{flow.id === "chat" ? (
-													<MessageCircle size={14} />
-												) : (
-													<AgentIcon
-														size={24}
-														reactive={false}
-														aria-label={flow.name}
-														screenContent={toAgentScreenContent(
-															getAgentIconScreenFromMetadata(flow.metadata),
-															flow.name,
-														)}
-													/>
-												)}
-												<span>{flow.name}</span>
-												{flow.id === selectedAgentFlowId && (
-													<Check size={13} className="ml-auto text-primary" />
-												)}
-											</DropdownMenuItem>
-										))}
+											/>
+										</DropdownMenuItem>
+										{favoriteAgents.length > 0 ? (
+											<>
+												<DropdownMenuLabel className={GROUP_LABEL}>
+													{t("flowSelector.favorites")}
+												</DropdownMenuLabel>
+												{favoriteAgents.map(renderAgentOption)}
+												{otherAgents.length > 0 ? (
+													<DropdownMenuLabel className={GROUP_LABEL}>
+														{t("flowSelector.otherAgents")}
+													</DropdownMenuLabel>
+												) : null}
+											</>
+										) : null}
+										{otherAgents.map(renderAgentOption)}
+										{onToggleFavoriteAgent &&
+										favoriteAgents.length === 0 &&
+										otherAgents.length > 2 ? (
+											<p className="px-2 pb-1 pt-1.5 text-[11px] text-muted-foreground">
+												{t("flowSelector.starHint")}
+											</p>
+										) : null}
 										<DropdownMenuSeparator />
 										<DropdownMenuItem
 											onClick={onCreateAgentFlow}
@@ -335,8 +455,23 @@ export const ChatInputControls: React.FC<ChatInputControlsProps> = ({
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
-								<TooltipContent>
-									<p className="text-xs">{t("tooltips.flowSelector")}</p>
+								<TooltipContent className="max-w-72">
+									{selectedTeam.length > 0 ? (
+										<>
+											<p className="text-xs font-medium">
+												{selectedFlow?.name}
+											</p>
+											<p className="text-xs opacity-80">
+												{t("flowSelector.teamTooltip", {
+													names: selectedTeam
+														.map((member) => member.name)
+														.join(", "),
+												})}
+											</p>
+										</>
+									) : (
+										<p className="text-xs">{t("tooltips.flowSelector")}</p>
+									)}
 								</TooltipContent>
 							</Tooltip>
 

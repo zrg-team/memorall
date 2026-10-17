@@ -1,6 +1,7 @@
 import React from "react";
 import type { useAgentWizard } from "../hooks/use-agent-wizard";
 import { AgentWizardComputerOffer } from "./AgentWizardComputerOffer";
+import { AgentWizardTeamOffer } from "./AgentWizardTeamOffer";
 
 /**
  * Loaded on demand: this pulls the MCP discovery client and the Composio client,
@@ -15,11 +16,13 @@ const AgentWizardConnectionSetup = React.lazy(() =>
 /** Whether the wizard has a card or panel open for the user. */
 export const hasAgentWizardInlineSetup = (
 	wizard: ReturnType<typeof useAgentWizard>,
-): boolean => Boolean(wizard.computerOffer || wizard.connectionSetup);
+): boolean =>
+	Boolean(wizard.computerOffer || wizard.teamOffer || wizard.connectionSetup);
 
 /**
  * What the wizard opens between the transcript and the composer, the same in
- * every place the wizard is shown: the MemonOS Bot card and connection setup.
+ * every place the wizard is shown: the MemonOS Bot card, the team card and
+ * connection setup.
  */
 export const AgentWizardInlineSetup = ({
 	wizard,
@@ -34,6 +37,14 @@ export const AgentWizardInlineSetup = ({
 					offer={wizard.computerOffer}
 					onAccept={wizard.acceptComputerOffer}
 					onDismiss={wizard.dismissComputerOffer}
+				/>
+			) : null}
+			{wizard.teamOffer ? (
+				<AgentWizardTeamOffer
+					offer={wizard.teamOffer}
+					agents={wizard.otherAgents}
+					onAccept={wizard.acceptTeamOffer}
+					onDismiss={wizard.dismissTeamOffer}
 				/>
 			) : null}
 			{wizard.connectionSetup ? (

@@ -5,7 +5,10 @@ import {
 	applyAgentWizardPatch,
 	applyAgentWizardToolPatch,
 } from "../apply-agent-wizard-patch";
-import { AGENT_WIZARD_TOOL_NAMES } from "../build-agent-wizard-prompt";
+import {
+	AGENT_WIZARD_TOOL_NAMES,
+	buildAgentWizardSystemPrompt,
+} from "../build-agent-wizard-prompt";
 import {
 	AGENT_WIZARD_TEMPLATES,
 	createBlankAgentWizardDraft,
@@ -16,6 +19,7 @@ const catalog = {
 	featureNames: ["knowledge-retrieval", "web-access"],
 	toolNames: ["search", "read"],
 	skillNames: ["writing", "coding"],
+	agents: [{ id: "agent-1", name: "Helper", description: "" }],
 } as any;
 
 const draft = {
@@ -173,5 +177,71 @@ describe("agent wizard patch helpers", () => {
 		expect(
 			agentWizardToolPatchFromCall(AGENT_WIZARD_TOOL_NAMES.updateName, {}),
 		).toBeNull();
+	});
+});
+
+describe("agent wizard teams", () => {
+	it("keeps only the user's own agents in a team", () => {
+		const result = applyAgentWizardToolPatch(
+			draft,
+			{
+				type: "enable_feature",
+				name: "web-access",
+				config: { accessibleAgentIds: ["agent-1", "made-up"] },
+			},
+			catalog,
+		);
+		expect(result.draft.multiAgentAccessibleAgentIds).toEqual(["agent-1"]);
+		expect(result.notes[0]).toContain("agent: made-up");
+	});
+
+	it("reads a team proposal, which changes nothing in the draft", () => {
+		const patch = agentWizardToolPatchFromCall(
+			AGENT_WIZARD_TOOL_NAMES.offerTeam,
+			{ agentIds: ["agent-1", "agent-1", "agent-2"], reason: "  Leads it.  " },
+		);
+		expect(patch).toEqual({
+			type: "offer_team",
+			agentIds: ["agent-1", "agent-2"],
+			reason: "Leads it.",
+		});
+		expect(
+			applyAgentWizardToolPatch(draft, patch as never, catalog).draft,
+		).toEqual(draft);
+	});
+});
+
+describe("agent wizard prompt teams", () => {
+	const teamCatalog = {
+		featureNames: ["multi-agent-feature"],
+		toolNames: [],
+		skillNames: [],
+		connections: [],
+		composioKeySaved: false,
+		agents: [
+			{
+				id: "writer-id",
+				name: "Content Writer",
+				description: "Writes  blog\nposts.",
+			},
+		],
+	};
+
+	it("lists the user's agents and the team card, where a team can be made", () => {
+		const prompt = buildAgentWizardSystemPrompt(teamCatalog, draft);
+		expect(prompt).toContain("# Multi-Agent Teams");
+		expect(prompt).toContain(
+			"- id: writer-id | name: Content Writer | does: Writes blog posts.",
+		);
+		expect(prompt).toContain(AGENT_WIZARD_TOOL_NAMES.offerTeam);
+	});
+
+	it("says nothing of teams with no other agents or no delegation", () => {
+		expect(
+			buildAgentWizardSystemPrompt({ ...teamCatalog, agents: [] }, draft),
+		).not.toContain("# Multi-Agent Teams");
+		expect(
+			buildAgentWizardSystemPrompt({ ...teamCatalog, featureNames: [] }, draft),
+		).not.toContain("# Multi-Agent Teams");
 	});
 });

@@ -414,6 +414,7 @@ export const useAgentsWorkspaceController = () => {
 		onDraftChange: applyWizardDraftToEditor,
 		initialDraft: wizardInitialDraft,
 		initialAssistantMessage: wizardInitialMessage,
+		agentId: selectedPresetId,
 	});
 
 	React.useEffect(() => {
