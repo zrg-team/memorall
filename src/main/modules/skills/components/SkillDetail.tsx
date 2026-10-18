@@ -44,6 +44,8 @@ import { SkillCategoryBadge } from "../utils/skill-category";
 
 interface SkillDetailProps {
 	enabled: boolean;
+	enabledLoading?: boolean;
+	enabledDisabled?: boolean;
 	agentName: string;
 	onToggleEnabled: (name: string) => void;
 }
@@ -121,6 +123,8 @@ const ResourceView: React.FC<{ skillName: string; resourcePath: string }> = ({
 
 export const SkillDetail: React.FC<SkillDetailProps> = ({
 	enabled,
+	enabledLoading = false,
+	enabledDisabled = false,
 	agentName,
 	onToggleEnabled,
 }) => {
@@ -299,12 +303,16 @@ export const SkillDetail: React.FC<SkillDetailProps> = ({
 					size="sm"
 					variant={enabled ? "secondary" : "default"}
 					className="h-8 shrink-0"
+					disabled={enabledDisabled}
+					aria-busy={enabledLoading}
 					onClick={() => onToggleEnabled(openSkill.name)}
 					title={t("detail.enabledForHint", { agent: agentName })}
 				>
-					{enabled
-						? t("detail.enabledFor", { agent: agentName })
-						: t("detail.enableFor", { agent: agentName })}
+					{enabledLoading
+						? t("status.loading", { ns: "common" })
+						: enabled
+							? t("detail.enabledFor", { agent: agentName })
+							: t("detail.enableFor", { agent: agentName })}
 				</Button>
 			</div>
 

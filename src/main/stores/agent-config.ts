@@ -395,6 +395,7 @@ const pendingSkillChanges: Array<{
 }> = [];
 
 export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
+	let initializeVersion = 0;
 	const persistUnifiedConfig = async () => {
 		const targetFlowId = get().currentFlowId;
 		await flushSkillAssignments(targetFlowId);
@@ -517,9 +518,12 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 		close: () => set({ isOpen: false }),
 
 		initialize: async (flowId) => {
+			const version = ++initializeVersion;
+			const requestedFlowId =
+				flowId === undefined ? get().currentFlowId : flowId;
+			const targetFlowId = requestedFlowId === "chat" ? null : requestedFlowId;
 			set({ isLoading: true, error: null });
 			try {
-				const targetFlowId = flowId ?? get().currentFlowId;
 				const flowRef = targetFlowId
 					? { flowId: targetFlowId }
 					: { predefinedFlow: "foundation" as const };
@@ -556,6 +560,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 							flowRef,
 						);
 
+					if (version !== initializeVersion) return;
 					set({
 						savedConfig: normalizedConfig,
 						draftConfig: { ...normalizedConfig },
@@ -583,6 +588,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 
 				const loadedConfig =
 					await serviceManager.flowBuilderService.getUnifiedFlowConfig(flowRef);
+				if (version !== initializeVersion) return;
 
 				// Agents authored before the Connections registry keep their servers
 				// inline. Lift them into the registry on first load so the picker and
@@ -607,6 +613,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 
 				const derivedState = deriveLegacyStateFromUnified(unifiedConfig);
 
+				if (version !== initializeVersion) return;
 				set({
 					savedConfig: derivedState.config,
 					draftConfig: { ...derivedState.config },
@@ -634,6 +641,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 					isLegacyConfig: false,
 				});
 			} catch (err) {
+				if (version !== initializeVersion) return;
 				logError("[AgentConfigStore] Failed to initialize:", err);
 				set({
 					error: err instanceof Error ? err.message : "Failed to load config",

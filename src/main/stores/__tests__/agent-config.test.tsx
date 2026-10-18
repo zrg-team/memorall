@@ -386,6 +386,79 @@ describe("useAgentConfigStore", () => {
 		expect(state.availableAgents).toEqual([agentFlow]);
 	});
 
+	it.each(["resolve", "reject"])(
+		"keeps the latest agent when an earlier load finishes with %s",
+		async (outcome) => {
+			await initializeUnifiedStore();
+			let finishOld!: (config: UnifiedFlowConfig) => void;
+			let failOld!: (error: Error) => void;
+			mocks.flowBuilderService.getUnifiedFlowConfig.mockImplementationOnce(
+				() =>
+					new Promise<UnifiedFlowConfig>((resolve, reject) => {
+						finishOld = resolve;
+						failOld = reject;
+					}),
+			);
+			const older = useAgentConfigStore.getState().initialize("slow-agent");
+			await vi.waitFor(() => expect(finishOld).toBeTypeOf("function"));
+			mocks.flowBuilderService.getUnifiedFlowConfig.mockResolvedValueOnce(
+				withEnabledSkills(unifiedConfig(), ["writer"]),
+			);
+			await useAgentConfigStore.getState().initialize("latest-agent");
+			if (outcome === "resolve")
+				finishOld(withEnabledSkills(unifiedConfig(), ["stale"]));
+			else failOld(new Error("Old agent failed"));
+			await older;
+			expect(useAgentConfigStore.getState()).toMatchObject({
+				currentFlowId: "latest-agent",
+				draftEnabledSkillNames: ["writer"],
+				isLoading: false,
+				error: null,
+			});
+		},
+	);
+
+	it("ignores an earlier legacy load after switching to another agent", async () => {
+		await initializeUnifiedStore();
+		mocks.flowBuilderService.getFlowConfigStorageFormat.mockResolvedValueOnce(
+			"legacy",
+		);
+		mocks.flowBuilderService.getFlowConfig.mockResolvedValue({
+			graphType: "foundation",
+		});
+		let finishOld!: (features: Record<string, boolean>) => void;
+		mocks.flowBuilderService.getFlowFeatureFlags.mockImplementationOnce(
+			() =>
+				new Promise<Record<string, boolean>>((resolve) => {
+					finishOld = resolve;
+				}),
+		);
+		const older = useAgentConfigStore.getState().initialize("legacy-agent");
+		await vi.waitFor(() => expect(finishOld).toBeTypeOf("function"));
+		await useAgentConfigStore.getState().initialize("latest-agent");
+		finishOld({});
+		await older;
+		expect(useAgentConfigStore.getState()).toMatchObject({
+			currentFlowId: "latest-agent",
+			draftEnabledSkillNames: ["docs"],
+			isLegacyConfig: false,
+			isLoading: false,
+		});
+	});
+
+	it.each([null, "chat"])(
+		"loads the default config for an explicit %s selection",
+		async (selection) => {
+			await initializeUnifiedStore();
+			mocks.flowBuilderService.getUnifiedFlowConfig.mockClear();
+			await useAgentConfigStore.getState().initialize(selection);
+			expect(
+				mocks.flowBuilderService.getUnifiedFlowConfig,
+			).toHaveBeenCalledWith({ predefinedFlow: "foundation" });
+			expect(useAgentConfigStore.getState().currentFlowId).toBeNull();
+		},
+	);
+
 	it("tracks dirty state across field, feature, tool, agent, MCP, and skill edits", async () => {
 		await initializeUnifiedStore();
 		const store = useAgentConfigStore.getState();
