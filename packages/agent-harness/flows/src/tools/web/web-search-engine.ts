@@ -2,6 +2,7 @@ import { parseHtmlDocument } from "../../utils/html-parser.js";
 import z from "zod";
 import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
+import { optionalToolField, optionalToolInteger } from "./web-input.js";
 import {
 	createDefaultWebErrorResult,
 	createWebResult,
@@ -285,23 +286,18 @@ const mapConcurrent = async <T, R>(
 const MAX_SEARCH_CHALLENGE_PROMPTS = 1;
 
 const schema = z.object({
-	query: z.string().min(1).describe("The search query."),
-	engines: z
-		.string()
-		.optional()
-		.describe(
-			`Comma-separated engines to search. Use "all" for all engines, or any combination of: ${SUPPORTED_ENGINES.join(", ")}. Default: "duckduckgo,brave,bing". Example: "google,bing".`,
-		),
-	maxResultsPerEngine: z
-		.number()
-		.int()
-		.optional()
-		.describe("Max results to return per engine (default 10)."),
-	timeoutMs: z
-		.number()
-		.int()
-		.optional()
-		.describe("Per-engine page load timeout in milliseconds (default 15000)."),
+	query: z.string().trim().min(1).describe("The search query."),
+	engines: optionalToolField(z.string(), {
+		normalize: (value) => (Array.isArray(value) ? value.join(",") : value),
+	}).describe(
+		`Comma-separated engines to search. Use "all" for all engines, or any combination of: ${SUPPORTED_ENGINES.join(", ")}. Default: "duckduckgo,brave,bing". Example: "google,bing".`,
+	),
+	maxResultsPerEngine: optionalToolInteger().describe(
+		"Max results to return per engine (default 10).",
+	),
+	timeoutMs: optionalToolInteger().describe(
+		"Per-engine page load timeout in milliseconds (default 15000).",
+	),
 });
 
 type Input = z.infer<typeof schema>;

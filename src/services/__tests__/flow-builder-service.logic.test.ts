@@ -72,6 +72,7 @@ import {
 	FILE_OKF_INDEX_STEP_NAME,
 	FILE_EMBEDDING_INDEX_STEP_NAME,
 } from "@/services/folder-index/constants";
+import { subscribeSkillChanges } from "@/services/skill-events";
 
 const now = new Date("2026-01-01T00:00:00.000Z");
 
@@ -581,6 +582,29 @@ describe("FlowBuilderService", () => {
 		expect(
 			harness.insertBatches.some((batch) => batch.table === schema.flowConfigs),
 		).toBe(true);
+	});
+
+	it("notifies skill views only after a config save commits", async () => {
+		const harness = createHarness();
+		const changed = vi.fn();
+		const unsubscribe = subscribeSkillChanges(changed);
+		const config: UnifiedFlowConfig = { graphType: "foundation", steps: [] };
+		harness.selectQueue.push([flow({ id: "flow-1" })], []);
+		await harness.service.saveUnifiedFlowConfig({ flowId: "flow-1" }, config);
+		expect(changed).toHaveBeenCalledExactlyOnceWith(
+			{ type: "assignment", flowId: "flow-1", config },
+			false,
+		);
+		changed.mockClear();
+		harness.selectQueue.push([flow({ id: "flow-1" })]);
+		harness.databaseService.transaction.mockRejectedValueOnce(
+			new Error("Not saved"),
+		);
+		await expect(
+			harness.service.saveUnifiedFlowConfig({ flowId: "flow-1" }, config),
+		).rejects.toThrow("Not saved");
+		expect(changed).not.toHaveBeenCalled();
+		unsubscribe();
 	});
 
 	it("splits stored combined index features and persists independent toggles", async () => {

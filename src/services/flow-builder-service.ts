@@ -44,6 +44,7 @@ import {
 	splitFolderIndexFeatureFlags,
 } from "@/services/folder-index/feature-migration";
 import { FOLDER_INDEX_STEP_NAME } from "@/services/folder-index/constants";
+import { publishSkillChange } from "@/services/skill-events";
 import {
 	buildDefaultFlowConfig,
 	mergeWithDefaultConfig,
@@ -1007,6 +1008,10 @@ export class FlowBuilderService {
 				.set({ updatedAt: new Date() })
 				.where(eq(schema.flows.id, flow.id));
 		});
+		publishSkillChange({ type: "assignment", flowId: flow.id, config });
+		if ("predefinedFlow" in ref) {
+			publishSkillChange({ type: "assignment", flowId: null, config });
+		}
 	}
 
 	/**

@@ -9,6 +9,13 @@ import { normalizeDocumentPath } from "../files/util";
 import { writeFileBytes } from "@memorall/agent-harness-flows/tools/fs/util";
 import { captureWebSessionScreenshot } from "./web-tool-registry";
 import {
+	optionalWebString,
+	optionalWebUrl,
+	optionalToolChoice,
+	optionalToolInteger,
+	withWebSessionTarget,
+} from "@memorall/agent-harness-flows/tools/web/web-input";
+import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	requireWebBrowserService,
@@ -16,38 +23,25 @@ import {
 
 const TOOL_NAME = "web_screenshot" as const;
 
-const schema = z.object({
-	sessionId: z
-		.string()
-		.optional()
-		.describe(
+const schema = withWebSessionTarget(
+	z.object({
+		sessionId: optionalWebString().describe(
 			"Active web session to capture. Use this when a session is already open.",
 		),
-	url: z
-		.string()
-		.url()
-		.optional()
-		.describe(
+		url: optionalWebUrl().describe(
 			"Open this URL first, then capture. Use when no sessionId is available.",
 		),
-	browserMode: z
-		.enum(["iframe", "tab", "window"])
-		.optional()
-		.describe(
+		browserMode: optionalToolChoice(["iframe", "tab", "window"]).describe(
 			"Open mode when opening by URL. Leave it out for a window; `iframe` only for a local server.",
 		),
-	file_path: z
-		.string()
-		.optional()
-		.describe(
+		file_path: optionalWebString().describe(
 			"Where to save the PNG in the root filesystem. Default: /screenshots/screenshot-<timestamp>.png",
 		),
-	timeoutMs: z
-		.number()
-		.int()
-		.optional()
-		.describe("Navigation timeout in milliseconds when opening by URL."),
-});
+		timeoutMs: optionalToolInteger().describe(
+			"Navigation timeout in milliseconds when opening by URL.",
+		),
+	}),
+);
 
 type Input = z.infer<typeof schema>;
 type Services = Pick<AllServices, "webBrowser" | "fs">;

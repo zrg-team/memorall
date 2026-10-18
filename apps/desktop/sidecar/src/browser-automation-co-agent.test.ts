@@ -34,6 +34,10 @@ const fakeEngine = (engine: BrowserEngine, canHostCoAgent: boolean) => {
 			calls.push(`close ${session.url}`);
 		},
 		stop: async () => {},
+		show: async (session) => {
+			calls.push(`show ${session.url}`);
+			return true;
+		},
 		...(canHostCoAgent
 			? {
 					coAgentAttach: async (session: BackendSession) => {
@@ -88,7 +92,11 @@ describe("co-agent activation in the managed browser", () => {
 
 		expect(result).toMatchObject({ success: true, session: { tabId: 1 } });
 		expect(browseros.calls).toEqual([]);
-		expect(chromium.calls).toEqual(["open about:blank", "attach about:blank"]);
+		expect(chromium.calls).toEqual([
+			"open about:blank",
+			"attach about:blank",
+			"show about:blank",
+		]);
 	});
 
 	it("moves a page the agent opened in BrowserOS instead of failing on it", async () => {
@@ -113,12 +121,25 @@ describe("co-agent activation in the managed browser", () => {
 		expect(chromium.calls).toEqual([
 			"open https://example.test/",
 			"attach https://example.test/",
+			"show https://example.test/",
 		]);
 		// The agent's tab keeps its id, so its later web commands follow it.
 		const status = await automation.status();
 		expect(status.sessions).toEqual([
 			expect.objectContaining({ tabId: 1, engine: "chromium" }),
 		]);
+	});
+
+	it("does not show a page during ordinary agent browsing", async () => {
+		const browseros = fakeEngine("browseros", false);
+		const chromium = fakeEngine("chromium", true);
+		const automation = automationWith({
+			browseros: browseros.backend,
+			chromium: chromium.backend,
+		});
+		await automation.handle(webOpen("https://example.test/"));
+		expect(browseros.calls).toEqual(["open https://example.test/"]);
+		expect(chromium.calls).toEqual([]);
 	});
 
 	it("still says so when no engine can host it", async () => {

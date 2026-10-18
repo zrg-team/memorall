@@ -2,6 +2,12 @@ import z from "zod";
 import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import {
+	webUrl,
+	optionalToolChoice,
+	optionalToolInteger,
+	optionalToolBoolean,
+} from "./web-input.js";
+import {
 	MAX_WEB_MAX_HTML_CHARS,
 	MIN_WEB_MAX_HTML_CHARS,
 	normalizeWebMaxHtmlChars,
@@ -20,29 +26,19 @@ import {
 const TOOL_NAME = "web_open" as const;
 
 const schema = z.object({
-	url: z.string().url().describe("Target web URL to open."),
-	browserMode: z
-		.enum(["iframe", "tab", "window"])
-		.optional()
-		.describe(
-			"Open mode. Leave it out for a browser window (falls back to a tab); `tab` for a tab; `iframe` only for a local server (localhost or a sandbox preview), and on a public site it opens a window instead.",
-		),
-	timeoutMs: z
-		.number()
-		.int()
-		.optional()
-		.describe("Navigation wait timeout in milliseconds."),
-	maxHtmlChars: z
-		.number()
-		.int()
-		.optional()
-		.describe(
-			`Limit HTML length returned to the agent. Values are clamped to ${MIN_WEB_MAX_HTML_CHARS}-${MAX_WEB_MAX_HTML_CHARS}.`,
-		),
-	keepSession: z
-		.boolean()
-		.optional()
-		.describe("Keep session alive for follow-up DOM actions (default true)."),
+	url: webUrl().describe("Target web URL to open."),
+	browserMode: optionalToolChoice(["iframe", "tab", "window"]).describe(
+		"Open mode. Leave it out for a browser window (falls back to a tab); `tab` for a tab; `iframe` only for a local server (localhost or a sandbox preview), and on a public site it opens a window instead.",
+	),
+	timeoutMs: optionalToolInteger().describe(
+		"Navigation wait timeout in milliseconds.",
+	),
+	maxHtmlChars: optionalToolInteger().describe(
+		`Limit HTML length returned to the agent. Values are clamped to ${MIN_WEB_MAX_HTML_CHARS}-${MAX_WEB_MAX_HTML_CHARS}.`,
+	),
+	keepSession: optionalToolBoolean().describe(
+		"Keep session alive for follow-up DOM actions (default true).",
+	),
 });
 
 type Input = z.infer<typeof schema>;

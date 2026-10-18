@@ -363,7 +363,7 @@ export class BrowserAutomationManager {
 			// sessions — so this is a precondition, never a silent repair.
 			throw new BrowserAutomationError(
 				"CO_AGENT_REQUIRES_VISIBLE_BROWSER",
-				"Enable Show managed browser before starting the co-agent. Changing visibility closes active sessions.",
+				"Enable the browser window before starting the co-agent. Changing this setting closes active sessions.",
 			);
 		}
 
@@ -421,6 +421,11 @@ export class BrowserAutomationManager {
 			{ tabId, revision: CO_AGENT_BUNDLE_REVISION },
 			signal,
 		);
+		// Starting the co-agent is an explicit user action. Ordinary opens stay
+		// in the background, including when the visible runtime starts minimized.
+		if (session.backend.show) {
+			await session.backend.show(session.backendSession, signal);
+		}
 		this.coAgentTabId = tabId;
 		this.coAgentEnabledAt = Date.now();
 
@@ -500,7 +505,7 @@ export class BrowserAutomationManager {
 		if (!this.settings.visible) {
 			throw new BrowserAutomationError(
 				"TAKEOVER_REQUIRES_VISIBLE_BROWSER",
-				"Enable Show managed browser before handing a session to the user. Changing visibility closes active sessions.",
+				"Enable the browser window before handing a session to the user. Changing this setting closes active sessions.",
 			);
 		}
 		const session = this.session(tabId, true);

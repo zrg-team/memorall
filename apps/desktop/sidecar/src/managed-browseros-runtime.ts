@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import type { BrowserSettings } from "./browser-runtime-types";
 import { BrowserAutomationError } from "./browser-runtime-types";
+import { initializeBackgroundWindow } from "./chromium-cdp-backend";
 
 const trace = (message: string): void => {
 	if (process.env.MEMORALL_SMOKE_VERBOSE === "1")
@@ -519,7 +520,9 @@ export class ManagedBrowserOsRuntime {
 				...(process.env.MEMORALL_BROWSER_DISABLE_SANDBOX === "1"
 					? ["--no-sandbox"]
 					: []),
-				...(settings.visible ? [] : ["--headless=new", "--disable-gpu"]),
+				...(settings.visible
+					? ["--no-startup-window"]
+					: ["--headless=new", "--disable-gpu"]),
 			],
 			{ stdio: ["ignore", "ignore", "pipe"], windowsHide: true, detached },
 		);
@@ -531,6 +534,9 @@ export class ManagedBrowserOsRuntime {
 				"browser process",
 				captureDiagnostics(browser),
 			);
+			if (settings.visible) {
+				await initializeBackgroundWindow(`http://127.0.0.1:${cdpPort}`);
+			}
 			if (!manageServer) {
 				this.connection = { cdpEndpoint: `http://127.0.0.1:${cdpPort}` };
 				return this.connection;

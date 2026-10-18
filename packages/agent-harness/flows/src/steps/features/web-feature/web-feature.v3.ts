@@ -81,7 +81,7 @@ Multiple web sessions can be open simultaneously. Use sessionId to target a spec
 ## WEB SEARCH TOOL
 - web_search opens each engine in a real browser tab, loads the search results page, and extracts titles, URLs, and snippets — all in a single call.
 - Supported engines: google, bing, duckduckgo, yahoo, brave.
-- Pass engines: ["all"] to query all engines sequentially, or a specific subset for speed.
+- Pass engines: "all" to query all engines, or a comma-separated string such as "google,bing" for a specific subset.
 - When to use web_search:
   • You need to discover URLs or facts without navigating to individual result pages.
   • You want to compare results across multiple engines.

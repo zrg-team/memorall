@@ -23,7 +23,8 @@
     "notifications",
     "offscreen",
     "webNavigation",
-    "tabs"
+    "tabs",
+    "tabGroups"
   ],
   "host_permissions": [
     "https://huggingface.co/*",

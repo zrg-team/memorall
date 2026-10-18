@@ -1,6 +1,9 @@
 import { ALIREZAREZVANI_DEFAULT_SKILLS } from "./alirezarezvani";
 import { ANTHROPIC_DEFAULT_SKILLS } from "./anthropic";
+import { BESTAGENTKITS_DEFAULT_SKILLS } from "./bestagentkits";
+import { BLADER_DEFAULT_SKILLS } from "./blader";
 import { BUNDLED_DEFAULT_SKILLS } from "./bundled";
+import { COREYHAINES31_DEFAULT_SKILLS } from "./coreyhaines31";
 import { SECONDSKY_DEFAULT_SKILLS } from "./secondsky";
 import { ANDREJ_KARPATHY_SKILLS } from "./andrej-karpathy";
 import { DESIGN_DEFAULT_SKILLS } from "./design";
@@ -21,6 +24,9 @@ const DEFAULT_SKILL_MANIFEST = [
 	...ANDREJ_KARPATHY_SKILLS,
 	...NEXU_DEFAULT_SKILLS,
 	...DESIGN_DEFAULT_SKILLS,
+	...COREYHAINES31_DEFAULT_SKILLS,
+	...BLADER_DEFAULT_SKILLS,
+	...BESTAGENTKITS_DEFAULT_SKILLS,
 ].filter(
 	(entry, index, all) =>
 		all.findIndex((other) => other.name === entry.name) === index,

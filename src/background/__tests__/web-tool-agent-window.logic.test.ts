@@ -12,6 +12,22 @@ vi.mock("@/utils/logger", () => ({
 	logDebug: vi.fn(),
 }));
 
+const captures = vi.hoisted(() => ({
+	visible: vi.fn(
+		async (_windowId: number) =>
+			`data:image/png;base64,${Buffer.alloc(24).toString("base64")}`,
+	),
+	area: vi.fn(async () => ({
+		dataUrl: "data:image/png;base64,",
+		width: 100,
+		height: 100,
+	})),
+}));
+vi.mock("../tab-screenshot", () => ({
+	captureVisible: captures.visible,
+	captureTabArea: captures.area,
+}));
+
 const snapshotReply = (url: string) => ({
 	source: WEB_CONTENT_COMMAND_SOURCE,
 	type: "web-tool:snapshot-result",
@@ -28,13 +44,38 @@ const snapshotReply = (url: string) => ({
 /** A browser with real windows and tabs, as far as the handler can tell. */
 const installBrowser = () => {
 	const windows = new Map<number, number[]>([[1, [100]]]);
-	const tabs = new Map<number, { id: number; windowId: number; url: string }>([
-		[100, { id: 100, windowId: 1, url: "https://user.example/" }],
+	const tabs = new Map<
+		number,
+		{
+			id: number;
+			windowId: number;
+			url: string;
+			groupId?: number;
+			active: boolean;
+		}
+	>([
+		[100, { id: 100, windowId: 1, url: "https://user.example/", active: true }],
 	]);
 	let nextWindow = 2;
 	let nextTab = 101;
-	const addTab = (windowId: number, url: string) => {
-		const tab = { id: nextTab++, windowId, url, status: "complete" };
+	let nextGroup = 10;
+	const groups = new Map<
+		number,
+		{ id: number; windowId: number; title?: string }
+	>();
+	const addTab = (windowId: number, url: string, active = false) => {
+		const selected = active || windows.get(windowId)?.length === 0;
+		if (selected)
+			for (const tab of tabs.values()) {
+				if (tab.windowId === windowId) tab.active = false;
+			}
+		const tab = {
+			id: nextTab++,
+			windowId,
+			url,
+			status: "complete",
+			active: selected,
+		};
 		tabs.set(tab.id, tab);
 		windows.get(windowId)?.push(tab.id);
 		return tab;
@@ -60,15 +101,27 @@ const installBrowser = () => {
 	// What the background tells the extension's pages (the offscreen document).
 	const runtimeSendMessage = vi.fn(async (_message: unknown) => undefined);
 	const windowsApi = {
-		create: vi.fn(async ({ url }: { url: string }) => {
+		create: vi.fn(async ({ url, tabId }: { url?: string; tabId?: number }) => {
 			const id = nextWindow++;
 			windows.set(id, []);
-			const tab = addTab(id, url);
+			if (typeof tabId === "number") {
+				const tab = tabs.get(tabId);
+				if (!tab) throw new Error("No tab.");
+				windows.set(
+					tab.windowId,
+					(windows.get(tab.windowId) ?? []).filter((value) => value !== tabId),
+				);
+				tab.windowId = id;
+				tab.active = true;
+				windows.set(id, [tabId]);
+				return { id, tabs: [tab] };
+			}
+			const tab = addTab(id, url ?? "about:blank");
 			return { id, tabs: [tab] };
 		}),
 		get: vi.fn(async (id: number) => {
 			if (!windows.has(id)) throw new Error(`No window with id: ${id}.`);
-			return { id };
+			return { id, focused: id === 1 };
 		}),
 		getLastFocused: vi.fn(async () => ({ id: 1 })),
 		update: vi.fn(async () => ({})),
@@ -93,11 +146,19 @@ const installBrowser = () => {
 		windows: windowsApi,
 		tabs: {
 			create: vi.fn(
-				async ({ url, windowId }: { url: string; windowId?: number }) => {
+				async ({
+					url,
+					windowId,
+					active,
+				}: {
+					url: string;
+					windowId?: number;
+					active?: boolean;
+				}) => {
 					const target = windowId ?? 1;
 					if (!windows.has(target))
 						throw new Error(`No window with id: ${target}.`);
-					return addTab(target, url);
+					return addTab(target, url, active);
 				},
 			),
 			get: vi.fn(async (id: number) => {
@@ -105,16 +166,82 @@ const installBrowser = () => {
 				if (!tab) throw new Error(`No tab with id: ${id}.`);
 				return { ...tab, status: "complete" };
 			}),
-			query: vi.fn(async ({ windowId }: { windowId: number }) =>
-				(windows.get(windowId) ?? []).map((id) => tabs.get(id)),
+			query: vi.fn(async ({ windowId }: { windowId?: number }) =>
+				typeof windowId === "number"
+					? (windows.get(windowId) ?? []).map((id) => tabs.get(id))
+					: [...tabs.values()],
 			),
-			sendMessage: vi.fn(async (tabId: number) =>
-				snapshotReply(tabs.get(tabId)?.url ?? ""),
+			sendMessage: vi.fn(
+				async (tabId: number, message: { type: string; url?: string }) => {
+					if (message.type === "web-tool:navigate-to-image") {
+						const tab = tabs.get(tabId);
+						if (tab && message.url) tab.url = message.url;
+						return {
+							source: WEB_CONTENT_COMMAND_SOURCE,
+							type: "web-tool:navigate-to-image-result",
+							success: true,
+						};
+					}
+					if (message.type === "web-tool:read-rendered-image")
+						return {
+							source: WEB_CONTENT_COMMAND_SOURCE,
+							type: "web-tool:read-rendered-image-result",
+							success: true,
+							base64: "AAAA",
+							mimeType: "image/png",
+							width: 1,
+							height: 1,
+						};
+					return snapshotReply(tabs.get(tabId)?.url ?? "");
+				},
 			),
-			update: vi.fn(async () => ({})),
+			update: vi.fn(async (tabId: number, props: { active?: boolean }) => {
+				const tab = tabs.get(tabId);
+				if (props.active && tab)
+					for (const candidate of tabs.values()) {
+						if (candidate.windowId === tab.windowId)
+							candidate.active = candidate.id === tabId;
+					}
+				return tab;
+			}),
+			group: vi.fn(
+				async ({
+					tabIds,
+					groupId,
+					createProperties,
+				}: {
+					tabIds: number;
+					groupId?: number;
+					createProperties?: { windowId: number };
+				}) => {
+					const tab = tabs.get(tabIds);
+					if (!tab) throw new Error("No tab.");
+					const id = groupId ?? nextGroup++;
+					if (groupId === undefined) {
+						groups.set(id, {
+							id,
+							windowId: createProperties?.windowId ?? tab.windowId,
+						});
+					}
+					tab.groupId = id;
+					return id;
+				},
+			),
 			remove: vi.fn(async (id: number) => removeTab(id)),
 			onUpdated: { addListener: vi.fn() },
 			onRemoved: { addListener: vi.fn() },
+		},
+		tabGroups: {
+			get: vi.fn(async (id: number) => {
+				const group = groups.get(id);
+				if (!group) throw new Error("No group.");
+				return group;
+			}),
+			update: vi.fn(async (id: number, props: { title: string }) => {
+				const group = groups.get(id);
+				if (group) Object.assign(group, props);
+				return group;
+			}),
 		},
 		scripting: { executeScript: vi.fn(async () => [{ result: null }]) },
 		storage: {
@@ -157,6 +284,8 @@ const installBrowser = () => {
 	return {
 		windows,
 		windowsApi,
+		groups,
+		tabs,
 		dispatch,
 		open,
 		sendFromTab,
@@ -181,6 +310,8 @@ const surfaceOf = (response: WebBrowserCommandResponse) => {
 describe("the agent's window", () => {
 	beforeEach(() => {
 		vi.unstubAllGlobals();
+		captures.visible.mockClear();
+		captures.area.mockClear();
 	});
 
 	it("opens every window-mode page as a tab of one window", async () => {
@@ -200,6 +331,198 @@ describe("the agent's window", () => {
 		expect(browser.windows.get(windowId as number)).toHaveLength(3);
 		// The user's own window is left as it was.
 		expect(browser.windows.get(1)).toEqual([100]);
+		expect(chrome.tabs.create).toHaveBeenCalledWith(
+			expect.objectContaining({ active: false }),
+		);
+		expect(browser.windowsApi.create).toHaveBeenCalledWith(
+			expect.objectContaining({ focused: false }),
+		);
+		expect(browser.windowsApi.update).not.toHaveBeenCalled();
+		expect(chrome.tabs.update).not.toHaveBeenCalled();
+		const group = [...browser.groups.values()][0];
+		expect(group).toMatchObject({ title: "Memorall", windowId });
+		expect(browser.groups.size).toBe(1);
+		for (const response of [a, b, c]) {
+			expect(browser.tabs.get(surfaceOf(response).tabId)?.groupId).toBe(
+				group.id,
+			);
+		}
+	});
+
+	it("groups background tabs without grouping the user's own tab", async () => {
+		const browser = installBrowser();
+		await register();
+		await Promise.all(
+			["a", "b"].map((sessionId) =>
+				browser.dispatch({
+					command: "open",
+					sessionId,
+					url: `https://${sessionId}.example/`,
+					mode: "tab",
+					timeoutMs: 2_000,
+					maxHtmlChars: 1_000,
+				}),
+			),
+		);
+
+		expect(browser.windowsApi.create).not.toHaveBeenCalled();
+		expect(browser.groups.size).toBe(1);
+		expect([...browser.groups.values()][0]).toMatchObject({
+			title: "Memorall",
+			windowId: 1,
+		});
+		expect(browser.tabs.get(100)?.groupId).toBeUndefined();
+		expect(chrome.tabs.update).not.toHaveBeenCalled();
+	});
+
+	it("creates a new group when the remembered group has been removed", async () => {
+		const browser = installBrowser();
+		await register();
+		await browser.open("a", "https://a.example/");
+		const oldGroup = [...browser.groups.keys()][0];
+		browser.groups.delete(oldGroup);
+		await browser.open("b", "https://b.example/");
+
+		expect(chrome.tabGroups.update).toHaveBeenCalledTimes(2);
+		expect([...browser.groups.keys()][0]).not.toBe(oldGroup);
+	});
+
+	it("still opens a page if tab grouping fails", async () => {
+		const browser = installBrowser();
+		vi.mocked(chrome.tabs.group).mockRejectedValueOnce(
+			new Error("Grouping unavailable"),
+		);
+		await register();
+
+		expect((await browser.open("a", "https://a.example/")).success).toBe(true);
+		expect((await browser.open("b", "https://b.example/")).success).toBe(true);
+		expect(browser.groups.size).toBe(1);
+	});
+
+	it("only brings a page forward on an explicit request", async () => {
+		const browser = installBrowser();
+		await register();
+		const surface = surfaceOf(await browser.open("a", "https://a.example/"));
+		await browser.dispatch({
+			command: "bring-to-front",
+			sessionId: "a",
+			tabId: surface.tabId,
+		});
+
+		expect(chrome.tabs.update).toHaveBeenCalledExactlyOnceWith(surface.tabId, {
+			active: true,
+		});
+		expect(browser.windowsApi.update).toHaveBeenCalledExactlyOnceWith(
+			surface.windowId,
+			{ focused: true },
+		);
+	});
+
+	it("captures a background session without changing the user's selected tab", async () => {
+		const browser = installBrowser();
+		await register();
+		const surface = surfaceOf(
+			await browser.dispatch({
+				command: "open",
+				sessionId: "a",
+				url: "https://a.example/",
+				mode: "tab",
+				timeoutMs: 2_000,
+				maxHtmlChars: 1_000,
+			}),
+		);
+		const result = await browser.dispatch({
+			command: "screenshot",
+			sessionId: "a",
+			tabId: surface.tabId,
+			windowId: 1,
+		});
+
+		expect(result.success).toBe(true);
+		expect(browser.tabs.get(100)?.active).toBe(true);
+		expect(browser.tabs.get(surface.tabId)?.windowId).not.toBe(1);
+		expect(chrome.tabs.update).not.toHaveBeenCalled();
+		expect(browser.windowsApi.update).not.toHaveBeenCalled();
+		expect(captures.visible).toHaveBeenCalledWith(
+			browser.tabs.get(surface.tabId)?.windowId,
+		);
+
+		// Closing the moved session must not close the user's original window.
+		await browser.dispatch({
+			command: "close",
+			sessionId: "a",
+			tabId: surface.tabId,
+			windowId: 1,
+		});
+		expect(browser.windows.get(1)).toEqual([100]);
+	});
+
+	it("captures an already selected agent page without activating anything", async () => {
+		const browser = installBrowser();
+		await register();
+		const surface = surfaceOf(await browser.open("a", "https://a.example/"));
+		expect(
+			(
+				await browser.dispatch({
+					command: "screenshot",
+					sessionId: "a",
+					tabId: surface.tabId,
+				})
+			).success,
+		).toBe(true);
+		expect(chrome.tabs.update).not.toHaveBeenCalled();
+		expect(browser.windowsApi.update).not.toHaveBeenCalled();
+		expect(browser.windowsApi.create).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not switch to an unrelated inactive user tab for a screenshot", async () => {
+		const browser = installBrowser();
+		await register();
+		const tab = await chrome.tabs.create({
+			url: "https://other.example/",
+			active: false,
+		});
+		expect(
+			(
+				await browser.dispatch({
+					command: "screenshot",
+					sessionId: "unknown",
+					tabId: tab.id,
+				})
+			).success,
+		).toBe(false);
+		expect(browser.tabs.get(100)?.active).toBe(true);
+		expect(chrome.tabs.update).not.toHaveBeenCalled();
+		expect(captures.visible).not.toHaveBeenCalled();
+	});
+
+	it("loads protected images in a temporary background copy of the source page", async () => {
+		const browser = installBrowser();
+		await register();
+		const result = await browser.dispatch({
+			command: "capture-image",
+			sessionId: "images",
+			tabId: 100,
+			url: "https://images.example/photo.jpg",
+			timeoutMs: 2_000,
+		});
+		expect(result).toMatchObject({ success: true, base64: "AAAA" });
+		expect(chrome.tabs.create).toHaveBeenCalledWith({
+			url: "https://user.example/",
+			active: false,
+			openerTabId: 100,
+			windowId: 1,
+		});
+		expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+			101,
+			expect.objectContaining({ type: "web-tool:navigate-to-image" }),
+		);
+		expect(browser.tabs.get(100)).toMatchObject({
+			active: true,
+			url: "https://user.example/",
+		});
+		expect(browser.tabs.has(101)).toBe(false);
+		expect(chrome.tabs.update).not.toHaveBeenCalled();
 	});
 
 	it("closes a page's tab, and the window only with its last page", async () => {
@@ -231,6 +554,8 @@ describe("the agent's window", () => {
 		const after = surfaceOf(await browser.open("b", "https://b.example/"));
 		expect(after.windowId).toBe(windowId);
 		expect(browser.windowsApi.create).toHaveBeenCalledTimes(1);
+		expect(chrome.tabGroups.update).toHaveBeenCalledTimes(1);
+		expect(browser.groups.size).toBe(1);
 	});
 });
 

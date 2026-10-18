@@ -2523,6 +2523,7 @@ __metadata:
   resolution: "@memorall/agent-harness-flows@workspace:packages/agent-harness/flows"
   dependencies:
     "@langchain/langgraph": "npm:1.4.9"
+    "@memorall/agent-harness-core": "workspace:^"
     "@memorall/agent-harness-mcp": "workspace:^"
     "@memorall/agent-harness-sandbox": "workspace:^"
     gpt-tokenizer: "npm:^3.4.0"

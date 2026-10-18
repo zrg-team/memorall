@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@langchain/langgraph": "1.4.9",
+    "@memorall/agent-harness-core": "workspace:^",
     "@memorall/agent-harness-mcp": "workspace:^",
     "@memorall/agent-harness-sandbox": "workspace:^",
     "gpt-tokenizer": "^3.4.0",

@@ -3,6 +3,12 @@ import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import type { WebDomElementInfo } from "../../interfaces/services/web-browser.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import {
+	optionalWebString,
+	optionalToolField,
+	optionalToolInteger,
+	toolChoice,
+} from "./web-input.js";
+import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	requireWebBrowserService,
@@ -13,11 +19,13 @@ import {
 
 const TOOL_NAME = "web_dom_action" as const;
 
-const schema = z.object({
-	sessionId: z.string().describe("Active web session ID."),
-	selector: z.string().min(1).describe("CSS selector for DOM target."),
-	action: z
-		.enum([
+const schema = z
+	.object({
+		sessionId: z.string().trim().min(1).describe("Active web session ID."),
+		selector: optionalWebString().describe(
+			"CSS selector for DOM target. Required for click/input/focus; defaults to body for query/read/scroll.",
+		),
+		action: toolChoice([
 			"query",
 			"read",
 			"click",
@@ -25,22 +33,28 @@ const schema = z.object({
 			"focus",
 			"scrollTop",
 			"scrollBottom",
-		])
-		.describe(
+		]).describe(
 			"DOM action. `query` supports index-less selection list, others operate by selector+index.",
 		),
-	index: z
-		.number()
-		.int()
-		.optional()
-		.describe("Element index for selectors returning multiple results."),
-	value: z.string().optional().describe("Text to fill (input action only)."),
-	maxResults: z
-		.number()
-		.int()
-		.optional()
-		.describe("For query: max returned element list."),
-});
+		index: optionalToolInteger().describe(
+			"Element index for selectors returning multiple results.",
+		),
+		value: optionalToolField(z.string(), { preserveBlank: true }).describe(
+			"Text to fill (input action only).",
+		),
+		maxResults: optionalToolInteger().describe(
+			"For query: max returned element list.",
+		),
+	})
+	.refine(
+		(value) =>
+			!["click", "input", "focus"].includes(value.action) ||
+			Boolean(value.selector),
+		{
+			message: "A selector is required for click, input, and focus actions.",
+			path: ["selector"],
+		},
+	);
 
 type Input = z.infer<typeof schema>;
 
@@ -93,6 +107,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 	schema,
 	execute: async (input, context) => {
 		const webBrowser = requireWebBrowserService(services);
+		const selector = input.selector ?? "body";
 		try {
 			const refreshed = await webBrowser.refreshSession({
 				sessionId: input.sessionId,
@@ -111,7 +126,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 			if (input.action === "query") {
 				const elements = await webBrowser.queryDomElements({
 					sessionId: session.id,
-					selector: input.selector,
+					selector,
 					maxResults: Math.max(1, Math.min(50, input.maxResults ?? 20)),
 				});
 				const actionResult = [...elements]
@@ -145,7 +160,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 					sessionId: session.id,
 					url: session.currentUrl,
 					action: input.action,
-					selector: input.selector,
+					selector,
 					note: "Use the returned `index` value for follow-up read/click/input/focus actions. Prefer visible elements with acceptsTextInput=true for text entry. To look at pictures, collect their `src` values and pass them to web_read_images — image bytes are never returned as element text.",
 					result: actionResult,
 					...webBlockFields(session),
@@ -155,7 +170,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 			const actionResult = await webBrowser.performDomAction({
 				sessionId: session.id,
 				action: input.action,
-				selector: input.selector,
+				selector,
 				index: Math.max(0, input.index ?? 0),
 				value: input.value,
 			});
@@ -166,7 +181,7 @@ export const createWebDomActionTool: ToolFactory<Input, WebToolServices> = (
 				sessionId: session.id,
 				url: session.currentUrl,
 				action: input.action,
-				selector: input.selector,
+				selector,
 				result: actionResult,
 				...webBlockFields(session),
 			});

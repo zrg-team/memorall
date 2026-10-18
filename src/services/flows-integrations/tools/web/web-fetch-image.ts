@@ -6,6 +6,10 @@ import type {
 import type { AllServices } from "@memorall/agent-harness-flows/interfaces/services/services";
 import { toolRegistry } from "@memorall/agent-harness-flows/registries/tool-registry";
 import { logInfo } from "@/utils/logger";
+import {
+	optionalWebString,
+	webUrl,
+} from "@memorall/agent-harness-flows/tools/web/web-input";
 import { normalizeDocumentPath } from "../files/util";
 import { writeFileBytes } from "@memorall/agent-harness-flows/tools/fs/util";
 import {
@@ -60,7 +64,8 @@ export const fetchImageBytesFromBrowserSession = async (
 	bytes: Uint8Array;
 	mimeType: string;
 }> => {
-	const resolvedSessionId = sessionId ?? getTabSessionForUrl(url)?.sessionId;
+	const resolvedSessionId =
+		sessionId?.trim() || getTabSessionForUrl(url)?.sessionId;
 	if (!resolvedSessionId) {
 		return downloadDirectly(url);
 	}
@@ -109,22 +114,15 @@ export const fetchImageBytesFromBrowserSession = async (
 };
 
 const schema = z.object({
-	url: z
-		.string()
-		.url()
-		.describe("Image URL to fetch and store in the root filesystem."),
-	sessionId: z
-		.string()
-		.optional()
-		.describe(
-			"Optional active web session whose tab fetches the image. Uses direct fetch when no tab session is available.",
-		),
-	file_path: z
-		.string()
-		.optional()
-		.describe(
-			"Where to save the image inside the root filesystem. Default: /resources/images/<filename>",
-		),
+	url: webUrl().describe(
+		"Image URL to fetch and store in the root filesystem.",
+	),
+	sessionId: optionalWebString().describe(
+		"Optional active web session whose tab fetches the image. Uses direct fetch when no tab session is available.",
+	),
+	file_path: optionalWebString().describe(
+		"Where to save the image inside the root filesystem. Default: /resources/images/<filename>",
+	),
 });
 
 type Input = z.infer<typeof schema>;

@@ -251,6 +251,57 @@ export const captureCdpPage = async (
 	page: Pick<CdpConnection, "send">,
 	options: ScreenshotOptions,
 	signal?: AbortSignal,
+) => {
+	const window = await page
+		.send<{ bounds?: { windowState?: string } }>(
+			"Browser.getWindowForTarget",
+			{},
+			signal,
+		)
+		.catch(() => null);
+	if (window?.bounds?.windowState !== "minimized") {
+		return capturePaintedCdpPage(page, options, signal);
+	}
+
+	// Minimized native windows stop painting their surface. Give this capture
+	// an offscreen viewport instead of restoring or focusing the native window.
+	const layout = await page.send<CdpLayoutMetrics & Record<string, unknown>>(
+		"Page.getLayoutMetrics",
+		{},
+		signal,
+	);
+	const width = Math.max(
+		1,
+		Math.round(layout.cssLayoutViewport?.clientWidth ?? 1280),
+	);
+	const height = Math.max(
+		1,
+		Math.round(layout.cssLayoutViewport?.clientHeight ?? 800),
+	);
+	await page.send(
+		"Emulation.setDeviceMetricsOverride",
+		{ width, height, deviceScaleFactor: 1, mobile: false },
+		signal,
+	);
+	try {
+		return await capturePaintedCdpPage(
+			page,
+			options.fullPage || options.clip
+				? options
+				: { clip: { x: 0, y: 0, width, height } },
+			signal,
+			true,
+		);
+	} finally {
+		await page.send("Emulation.clearDeviceMetricsOverride").catch(() => {});
+	}
+};
+
+const capturePaintedCdpPage = async (
+	page: Pick<CdpConnection, "send">,
+	options: ScreenshotOptions,
+	signal?: AbortSignal,
+	renderOffscreen = false,
 ): Promise<{
 	dataUrl: string;
 	width: number;
@@ -286,7 +337,8 @@ export const captureCdpPage = async (
 				),
 			);
 			params.clip = planned.clip;
-			params.captureBeyondViewport = options.fullPage === true;
+			params.captureBeyondViewport =
+				renderOffscreen || options.fullPage === true;
 			cut = planned.cut;
 		}
 		result = await page.send<{ data?: string }>(
@@ -329,6 +381,68 @@ const snapshotCode = (maxHtmlChars: number): string => `(() => {
     domAccessible: true
   };
 })()`;
+
+const connectBrowser = async (
+	endpoint: string,
+	signal?: AbortSignal,
+): Promise<CdpConnection> => {
+	const response = await fetch(`${endpoint}/json/version`, { signal });
+	if (!response.ok) throw new Error(`CDP returned HTTP ${response.status}.`);
+	const version = (await response.json()) as { webSocketDebuggerUrl?: string };
+	if (!version.webSocketDebuggerUrl)
+		throw new Error("CDP browser socket is missing.");
+	return CdpConnection.connect(version.webSocketDebuggerUrl, signal);
+};
+
+/** Start a visible runtime without putting a window over the user's work. */
+export const initializeBackgroundWindow = async (
+	endpoint: string,
+): Promise<void> => {
+	const browser = await connectBrowser(endpoint);
+	try {
+		await browser.send("Target.createTarget", {
+			url: BLANK_PAGE_URL,
+			newWindow: true,
+			background: true,
+			windowState: "minimized",
+		});
+	} finally {
+		browser.close();
+	}
+};
+
+const createBackgroundTarget = async (
+	endpoint: string,
+	signal?: AbortSignal,
+): Promise<CdpTarget> => {
+	const browser = await connectBrowser(endpoint, signal);
+	let targetId: string | undefined;
+	try {
+		const created = await browser.send<{ targetId: string }>(
+			"Target.createTarget",
+			{ url: BLANK_PAGE_URL, background: true },
+			signal,
+		);
+		targetId = created.targetId;
+		const response = await fetch(`${endpoint}/json/list`, { signal });
+		if (!response.ok) throw new Error(`CDP returned HTTP ${response.status}.`);
+		const targets = (await response.json()) as CdpTarget[];
+		const target = targets.find((candidate) => candidate.id === targetId);
+		if (!target?.id || !target.webSocketDebuggerUrl) {
+			throw new BrowserAutomationError(
+				"CDP_INVALID_RESPONSE",
+				"Managed Chromium returned no page target.",
+			);
+		}
+		return target;
+	} catch (error) {
+		if (targetId)
+			await browser.send("Target.closeTarget", { targetId }).catch(() => {});
+		throw error;
+	} finally {
+		browser.close();
+	}
+};
 
 export class ChromiumCdpBackend implements BrowserBackend {
 	readonly engine = "chromium" as const;
@@ -379,20 +493,7 @@ export class ChromiumCdpBackend implements BrowserBackend {
 		const url = checkedPageUrl(rawUrl);
 		const endpoint = await this.endpoint();
 		await this.hardenBrowser(endpoint, signal);
-		const response = await fetch(
-			`${endpoint}/json/new?${encodeURIComponent("about:blank")}`,
-			{
-				method: "PUT",
-				signal,
-			},
-		);
-		if (!response.ok) {
-			throw new BrowserAutomationError(
-				"CDP_TARGET_CREATE_FAILED",
-				`Managed Chromium could not create a page (HTTP ${response.status}).`,
-			);
-		}
-		const target = (await response.json()) as CdpTarget;
+		const target = await createBackgroundTarget(endpoint, signal);
 		if (!target.id || !target.webSocketDebuggerUrl) {
 			throw new BrowserAutomationError(
 				"CDP_INVALID_RESPONSE",

@@ -13,9 +13,9 @@
  * what it wanted. An empty string is not an argument; drop it and try again.
  *
  * The drop is deliberately narrow: a key is removed only when the schema itself
- * complained that it was too short, so a call that already validates is never
- * touched, and a tool that genuinely accepts `""` (a file's contents, a
- * process's stdin) keeps it, because no such complaint is raised.
+ * complained that it was too short or an invalid URL, so a call that already
+ * validates is never touched, and a tool that genuinely accepts `""` (a file's
+ * contents, a process's stdin) keeps it, because no such complaint is raised.
  *
  * **A ZodError reaching the model as JSON.** `ZodError.message` is the
  * pretty-printed issue array, so a failed call arrives in the transcript as
@@ -48,6 +48,7 @@ interface ZodLikeIssue {
 	readonly message: string;
 	readonly minimum?: number | bigint;
 	readonly origin?: string;
+	readonly format?: string;
 	/** invalid_type: the type the schema wanted. */
 	readonly expected?: string;
 	/** invalid_value: the options the schema accepts. */
@@ -150,7 +151,7 @@ const isBlankString = (value: unknown): boolean =>
  *
  * Nested paths are left alone: removing a key from inside an object the tool
  * expects to be shaped a certain way is a guess, while a top-level argument the
- * schema calls too short is simply absent.
+ * schema calls too short or an invalid URL is simply absent.
  */
 const blankKeysToDrop = (
 	error: unknown,
@@ -160,7 +161,11 @@ const blankKeysToDrop = (
 
 	const keys: string[] = [];
 	for (const issue of error.issues) {
-		if (issue.code !== "too_small") continue;
+		if (
+			issue.code !== "too_small" &&
+			!(issue.code === "invalid_format" && issue.format === "url")
+		)
+			continue;
 		if (issue.path.length !== 1) continue;
 		const key = issue.path[0];
 		if (typeof key !== "string") continue;

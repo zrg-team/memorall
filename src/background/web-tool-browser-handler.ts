@@ -15,6 +15,7 @@ import {
 } from "@/services/web-browser/web-browser-protocol";
 import { siteAccessWithheldMessage } from "@/services/web-browser/site-access";
 import { logError } from "@/utils/logger";
+import { groupAgentTab } from "./agent-tab-group";
 import {
 	hasSiteAccess,
 	isMissingContentScriptError,
@@ -245,6 +246,7 @@ const openBrowserTab = async (url: string): Promise<WebBrowserSurface> => {
 	if (typeof tab.id !== "number") {
 		throw new Error("Failed to open browser tab for web session.");
 	}
+	await groupAgentTab(tab);
 
 	return {
 		mode: "tab",
@@ -253,11 +255,6 @@ const openBrowserTab = async (url: string): Promise<WebBrowserSurface> => {
 };
 
 const openBrowserWindow = async (url: string): Promise<WebBrowserSurface> => {
-	const previousFocusedWindowId = await chrome.windows
-		.getLastFocused()
-		.then((window) => window?.id)
-		.catch(() => undefined);
-
 	const browserWindow = await chrome.windows.create({
 		url,
 		focused: false,
@@ -280,14 +277,8 @@ const openBrowserWindow = async (url: string): Promise<WebBrowserSurface> => {
 		throw new Error("Failed to resolve browser tab for web window session.");
 	}
 
-	if (
-		typeof previousFocusedWindowId === "number" &&
-		previousFocusedWindowId !== windowId
-	) {
-		await chrome.windows
-			.update(previousFocusedWindowId, { focused: true })
-			.catch(() => {});
-	}
+	// Focusing the previous browser window would steal focus from another app.
+	await groupAgentTab({ id: tabId, windowId });
 
 	return {
 		mode: "window",
@@ -503,6 +494,7 @@ const openTabInWindow = async (
 	if (typeof tab.id !== "number") {
 		throw new Error("Failed to open browser tab for web session.");
 	}
+	await groupAgentTab(tab);
 	return { mode: "tab", tabId: tab.id };
 };
 
@@ -538,9 +530,9 @@ const openInAgentWindow = (url: string): Promise<WebBrowserSurface> => {
 		const windowId = await findAgentWindow();
 		if (typeof windowId === "number") {
 			try {
-				// Shown in its window, which stays where it is behind the user's.
-				const tab = await chrome.tabs.create({ url, windowId, active: true });
+				const tab = await chrome.tabs.create({ url, windowId, active: false });
 				if (typeof tab.id === "number") {
+					await groupAgentTab(tab);
 					return { mode: "window", tabId: tab.id, windowId } as const;
 				}
 			} catch {
@@ -1083,18 +1075,46 @@ const parsePngDimensions = (
 	};
 };
 
-const handleScreenshotCommand = async (
+const captureSessionScreenshot = async (
 	request: Extract<WebBrowserCommandRequest, { command: "screenshot" }>,
 ): Promise<WebBrowserCommandResponse> => {
 	try {
 		const tab = await getTabOrThrow(request.tabId);
-		const windowId = request.windowId ?? tab.windowId;
+		let windowId = tab.windowId;
 		if (typeof windowId !== "number") {
 			throw new Error("Cannot determine window for screenshot capture.");
 		}
 
-		await chrome.tabs.update(request.tabId, { active: true });
-		await delay(150);
+		if (!tab.active) {
+			const window = await chrome.windows.get(windowId);
+			if (window.focused) {
+				// captureVisibleTab needs a selected tab. Move an agent-owned page
+				// into a background window instead of replacing the user's page.
+				const stored = (await loadStoredSurfaces()).get(request.sessionId);
+				if (!stored || stored.tabId !== request.tabId) {
+					throw new Error(
+						"Cannot capture an inactive user tab in the foreground window. Open an agent web session for background screenshots.",
+					);
+				}
+				const background = await chrome.windows.create({
+					tabId: request.tabId,
+					focused: false,
+					type: "normal",
+				});
+				if (typeof background?.id !== "number") {
+					throw new Error(
+						"Failed to create a background window for screenshot capture.",
+					);
+				}
+				windowId = background.id;
+				agentWindowId = windowId;
+				await addStoredSurface({ ...stored, mode: "window", windowId });
+				await groupAgentTab({ id: request.tabId, windowId });
+			} else {
+				await chrome.tabs.update(request.tabId, { active: true });
+			}
+			await delay(150);
+		}
 
 		if (request.fullPage || request.clip) {
 			const picture = await captureTabArea(request.tabId, windowId, {
@@ -1137,6 +1157,16 @@ const handleScreenshotCommand = async (
 	}
 };
 
+// A capture must finish before another request selects a different agent tab.
+let screenshotQueue: Promise<unknown> = Promise.resolve();
+const handleScreenshotCommand = (
+	request: Extract<WebBrowserCommandRequest, { command: "screenshot" }>,
+): Promise<WebBrowserCommandResponse> => {
+	const capture = screenshotQueue.then(() => captureSessionScreenshot(request));
+	screenshotQueue = capture.catch(() => undefined);
+	return capture;
+};
+
 const handleFetchImageCommand = async (
 	request: Extract<WebBrowserCommandRequest, { command: "fetch-image" }>,
 ): Promise<WebBrowserCommandResponse> => {
@@ -1172,65 +1202,67 @@ const handleFetchImageCommand = async (
  * Measured behaviour this works around, on a host with hotlink protection:
  * a direct fetch from the extension is refused (no Referer), a fetch from the
  * page's content script is blocked by CORS, and a tab the extension opens at the
- * image sends no Referer either — `openerTabId` does not supply one. Only a tab
- * the *page* opens carries that page's Referer, and once the tab is on the image
+ * image sends no Referer either — `openerTabId` does not supply one. Load a
+ * background copy of the source page and navigate it from within that page.
+ * The navigation carries the page's Referer, and once the tab is on the image
  * the document is same-origin with it, so the pixels can be read off a canvas.
  * Re-fetching inside that tab does not work: the request would carry the image
  * tab's own Referer and be refused again.
  */
-const findTabOpenedBy = async (
-	openerTabId: number,
-	url: string,
-	knownTabIds: ReadonlySet<number>,
+const waitForImageNavigation = async (
+	tabId: number,
+	sourceUrl: string,
 	timeoutMs: number,
-): Promise<chrome.tabs.Tab> => {
+): Promise<void> => {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
-		const tabs = await chrome.tabs.query({});
-		const opened = tabs.find(
-			(tab) =>
-				typeof tab.id === "number" &&
-				!knownTabIds.has(tab.id) &&
-				(tab.openerTabId === openerTabId ||
-					tab.url === url ||
-					tab.pendingUrl === url),
-		);
-		if (opened) return opened;
+		const tab = await getTabOrThrow(tabId);
+		if (tab.status === "loading" || (tab.url && tab.url !== sourceUrl)) return;
 		await delay(100);
 	}
-	throw new Error("The page did not open the image in a tab.");
+	throw new Error("The background page did not navigate to the image.");
 };
 
 const handleCaptureImageCommand = async (
 	request: Extract<WebBrowserCommandRequest, { command: "capture-image" }>,
 ): Promise<WebBrowserCommandResponse> => {
 	const timeoutMs = request.timeoutMs ?? 20_000;
+	const deadline = Date.now() + timeoutMs;
+	const remaining = () => Math.max(1, deadline - Date.now());
 	let imageTabId: number | undefined;
 	try {
-		const known = new Set(
-			(await chrome.tabs.query({}))
-				.map((tab) => tab.id)
-				.filter((id): id is number => typeof id === "number"),
-		);
+		const source = await getTabOrThrow(request.tabId);
+		if (!source.url) throw new Error("The source page has no URL.");
+		const imageTab = await chrome.tabs.create({
+			url: source.url,
+			windowId: source.windowId,
+			openerTabId: request.tabId,
+			active: false,
+		});
+		if (typeof imageTab.id !== "number")
+			throw new Error("Failed to open a background image tab.");
+		imageTabId = imageTab.id;
+		await groupAgentTab(imageTab);
+		await waitForTabReady(imageTabId, remaining());
+		const sourceUrl = (await getTabOrThrow(imageTabId)).url ?? source.url;
 
-		await sendContentCommand(
-			request.tabId,
-			{
-				source: WEB_CONTENT_COMMAND_SOURCE,
-				type: "web-tool:open-image-tab",
-				url: request.url,
-			},
-			Math.min(timeoutMs, 8_000),
-		);
-
-		const imageTab = await findTabOpenedBy(
-			request.tabId,
-			request.url,
-			known,
-			Math.min(timeoutMs, 8_000),
-		);
-		imageTabId = imageTab.id as number;
-		await waitForTabReady(imageTabId, timeoutMs);
+		if (sourceUrl !== request.url) {
+			await sendContentCommand(
+				imageTabId,
+				{
+					source: WEB_CONTENT_COMMAND_SOURCE,
+					type: "web-tool:navigate-to-image",
+					url: request.url,
+				},
+				Math.min(remaining(), 8_000),
+			);
+			await waitForImageNavigation(
+				imageTabId,
+				sourceUrl,
+				Math.min(remaining(), 8_000),
+			);
+			await waitForTabReady(imageTabId, remaining());
+		}
 
 		const response = await sendContentCommand(
 			imageTabId,
@@ -1238,7 +1270,7 @@ const handleCaptureImageCommand = async (
 				source: WEB_CONTENT_COMMAND_SOURCE,
 				type: "web-tool:read-rendered-image",
 			},
-			Math.min(timeoutMs, 10_000),
+			Math.min(remaining(), 10_000),
 		);
 		if (response.type !== "web-tool:read-rendered-image-result") {
 			throw new Error("Invalid rendered-image response.");
@@ -1294,12 +1326,11 @@ const handleCloseCommand = async (
 /**
  * Raise the session's tab for the user.
  *
- * Session tabs are opened unfocused on purpose (`openBrowserTab` passes
- * `active: false`, and `openBrowserWindow` restores the previously focused
- * window), so a page the agent is stuck on — a CAPTCHA, a sign-in gate — stays
- * invisible until something explicitly surfaces it. The stored surface wins over
- * the ids on the request because it tracks the tab across a mid-session
- * recreation.
+ * Session tabs are opened unfocused on purpose: tabs use `active: false`, and
+ * windows use `focused: false`. A page the agent is stuck on — a CAPTCHA, a
+ * sign-in gate — stays invisible until something explicitly surfaces it. The
+ * stored surface wins over the ids on the request because it tracks the tab
+ * across a mid-session recreation.
  */
 const handleBringToFrontCommand = async (
 	request: Extract<WebBrowserCommandRequest, { command: "bring-to-front" }>,

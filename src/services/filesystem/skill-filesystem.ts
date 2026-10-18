@@ -6,6 +6,7 @@ import {
 import { SANDBOX_FS_PREFIX } from "@/services/filesystem/sandbox-paths";
 import { platform } from "@/platform/current";
 import { logError, logInfo } from "@/utils/logger";
+import { publishSkillChange } from "@/services/skill-events";
 
 /**
  * Skills live on their own root, deliberately outside `/home/files`.
@@ -694,6 +695,7 @@ export class SkillFileSystem {
 		await fs.promises.writeFile(target, new TextEncoder().encode(content));
 
 		logInfo(`Skill written: ${target}`);
+		publishSkillChange({ type: "library", name });
 
 		return {
 			name,
@@ -739,12 +741,14 @@ export class SkillFileSystem {
 			await this.ensureDirectory(`${dir}/${segments.join("/")}`);
 		}
 		await fs.promises.writeFile(`${dir}/${relPath}`, data);
+		publishSkillChange({ type: "library", name });
 	}
 
 	async deleteSkillResource(name: string, relPath: string): Promise<void> {
 		await this.initialize();
 		this.assertSafeResourcePath(relPath);
 		await fs.promises.unlink(`${this.folderSkillDir(name)}/${relPath}`);
+		publishSkillChange({ type: "library", name });
 	}
 
 	/** Converts `<slug>.md` into `<slug>/SKILL.md`. No-op if already a folder. */
@@ -768,6 +772,11 @@ export class SkillFileSystem {
 	 * Delete a skill by name, in whichever format it uses.
 	 */
 	async deleteSkill(name: string): Promise<void> {
+		await this.deleteSkillFiles(name);
+		publishSkillChange({ type: "library", name });
+	}
+
+	private async deleteSkillFiles(name: string): Promise<void> {
 		await this.initialize();
 
 		const format = await this.resolveFormat(name);
@@ -845,7 +854,7 @@ export class SkillFileSystem {
 
 		// Replacing a folder skill with a file skill would strand the old
 		// directory, so clear whatever is there first.
-		if (existing) await this.deleteSkill(candidate.name);
+		if (existing) await this.deleteSkillFiles(candidate.name);
 
 		if (candidate.format === "folder" || candidate.resources.length) {
 			await this.ensureDirectory(this.folderSkillDir(candidate.name));
@@ -854,11 +863,10 @@ export class SkillFileSystem {
 				new TextEncoder().encode(candidate.entryContent),
 			);
 			for (const resource of candidate.resources) {
-				await this.writeSkillResource(
-					candidate.name,
-					resource.path,
-					resource.data,
-				);
+				this.assertSafeResourcePath(resource.path);
+				const target = `${this.folderSkillDir(candidate.name)}/${resource.path}`;
+				await this.ensureDirectory(target.slice(0, target.lastIndexOf("/")));
+				await fs.promises.writeFile(target, resource.data);
 			}
 		} else {
 			await fs.promises.writeFile(
@@ -867,6 +875,7 @@ export class SkillFileSystem {
 			);
 		}
 
+		publishSkillChange({ type: "library", name: candidate.name });
 		return {
 			name: candidate.name,
 			description: candidate.description,
