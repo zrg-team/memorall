@@ -7,6 +7,7 @@
 // Run after upgrading @huggingface/transformers:
 //   node tools/generate-pipeline-architectures.mjs
 // (a unit test fails while the checked-in table is stale).
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -87,6 +88,15 @@ if (
 	fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 ) {
 	const data = await readPipelineArchitectures();
-	writeFileSync(OUTPUT, renderPipelineArchitectures(data));
+	const formatted = execFileSync(
+		process.execPath,
+		[
+			path.join(root, "node_modules/@biomejs/biome/bin/biome"),
+			"format",
+			`--stdin-file-path=${OUTPUT}`,
+		],
+		{ cwd: root, input: renderPipelineArchitectures(data), encoding: "utf8" },
+	);
+	writeFileSync(OUTPUT, formatted);
 	console.log(`Wrote ${path.relative(root, OUTPUT)}`);
 }

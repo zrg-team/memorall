@@ -10,18 +10,18 @@ export interface PipelineArchitectures {
 
 export const PIPELINE_TASK_ALIASES: Readonly<Record<string, string>> = {
 	"sentiment-analysis": "text-classification",
-	"ner": "token-classification",
-	"asr": "automatic-speech-recognition",
+	ner: "token-classification",
+	asr: "automatic-speech-recognition",
 	"text-to-speech": "text-to-audio",
-	"embeddings": "feature-extraction"
+	embeddings: "feature-extraction",
 };
 
 export const PIPELINE_ARCHITECTURES: Readonly<
 	Record<string, PipelineArchitectures>
 > = {
 	"text-classification": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"AlbertForSequenceClassification",
 			"BartForSequenceClassification",
 			"BertForSequenceClassification",
@@ -63,12 +63,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"roformer",
 			"squeezebert",
 			"xlm",
-			"xlm-roberta"
-		]
+			"xlm-roberta",
+		],
 	},
 	"token-classification": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"BertForTokenClassification",
 			"CamembertForTokenClassification",
 			"ConvBertForTokenClassification",
@@ -102,12 +102,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"roberta",
 			"roformer",
 			"xlm",
-			"xlm-roberta"
-		]
+			"xlm-roberta",
+		],
 	},
 	"question-answering": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"AlbertForQuestionAnswering",
 			"BertForQuestionAnswering",
 			"CamembertForQuestionAnswering",
@@ -139,12 +139,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"roformer",
 			"squeezebert",
 			"xlm",
-			"xlm-roberta"
-		]
+			"xlm-roberta",
+		],
 	},
 	"fill-mask": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"AlbertForMaskedLM",
 			"BertForMaskedLM",
 			"CamembertForMaskedLM",
@@ -182,12 +182,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"roformer",
 			"squeezebert",
 			"xlm",
-			"xlm-roberta"
-		]
+			"xlm-roberta",
+		],
 	},
-	"summarization": {
-		"open": false,
-		"architectures": [
+	summarization: {
+		open: false,
+		architectures: [
 			"BartForConditionalGeneration",
 			"BlenderbotForConditionalGeneration",
 			"BlenderbotSmallForConditionalGeneration",
@@ -205,12 +205,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"marian",
 			"mbart",
 			"mt5",
-			"t5"
-		]
+			"t5",
+		],
 	},
-	"translation": {
-		"open": false,
-		"architectures": [
+	translation: {
+		open: false,
+		architectures: [
 			"BartForConditionalGeneration",
 			"BlenderbotForConditionalGeneration",
 			"BlenderbotSmallForConditionalGeneration",
@@ -228,12 +228,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"marian",
 			"mbart",
 			"mt5",
-			"t5"
-		]
+			"t5",
+		],
 	},
 	"text2text-generation": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"BartForConditionalGeneration",
 			"BlenderbotForConditionalGeneration",
 			"BlenderbotSmallForConditionalGeneration",
@@ -251,12 +251,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"marian",
 			"mbart",
 			"mt5",
-			"t5"
-		]
+			"t5",
+		],
 	},
 	"text-generation": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"AfmoeForCausalLM",
 			"ApertusForCausalLM",
 			"ArceeForCausalLM",
@@ -406,12 +406,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"trocr",
 			"vaultgemma",
 			"youtu",
-			"zaya"
-		]
+			"zaya",
+		],
 	},
 	"zero-shot-classification": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"AlbertForSequenceClassification",
 			"BartForSequenceClassification",
 			"BertForSequenceClassification",
@@ -453,12 +453,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"roformer",
 			"squeezebert",
 			"xlm",
-			"xlm-roberta"
-		]
+			"xlm-roberta",
+		],
 	},
 	"audio-classification": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"ASTForAudioClassification",
 			"HubertForSequenceClassification",
 			"UniSpeechForSequenceClassification",
@@ -472,16 +472,16 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"unispeech-sat",
 			"wav2vec2",
 			"wav2vec2-bert",
-			"wavlm"
-		]
+			"wavlm",
+		],
 	},
 	"zero-shot-audio-classification": {
-		"open": true,
-		"architectures": []
+		open: true,
+		architectures: [],
 	},
 	"automatic-speech-recognition": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"CohereAsrForConditionalGeneration",
 			"HubertForCTC",
 			"LiteWhisperForConditionalGeneration",
@@ -505,12 +505,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"wav2vec2",
 			"wav2vec2-bert",
 			"wavlm",
-			"whisper"
-		]
+			"whisper",
+		],
 	},
 	"text-to-audio": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"MusicgenForConditionalGeneration",
 			"SpeechT5ForTextToSpeech",
 			"SupertonicForConditionalGeneration",
@@ -518,23 +518,23 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"musicgen",
 			"speecht5",
 			"supertonic",
-			"vits"
-		]
+			"vits",
+		],
 	},
 	"image-to-text": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"Idefics3ForConditionalGeneration",
 			"SmolVLMForConditionalGeneration",
 			"VisionEncoderDecoderModel",
 			"idefics3",
 			"smolvlm",
-			"vision-encoder-decoder"
-		]
+			"vision-encoder-decoder",
+		],
 	},
 	"image-classification": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"BeitForImageClassification",
 			"ConvNextForImageClassification",
 			"ConvNextV2ForImageClassification",
@@ -578,12 +578,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"segformer",
 			"swin",
 			"vit",
-			"vit_msn"
-		]
+			"vit_msn",
+		],
 	},
 	"image-segmentation": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"CLIPSegForImageSegmentation",
 			"DetrForSegmentation",
 			"MaskFormerForInstanceSegmentation",
@@ -608,12 +608,12 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"modnet",
 			"sapiens",
 			"segformer",
-			"swin"
-		]
+			"swin",
+		],
 	},
 	"background-removal": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"CLIPSegForImageSegmentation",
 			"DetrForSegmentation",
 			"MaskFormerForInstanceSegmentation",
@@ -638,16 +638,16 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"modnet",
 			"sapiens",
 			"segformer",
-			"swin"
-		]
+			"swin",
+		],
 	},
 	"zero-shot-image-classification": {
-		"open": true,
-		"architectures": []
+		open: true,
+		architectures: [],
 	},
 	"object-detection": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"DFineForObjectDetection",
 			"DetrForObjectDetection",
 			"RFDetrForObjectDetection",
@@ -661,37 +661,31 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"rt_detr",
 			"rt_detr_v2",
 			"table-transformer",
-			"yolos"
-		]
+			"yolos",
+		],
 	},
 	"zero-shot-object-detection": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"GroundingDinoForObjectDetection",
 			"OwlViTForObjectDetection",
 			"Owlv2ForObjectDetection",
 			"grounding-dino",
 			"owlv2",
-			"owlvit"
-		]
+			"owlvit",
+		],
 	},
 	"document-question-answering": {
-		"open": false,
-		"architectures": [
-			"VisionEncoderDecoderModel",
-			"vision-encoder-decoder"
-		]
+		open: false,
+		architectures: ["VisionEncoderDecoderModel", "vision-encoder-decoder"],
 	},
 	"image-to-image": {
-		"open": false,
-		"architectures": [
-			"Swin2SRForImageSuperResolution",
-			"swin2sr"
-		]
+		open: false,
+		architectures: ["Swin2SRForImageSuperResolution", "swin2sr"],
 	},
 	"depth-estimation": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"CHMv2ForDepthEstimation",
 			"DPTForDepthEstimation",
 			"DepthAnythingForDepthEstimation",
@@ -707,20 +701,20 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"glpn",
 			"metric3d",
 			"metric3dv2",
-			"sapiens"
-		]
+			"sapiens",
+		],
 	},
 	"feature-extraction": {
-		"open": true,
-		"architectures": []
+		open: true,
+		architectures: [],
 	},
 	"image-feature-extraction": {
-		"open": true,
-		"architectures": []
+		open: true,
+		architectures: [],
 	},
 	"image-text-to-text": {
-		"open": false,
-		"architectures": [
+		open: false,
+		architectures: [
 			"Florence2ForConditionalGeneration",
 			"Gemma3ForConditionalGeneration",
 			"Gemma3nForConditionalGeneration",
@@ -762,7 +756,7 @@ export const PIPELINE_ARCHITECTURES: Readonly<
 			"qwen3_5_moe",
 			"qwen3_vl",
 			"qwen3_vl_moe",
-			"smolvlm"
-		]
-	}
+			"smolvlm",
+		],
+	},
 };
