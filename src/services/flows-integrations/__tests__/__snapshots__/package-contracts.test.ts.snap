@@ -2063,7 +2063,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
     },
   },
   {
-    "description": "Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, save a screenshot of the page to Files, or write and save in the Editor. Returns the new screen.",
+    "description": "Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, save a screenshot of the page to Files, or write and save in the Editor. A ref click needs only { action: "click", ref: "b12" }; omit unused fields. Returns the new screen.",
     "name": "memon_act",
     "parameters": {
       "description": "Act on the computer screen.",
@@ -2124,7 +2124,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "string",
         },
         "region": {
-          "description": "screenshot: only this part, in CSS pixels, as the screen gives places ("[b9] canvas 800×600 at 0,120" is { x: 0, y: 120, width: 800, height: 600 }): of the view, or with capture "page", of the page from its top.",
+          "description": "screenshot only: capture this part, in CSS pixels, with width and height at least 1 ("[b9] canvas 800×600 at 0,120" is { x: 0, y: 120, width: 800, height: 600 }): of the view, or with capture "page", of the page from its top. Omit for other actions, including click.",
           "properties": {
             "height": {
               "type": "number",
@@ -2152,7 +2152,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
           "type": "boolean",
         },
         "tab": {
-          "description": "select_tab/close_tab: the tab number from the screen.",
+          "description": "select_tab/close_tab only: the whole-number tab number from the screen, starting at 1. Omit for other actions, including click.",
           "type": "number",
         },
         "text": {
