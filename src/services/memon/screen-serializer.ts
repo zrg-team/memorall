@@ -15,6 +15,7 @@ import {
 	memonHomePaths,
 } from "./constants";
 import { currentTask, isTaskOpen, taskProgress } from "./tasks-file";
+import { terminalRunsInFront } from "./terminal/terminal-state";
 import type {
 	MemonFileEntry,
 	MemonFilesState,
@@ -25,7 +26,6 @@ import type {
 	MemonTerminalTab,
 	MemonWindowState,
 } from "./types";
-import { terminalRunsInFront } from "./terminal/terminal-state";
 
 /**
  * The screen the model reads. Pure, so the Computer panel's "Screen text"

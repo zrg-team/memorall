@@ -334,6 +334,40 @@ describe("agent sandbox tools", () => {
 });
 
 describe("sandbox tool profiles", () => {
+	it("keeps native execution and previews available without optional REPL or render capabilities", () => {
+		expect(
+			getSandboxToolsForProfile("web_app", [
+				"runtime.code",
+				"runtime.file",
+				"runtime.command",
+				"process.background",
+				"process.stdin",
+				"packages.install",
+				"packages.manifest",
+				"preview.start",
+				"preview.request",
+				"network.fetch",
+			]),
+		).toEqual(SANDBOX_WEB_APP_TOOLS);
+		const python = readSandboxPython({
+			python: {
+				runtime: "native",
+				packages: [],
+				notes: ["Use a virtual environment."],
+			},
+		});
+		const prompt = buildBrowserSandboxPrompt(
+			SANDBOX_WEB_APP_TOOLS,
+			python,
+			[],
+			[],
+			"qemu-ubuntu-minimal",
+		);
+		expect(prompt).toContain("Ubuntu Linux VM");
+		expect(prompt).toContain("Python runs inside the Linux VM");
+		expect(prompt).not.toContain("Pyodide");
+		expect(prompt).not.toContain("AlmostNode");
+	});
 	it("exposes six sandbox tools by default and snapshots only when stateful", () => {
 		expect(SANDBOX_EXECUTION_TOOLS).toHaveLength(4);
 		expect(SANDBOX_WEB_APP_TOOLS).toHaveLength(6);
@@ -362,7 +396,7 @@ describe("sandbox tool profiles", () => {
 					(capability) => capability !== "runtime.repl",
 				),
 			),
-		).toEqual(["sandbox_inspect", "sandbox_process"]);
+		).toEqual(["sandbox_inspect", "sandbox_run", "sandbox_process"]);
 		expect(
 			getSandboxToolsForProfile(
 				"web_app",

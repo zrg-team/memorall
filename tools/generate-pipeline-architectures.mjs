@@ -7,6 +7,7 @@
 // Run after upgrading @huggingface/transformers:
 //   node tools/generate-pipeline-architectures.mjs
 // (a unit test fails while the checked-in table is stale).
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -27,7 +28,21 @@ export async function readPipelineArchitectures(projectRoot = root) {
 		).href
 	);
 	const table = {};
-	for (const [task, spec] of Object.entries(pipelines.SUPPORTED_TASKS)) {
+	const { AutoModelForImageTextToText } = await import(
+		pathToFileURL(
+			path.join(
+				projectRoot,
+				"node_modules/@huggingface/transformers/src/models/auto/modeling_auto.js",
+			),
+		).href
+	);
+	// OCR uses AutoProcessor and this model class directly; the installed
+	// library has no image-text-to-text pipeline wrapper yet.
+	const tasks = {
+		...pipelines.SUPPORTED_TASKS,
+		"image-text-to-text": { model: AutoModelForImageTextToText },
+	};
+	for (const [task, spec] of Object.entries(tasks)) {
 		const models = Array.isArray(spec.model) ? spec.model : [spec.model];
 		const accepted = new Set();
 		let open = false;
@@ -73,6 +88,15 @@ if (
 	fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 ) {
 	const data = await readPipelineArchitectures();
-	writeFileSync(OUTPUT, renderPipelineArchitectures(data));
+	const formatted = execFileSync(
+		process.execPath,
+		[
+			path.join(root, "node_modules/@biomejs/biome/bin/biome"),
+			"format",
+			`--stdin-file-path=${OUTPUT}`,
+		],
+		{ cwd: root, input: renderPipelineArchitectures(data), encoding: "utf8" },
+	);
+	writeFileSync(OUTPUT, formatted);
 	console.log(`Wrote ${path.relative(root, OUTPUT)}`);
 }

@@ -1,5 +1,5 @@
-import type { MediaCategory } from "@/services/llm/interfaces/model-category";
 import type { SandboxToolName } from "@memorall/agent-harness-flows/tools/agent-sandbox/profiles";
+import type { MediaCategory } from "@/services/llm/interfaces/model-category";
 import type { HostedAppId } from "./apps/hosted/catalog";
 
 export const MEMON_STEP_NAME = "memon-feature" as const;

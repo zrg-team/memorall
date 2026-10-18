@@ -18,10 +18,10 @@ const schema = z
 		waitSeconds: z
 			.number()
 			.min(1)
-			.max(60)
+			.max(86_400)
 			.optional()
 			.describe(
-				"Wait this long first (a page loading, a server starting, the user acting), then read the screen.",
+				"Wait this many seconds first (1–86400, up to 24 hours; a page loading, a server starting, the user acting), then read the screen.",
 			),
 	})
 	.describe("Read the computer screen.");

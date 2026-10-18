@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/main/components/ui/button";
 import { PageHeader } from "@/main/components/ui/page-header";
 import { useChatStore } from "@/main/stores/chat";
+import { isUsageStorageCorruption } from "@/services/database/usage-storage-recovery";
 import {
 	isKnownProvider,
 	PROVIDER_REGISTRY,
@@ -55,6 +56,7 @@ import { TokenMixCard } from "./TokenMixCard";
 import { ToolTableCard } from "./ToolTableCard";
 import { TrendCard } from "./TrendCard";
 import { UsageFilterBar } from "./UsageFilterBar";
+import { UsageStorageRecovery } from "./UsageStorageRecovery";
 import { assignSeriesColors, useUsagePalette } from "./usage-palette";
 import type { UsageViewContext } from "./usage-view";
 
@@ -393,7 +395,10 @@ export const UsageDashboard: React.FC = () => {
 						</Button>
 					</div>
 				) : null}
-				{!hasAnyUsage ? (
+				{error && isUsageStorageCorruption(error) ? (
+					<UsageStorageRecovery error={error} onRecovered={refresh} />
+				) : null}
+				{!hasAnyUsage && !error ? (
 					<div className="mx-auto flex max-w-md flex-col items-center gap-2 px-6 py-16 text-center">
 						<Coins size={28} className="text-muted-foreground" />
 						<h2 className="text-base font-semibold">
@@ -405,7 +410,7 @@ export const UsageDashboard: React.FC = () => {
 							</p>
 						)}
 					</div>
-				) : (
+				) : hasAnyUsage ? (
 					<div
 						className={cn(
 							"flex flex-col gap-4 p-4 transition-opacity",
@@ -455,7 +460,7 @@ export const UsageDashboard: React.FC = () => {
 							</ul>
 						</details>
 					</div>
-				)}
+				) : null}
 			</div>
 		</div>
 	);

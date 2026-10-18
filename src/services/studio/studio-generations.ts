@@ -30,6 +30,13 @@ import {
 	STUDIO_USAGE_SOURCE,
 } from "@/services/model-usage/model-usage-ledger";
 import type { StudioContentPart } from "@/types/studio";
+import type {
+	ChatCompletionContentPart,
+	ChatCompletionResponse,
+} from "@/types/openai";
+import { bytesToBase64 } from "@/services/llm/utils/media-encoding";
+import { mediaPayloadToBytes } from "@/services/llm/utils/media-payload";
+import { ocrInstructions } from "@/services/llm/utils/ocr-instructions";
 
 /**
  * Where a generation's model requests are booked. Every Studio run is
@@ -61,6 +68,87 @@ export interface StudioGenerationResult {
 	parts: StudioContentPart[];
 	/** Text the result is about, when it differs from the input. */
 	content?: string;
+}
+
+export interface OCROptions extends StudioRunContext {
+	model: CurrentModelInfo;
+	image: Extract<MediaPayload, { kind: "file" }>;
+	fileName: string;
+	pageNumber?: number;
+	pageCount?: number;
+	batchId?: string;
+	selectedPages?: number[];
+	/** Sent exactly as configured for this model; empty means image-only. */
+	instructions?: string;
+	/** Request the generic layout format unless an explicit instruction is set. */
+	grounding?: boolean;
+	signal?: AbortSignal;
+}
+
+export async function runOCRGeneration(
+	options: OCROptions,
+): Promise<StudioGenerationResult> {
+	options.signal?.throwIfAborted();
+	const prompt = ocrInstructions({
+		...options,
+		local: options.model.provider === "transformer-media",
+	});
+	if (options.model.provider === "transformer-media") {
+		const result = await llmOf(options).imagesToolsFor(
+			options.model.serviceName,
+			{
+				model: options.model.modelId,
+				task: "image-to-text",
+				image: options.image,
+				options: { prompt },
+				signal: options.signal,
+			},
+		);
+		options.signal?.throwIfAborted();
+		if (!result.text?.trim())
+			throw new Error(
+				"The local OCR model returned no text. Try a clearer page or another model.",
+			);
+		return {
+			parts: [{ type: "text", text: result.text.trim(), role: "transcript" }],
+		};
+	}
+	const bytes = await mediaPayloadToBytes(options.image);
+	options.signal?.throwIfAborted();
+	const content: ChatCompletionContentPart[] = [
+		{
+			type: "image_url",
+			image_url: {
+				url: `data:${options.image.mimeType};base64,${bytesToBase64(bytes)}`,
+			},
+		},
+	];
+	if (prompt) content.push({ type: "text", text: prompt });
+	const response = (await llmOf(options).chatCompletionsFor(
+		options.model.serviceName,
+		{
+			model: options.model.modelId,
+			messages: [{ role: "user", content }],
+			stream: false,
+			max_tokens: 8192,
+			temperature: 0.2,
+			top_p: 0.9,
+			signal: options.signal,
+		},
+	)) as ChatCompletionResponse;
+	options.signal?.throwIfAborted();
+	const choice = response.choices?.[0];
+	if (choice?.finish_reason === "length") {
+		throw new Error(
+			"OCR reached the output limit. Try a cropped image or a model with a larger output limit.",
+		);
+	}
+	const text = choice?.message.content?.trim();
+	if (!text)
+		throw new Error(
+			"The model returned no text. Choose an OCR or vision model and try again.",
+		);
+	return { parts: [{ type: "text", text, role: "transcript" }] };
 }
 
 export interface SpeechOptions extends StudioRunContext {

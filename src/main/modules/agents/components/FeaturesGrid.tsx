@@ -389,7 +389,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 							<p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
 								{ta("featuresSection.core")}
 							</p>
-							<div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 auto-rows-[136px]">
+							<div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 auto-rows-[minmax(136px,auto)]">
 								{coreFeatures.map(renderFeatureCard)}
 							</div>
 						</div>
@@ -400,7 +400,7 @@ export const FeaturesGrid: React.FC<FeaturesGridProps> = ({ summary }) => {
 							<p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
 								{ta("featuresSection.other")}
 							</p>
-							<div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 auto-rows-[136px]">
+							<div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 auto-rows-[minmax(136px,auto)]">
 								{visibleOtherFeatures.map(renderFeatureCard)}
 							</div>
 						</div>

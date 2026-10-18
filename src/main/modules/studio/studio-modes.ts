@@ -6,6 +6,7 @@ import {
 	MessageSquare,
 	Mic,
 	Music,
+	ScanText,
 	TextSearch,
 	Wand2,
 } from "lucide-react";
@@ -56,6 +57,14 @@ export const STUDIO_MODE_DESCRIPTORS: readonly StudioModeDescriptor[] = [
 		label: "Image",
 		shortLabel: "Image",
 		description: "Create images from a description.",
+	},
+	{
+		mode: "ocr",
+		icon: ScanText,
+		label: "OCR",
+		shortLabel: "OCR",
+		description:
+			"Extract text, tables and Markdown from images and scanned PDFs.",
 	},
 	{
 		mode: "image-tools",

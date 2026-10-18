@@ -310,7 +310,7 @@
 				"description": "[Legacy] Basic file tools. Use documents-fs-feature instead."
 			},
 			"nodejsSandboxFeature": {
-				"name": "Node.js Sandbox",
+				"name": "Sandbox",
 				"description": "Execute JavaScript/TypeScript, run shell commands, install packages, and start servers in an isolated sandbox."
 			},
 			"webFeature": {

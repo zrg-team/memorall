@@ -262,6 +262,11 @@
 		"files": "Files",
 		"toggleType": "{{type}} index for {{folder}}",
 		"indexing": "Indexing…",
+		"progress": {
+			"label": "{{type}} indexing progress for {{folder}}",
+			"counts": "{{successful}} successful · {{indexing}} indexing · {{total}} total files",
+			"failed": "{{count}} failed"
+		},
 		"turnedOff": "Turned off here",
 		"rebuild": "Rebuild",
 		"addHint": "You can also add or remove an index with the Indexes button, a folder's menu, or Index on an open file.",

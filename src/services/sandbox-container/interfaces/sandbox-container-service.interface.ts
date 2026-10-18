@@ -49,6 +49,8 @@ export interface ISandboxContainerService {
 	isReady(): boolean;
 	getInitializedAt(): number | null;
 	initialize(): Promise<void>;
+	/** Native startup includes restoring the saved workspace before accepting input. */
+	prepareWorkspace?(): Promise<void>;
 	dispose(): Promise<void>;
 	request<T extends SandboxOperation>(
 		operation: T,

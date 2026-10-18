@@ -1,5 +1,10 @@
 # Sandbox Container Architecture
 
+Desktop builds route this same service to the native Ubuntu/QEMU sandbox.
+See [Desktop Linux sandbox](./desktop-vm-sandbox.md) for that transport, resource
+packaging, security boundary, and tests. The iframe and service-worker paths
+below describe the extension and web runtime.
+
 This document captures the full sandbox container flow in this repository with emphasis on:
 
 - thread responsibilities

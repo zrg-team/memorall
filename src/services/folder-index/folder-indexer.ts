@@ -16,6 +16,7 @@ import type { IndexStoreIO, LibraryIO } from "./storage";
 import type {
 	FolderIndexConfig,
 	FolderIndexFileEntry,
+	FolderIndexProgress,
 	FolderIndexSettings,
 	FolderIndexState,
 	FolderIndexSyncResult,
@@ -36,6 +37,7 @@ export class FolderIndexer {
 	/** Roots being synced, as "type:root", for the settings' progress. */
 	private readonly running = new Set<string>();
 	private readonly activity = new Map<string, "checking" | "indexing">();
+	private readonly progress = new Map<string, FolderIndexProgress>();
 	/** Syncs requested but not started, by root: requests in between share one. */
 	private readonly queued = new Map<
 		string,
@@ -219,6 +221,12 @@ export class FolderIndexer {
 					(other) => other !== rootPath && isSameOrInside(other, rootPath),
 				);
 				if (controller.signal.aborted) return null;
+				this.progress.set(key, {
+					total: files.length,
+					successful: 0,
+					indexing: 0,
+					failed: 0,
+				});
 				if (typeId !== EMBEDDING_INDEX_TYPE_ID)
 					this.activity.set(key, "indexing");
 				const result = await type.sync(root, files, {
@@ -227,12 +235,14 @@ export class FolderIndexer {
 					batchSize: config.settings.embeddingBatchSize,
 					pauseMs: config.settings.embeddingPauseMs,
 					onActivity: () => this.activity.set(key, "indexing"),
+					onProgress: (progress) => this.progress.set(key, { ...progress }),
 				});
 				return { ...result, skipped: result.skipped + skipped };
 			} finally {
 				this.running.delete(key);
 				this.active.delete(typeId);
 				this.activity.delete(key);
+				this.progress.delete(key);
 			}
 		});
 		this.queued.set(key, run);
@@ -402,6 +412,7 @@ export class FolderIndexer {
 		FolderIndexState & {
 			running: string[];
 			activity: Record<string, "checking" | "indexing">;
+			progress: Record<string, FolderIndexProgress>;
 			queued: string[];
 			changesDueAt?: number;
 		}
@@ -445,6 +456,7 @@ export class FolderIndexer {
 			folders,
 			running: [...this.running],
 			activity: Object.fromEntries(this.activity),
+			progress: Object.fromEntries(this.progress),
 			queued: [...this.queued.keys()],
 			...(this.changesDueAt !== null
 				? { changesDueAt: this.changesDueAt }

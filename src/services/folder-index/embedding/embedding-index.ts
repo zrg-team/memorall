@@ -18,6 +18,7 @@ import type { IndexStoreIO, LibraryIO } from "../storage";
 import type {
 	FolderIndexType,
 	FolderIndexSyncResult,
+	FolderIndexSyncOptions,
 	IndexedFileInfo,
 } from "../types";
 import { extractEmbeddingChunks } from "./chunks";
@@ -193,13 +194,7 @@ export class EmbeddingIndex implements FolderIndexType {
 	async sync(
 		root: string,
 		files: IndexedFileInfo[],
-		options: {
-			nestedRoots?: string[];
-			signal?: AbortSignal;
-			batchSize?: number;
-			pauseMs?: number;
-			onActivity?: () => void;
-		} = {},
+		options: FolderIndexSyncOptions = {},
 	): Promise<FolderIndexSyncResult> {
 		root = normalizeFolderPath(root);
 		const identity = this.identity();
@@ -258,16 +253,26 @@ export class EmbeddingIndex implements FolderIndexType {
 		if (result.removed) await save(true);
 		let processedFiles = 0;
 		let burst = 0;
+		const reportProgress = (indexing = 0) =>
+			options.onProgress?.({
+				total: files.length,
+				successful: result.created + result.updated + result.unchanged,
+				indexing,
+				failed: result.skipped,
+			});
+		reportProgress();
 		for (const file of files) {
 			if (options.signal?.aborted) {
 				await save(true);
 				return result;
 			}
+			reportProgress(1);
 			const before = manifest.files[file.path];
 			const sameSource =
 				before?.size === file.size && before.modifiedAt === file.modifiedAt;
 			if (sameSource && before.error && (before.retryAfter ?? 0) > now()) {
 				result.skipped++;
+				reportProgress();
 				continue;
 			}
 			if (
@@ -279,6 +284,7 @@ export class EmbeddingIndex implements FolderIndexType {
 					: await this.document(root, file.path, identity.fingerprint))
 			) {
 				result.unchanged++;
+				reportProgress();
 				continue;
 			}
 			let checkpoint: () => Promise<void> = async () => {};
@@ -308,6 +314,7 @@ export class EmbeddingIndex implements FolderIndexType {
 						complete: true,
 					};
 					result.unchanged++;
+					reportProgress();
 					dirty = true;
 					completedSinceSave++;
 					await save();
@@ -451,6 +458,7 @@ export class EmbeddingIndex implements FolderIndexType {
 				};
 				result.skipped++;
 			}
+			reportProgress();
 			dirty = true;
 			completedSinceSave++;
 			await save();

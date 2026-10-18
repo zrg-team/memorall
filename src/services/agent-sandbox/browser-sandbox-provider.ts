@@ -1,16 +1,4 @@
-import { v4 as nanoid } from "@/utils/uuid";
 import { assertJsonValue, type JsonValue } from "@memorall/agent-harness-core";
-import type { ISandboxContainerService } from "@/services/sandbox-container";
-import { INSTALLED_COMMANDS } from "@/services/sandbox-container/installed-commands";
-import {
-	BUNDLED_PYTHON_PACKAGES,
-	BUNDLED_PYTHON_NOTES,
-	BUNDLED_PYTHON_SUMMARY,
-} from "@/services/sandbox-container/python-packages";
-import type {
-	SandboxCommandResult as ContainerCommandResult,
-	SandboxServerInfo as ContainerServerInfo,
-} from "@/services/sandbox-container/types";
 import type {
 	SandboxCallContext,
 	SandboxCapabilities,
@@ -39,6 +27,19 @@ import type {
 	SandboxWorkspaceSyncResult,
 } from "@memorall/agent-harness-sandbox";
 import { SandboxError } from "@memorall/agent-harness-sandbox";
+import type { ISandboxContainerService } from "@/services/sandbox-container";
+import { INSTALLED_COMMANDS } from "@/services/sandbox-container/installed-commands";
+import {
+	BUNDLED_PYTHON_NOTES,
+	BUNDLED_PYTHON_PACKAGES,
+	BUNDLED_PYTHON_SUMMARY,
+} from "@/services/sandbox-container/python-packages";
+import type {
+	SandboxCommandResult as ContainerCommandResult,
+	SandboxServerInfo as ContainerServerInfo,
+} from "@/services/sandbox-container/types";
+import { errorMessage } from "@/utils/error-message";
+import { v4 as nanoid } from "@/utils/uuid";
 
 export const BROWSER_SANDBOX_PROVIDER_ID = "browser";
 
@@ -136,7 +137,7 @@ const asJson = (value: unknown): JsonValue => {
 
 const normalizeError = (error: unknown, operation: string): SandboxError => {
 	if (error instanceof SandboxError) return error;
-	const message = error instanceof Error ? error.message : String(error);
+	const message = errorMessage(error);
 	const lower = message.toLowerCase();
 	const code =
 		lower.includes("command") && lower.includes("not found")
@@ -290,7 +291,7 @@ const commandResult = (
 };
 
 class BrowserSandboxSession implements SandboxProviderSession {
-	readonly capabilities = BROWSER_SANDBOX_CAPABILITIES;
+	readonly capabilities: SandboxCapabilities;
 	readonly descriptor;
 	private readonly previewIdByPort = new Map<number, string>();
 	private readonly previewPortById = new Map<string, number>();
@@ -303,12 +304,15 @@ class BrowserSandboxSession implements SandboxProviderSession {
 	constructor(
 		private readonly service: ISandboxContainerService,
 		private readonly onClose: () => void,
+		providerId = BROWSER_SANDBOX_PROVIDER_ID,
+		capabilities = BROWSER_SANDBOX_CAPABILITIES,
 	) {
+		this.capabilities = capabilities;
 		const now = Date.now();
 		this.descriptor = {
 			sessionId: `sandbox:${nanoid()}`,
-			providerId: BROWSER_SANDBOX_PROVIDER_ID,
-			providerSessionId: "browser-default",
+			providerId,
+			providerSessionId: `${providerId}-default`,
 			status: "ready" as const,
 			createdAt: now,
 			updatedAt: now,
@@ -389,6 +393,9 @@ class BrowserSandboxSession implements SandboxProviderSession {
 					case "command":
 						return commandResult(
 							await this.service.executeCommand({
+								...(context.priority === "interactive"
+									? { interactive: true }
+									: {}),
 								command: request.command,
 								cwd: request.cwd,
 								env: request.env,
@@ -440,6 +447,9 @@ class BrowserSandboxSession implements SandboxProviderSession {
 					case "read": {
 						const cursor = parseCursor(request.cursor);
 						const result = await this.service.listenCommand({
+							...(context.priority === "interactive"
+								? { interactive: true }
+								: {}),
 							commandId: request.processId,
 							offset: cursor.offset,
 							waitTimeoutMs: request.waitMs,
@@ -468,6 +478,9 @@ class BrowserSandboxSession implements SandboxProviderSession {
 					}
 					case "stop": {
 						const result = await this.service.stopCommand({
+							...(context.priority === "interactive"
+								? { interactive: true }
+								: {}),
 							commandId: request.processId,
 						});
 						return { processId: result.commandId, stopped: true };
@@ -734,11 +747,19 @@ class BrowserSandboxSession implements SandboxProviderSession {
 }
 
 export class BrowserSandboxProvider implements SandboxProvider {
-	readonly id = BROWSER_SANDBOX_PROVIDER_ID;
+	readonly id: string;
 	readonly contractVersion = 1 as const;
 	private activeSession?: BrowserSandboxSession;
 
-	constructor(private readonly service: ISandboxContainerService) {}
+	constructor(
+		private readonly service: ISandboxContainerService,
+		private readonly options: {
+			id?: string;
+			capabilities?: SandboxCapabilities;
+		} = {},
+	) {
+		this.id = options.id ?? BROWSER_SANDBOX_PROVIDER_ID;
+	}
 
 	async createSession(
 		request: SandboxSessionRequest,
@@ -759,9 +780,14 @@ export class BrowserSandboxProvider implements SandboxProvider {
 		}
 		if (this.activeSession) return this.activeSession;
 		await this.service.initialize();
-		const session = new BrowserSandboxSession(this.service, () => {
-			if (this.activeSession === session) this.activeSession = undefined;
-		});
+		const session = new BrowserSandboxSession(
+			this.service,
+			() => {
+				if (this.activeSession === session) this.activeSession = undefined;
+			},
+			this.id,
+			this.options.capabilities,
+		);
 		this.activeSession = session;
 		return session;
 	}
@@ -777,7 +803,7 @@ export class BrowserSandboxProvider implements SandboxProvider {
 		) {
 			return this.activeSession;
 		}
-		if (providerSessionId !== "browser-default") {
+		if (providerSessionId !== `${this.id}-default`) {
 			throw new SandboxError(
 				"session_not_found",
 				`Browser sandbox session not found: ${providerSessionId}`,

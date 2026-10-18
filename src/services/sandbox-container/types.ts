@@ -47,6 +47,7 @@ export type SandboxCommandStatus =
 	| "stopped";
 
 export interface SandboxExecuteCommandRequest {
+	interactive?: boolean;
 	command: string;
 	cwd?: string;
 	env?: Record<string, string>;
@@ -55,6 +56,7 @@ export interface SandboxExecuteCommandRequest {
 }
 
 export interface SandboxListenCommandRequest {
+	interactive?: boolean;
 	commandId: string;
 	offset?: number;
 	waitTimeoutMs?: number;
@@ -67,6 +69,7 @@ export interface SandboxSendCommandInputRequest {
 }
 
 export interface SandboxStopCommandRequest {
+	interactive?: boolean;
 	commandId: string;
 }
 

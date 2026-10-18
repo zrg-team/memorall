@@ -158,6 +158,32 @@ const context = {
 };
 
 describe("BrowserSandboxProvider", () => {
+	it("forwards interactive scheduling only when the caller requests it", async () => {
+		const service = createContainerService();
+		const session = await new BrowserSandboxProvider(
+			service as never,
+		).createSession({ sessionKey: "conversation-1" }, context);
+		const interactive = { ...context, priority: "interactive" as const };
+		await session.runtime.run(
+			{ operation: "command", command: "ls" },
+			interactive,
+		);
+		await session.processes.manage(
+			{ operation: "read", processId: "command-1" },
+			interactive,
+		);
+		expect(service.executeCommand).toHaveBeenCalledWith(
+			expect.objectContaining({ interactive: true }),
+		);
+		expect(service.listenCommand).toHaveBeenCalledWith(
+			expect.objectContaining({ interactive: true }),
+		);
+		service.executeCommand.mockClear();
+		await session.runtime.run({ operation: "command", command: "ls" }, context);
+		expect(service.executeCommand).toHaveBeenCalledWith(
+			expect.not.objectContaining({ interactive: true }),
+		);
+	});
 	it("passes the reusable provider conformance suite", async () => {
 		const service = createContainerService();
 		await expectSandboxProviderConformance(

@@ -331,10 +331,15 @@ fn to_dto(root: &MappedRoot) -> MappedRootDto {
 
 impl MappedRoots {
     pub fn load(app: &tauri::AppHandle) -> Self {
-        let file = match app.path().app_data_dir() {
-            Ok(dir) => dir.join("mapped-roots.json"),
-            Err(_) => PathBuf::from("mapped-roots.json"),
-        };
+        // Native acceptance uses its own registry alongside its isolated VM
+        // and WebView profile, never the user's normal folder grants.
+        let file = std::env::var_os("MEMORALL_FS_MAP_REGISTRY")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .unwrap_or_else(|| match app.path().app_data_dir() {
+                Ok(dir) => dir.join("mapped-roots.json"),
+                Err(_) => PathBuf::from("mapped-roots.json"),
+            });
         let roots = fs::read_to_string(&file)
             .ok()
             .and_then(|text| serde_json::from_str::<RootsFile>(&text).ok())

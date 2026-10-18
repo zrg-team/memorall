@@ -15,6 +15,7 @@ export type ModelCategory =
 	| "speech-to-text"
 	| "image-generation"
 	| "image-tools"
+	| "ocr"
 	| "text-tools"
 	| "text-to-audio"
 	| "embedding";
@@ -51,6 +52,7 @@ export const WORKSPACE_MODES: readonly WorkspaceMode[] = [
 	"speech-to-text",
 	"image-generation",
 	"image-tools",
+	"ocr",
 	"text-tools",
 	"text-to-audio",
 ];
@@ -60,6 +62,7 @@ export const MEDIA_CATEGORIES: readonly MediaCategory[] = [
 	"speech-to-text",
 	"image-generation",
 	"image-tools",
+	"ocr",
 	"text-tools",
 	"text-to-audio",
 	"decision",

@@ -1,3 +1,4 @@
+import { platform } from "@/platform/current";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import {
 	MEMON_OPERATION_JOB_NAME,
@@ -25,6 +26,23 @@ const runOnce = async <T extends MemonOperation>(
 	operation: T,
 	payload: MemonOperationPayloadMap[T],
 ): Promise<MemonOperationResultMap[T]> => {
+	// Local notifications have no acknowledgement or replay. A request made
+	// before the processor subscribes would otherwise wait forever.
+	if (
+		platform.environment !== "extension" &&
+		!backgroundJob
+			.getNotificationBridge()
+			.getStatus()
+			.subscribedTypes.includes("JOB_ENQUEUED")
+	) {
+		const [{ serviceManager }, { ensureLocalRuntimeProcessor }] =
+			await Promise.all([
+				import("@/services"),
+				import("@/services/runtime/local-runtime-host"),
+			]);
+		await serviceManager.initialize({ proxy: false, exposeDatabaseRpc: false });
+		await ensureLocalRuntimeProcessor();
+	}
 	const executeResult = await backgroundJob.execute(
 		MEMON_OPERATION_JOB_NAME,
 		{ operation, payload } as MemonOperationJobPayload,

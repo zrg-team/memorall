@@ -33,6 +33,9 @@ const Probe = () => {
 			<output data-testid="scoped-running">
 				{index?.isRunning("/Music/Albums") ? "Indexing" : "Idle"}
 			</output>
+			<output data-testid="scoped-progress">
+				{JSON.stringify(index?.progressAt("/Music/Albums"))}
+			</output>
 		</>
 	);
 };
@@ -110,13 +113,38 @@ const mount = async () => {
 describe("Files indexing status", () => {
 	it("does not report unrelated jobs as indexing the open folder, and honors excluded subfolders", async () => {
 		state.running = ["embeddings:/Elsewhere"];
+		state.progress = {
+			"embeddings:/Elsewhere": {
+				total: 5,
+				successful: 2,
+				indexing: 1,
+				failed: 0,
+			},
+		};
 		await mount();
 		expect(screen.getByTestId("scoped-running")).toHaveTextContent("Idle");
+		expect(screen.getByTestId("scoped-progress")).toHaveTextContent("[]");
 		state.running = ["embeddings:/Music"];
+		state.progress = {
+			"embeddings:/Music": { total: 3, successful: 1, indexing: 1, failed: 0 },
+		};
 		await act(async () => {
 			vi.advanceTimersByTime(1500);
 		});
 		expect(screen.getByTestId("scoped-running")).toHaveTextContent("Indexing");
+		expect(
+			JSON.parse(screen.getByTestId("scoped-progress").textContent!),
+		).toEqual([
+			{
+				key: "embeddings:/Music",
+				typeId: "embeddings",
+				root: "/Music",
+				total: 3,
+				successful: 1,
+				indexing: 1,
+				failed: 0,
+			},
+		]);
 		state.folders.push({
 			path: "/Music/Albums",
 			on: [],
@@ -129,6 +157,7 @@ describe("Files indexing status", () => {
 			vi.advanceTimersByTime(1500);
 		});
 		expect(screen.getByTestId("scoped-running")).toHaveTextContent("Idle");
+		expect(screen.getByTestId("scoped-progress")).toHaveTextContent("[]");
 	});
 	it("coalesces slow status polls instead of piling up requests", async () => {
 		const original = mocks.request.getMockImplementation()!;

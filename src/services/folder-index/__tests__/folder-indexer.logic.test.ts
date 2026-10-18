@@ -41,6 +41,71 @@ const setup = () => {
 };
 
 describe("folder indexer with OKF", () => {
+	it("exposes live counts across subfolders and clears them when the run finishes", async () => {
+		const { library, indexer, okf } = setup();
+		const readFile = library.readFile;
+		let release!: () => void;
+		let started!: () => void;
+		const paused = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const secondFile = new Promise<void>((resolve) => {
+			started = resolve;
+		});
+		let reads = 0;
+		library.readFile = async (path) => {
+			if (++reads === 2) {
+				started();
+				await paused;
+			}
+			return readFile(path);
+		};
+		await indexer.setFolderType("/Work", "okf", true);
+		try {
+			await secondFile;
+			expect((await indexer.getState()).progress).toEqual({
+				"okf:/Work": { total: 3, successful: 1, indexing: 1, failed: 0 },
+			});
+		} finally {
+			release();
+			await indexer.whenIdle();
+		}
+		expect((await indexer.getState()).progress).toEqual({});
+		const { files } = await indexer.collectFiles(
+			await indexer.loadConfig(),
+			"okf",
+			"/Work",
+		);
+		const progress: unknown[] = [];
+		await okf.sync("/Work", files, {
+			onProgress: (value) => progress.push(value),
+		});
+		expect(progress.at(-1)).toEqual({
+			total: 3,
+			successful: 3,
+			indexing: 0,
+			failed: 0,
+		});
+		// Existing, current cards count as successful without reading the source again.
+		expect(reads).toBe(3);
+	});
+
+	it("clears live counts when an index run fails", async () => {
+		const { indexer, store } = setup();
+		await indexer.setFolderType("/Work", "okf", true);
+		await indexer.whenIdle();
+		const write = store.write;
+		store.write = async (path, text) => {
+			if (path.endsWith("/index.md")) throw new Error("Disk full");
+			return write(path, text);
+		};
+		await expect(indexer.syncRoot("okf", "/Work")).rejects.toThrow("Disk full");
+		expect(await indexer.getState()).toMatchObject({
+			running: [],
+			progress: {},
+		});
+	});
+
 	it("builds a bundle for a folder: cards, index.md per folder, log.md at the root", async () => {
 		const { store, indexer } = setup();
 		await indexer.setFolderType("/Work", "okf", true);

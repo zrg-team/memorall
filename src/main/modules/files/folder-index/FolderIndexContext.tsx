@@ -9,6 +9,7 @@ import {
 import type { FolderIndexStateView } from "@/services/folder-index/operation-types";
 import type {
 	FolderIndexFileEntry,
+	FolderIndexProgress,
 	FolderIndexSettings,
 	FolderIndexTypeInfo,
 } from "@/services/folder-index/types";
@@ -50,6 +51,12 @@ export interface FolderEntries {
 	byFile: Map<string, Array<FolderIndexFileEntry & { typeId: string }>>;
 }
 
+export interface RunningFolderIndexProgress extends FolderIndexProgress {
+	key: string;
+	typeId: string;
+	root: string;
+}
+
 interface PendingChange {
 	path: string;
 	typeId: string;
@@ -83,6 +90,8 @@ export interface FolderIndexContextValue {
 	/** Types a folder sets itself, and inherited ones it turns off. */
 	ruleOf(path: string): { on: string[]; off: string[] };
 	isRunning(path?: string): boolean;
+	/** Progress of the running roots that cover or sit inside this folder. */
+	progressAt(path: string): RunningFolderIndexProgress[];
 	/**
 	 * Whether indexing is coming for a folder: changes noticed and not yet
 	 * indexed, or a sync waiting its turn.
@@ -378,6 +387,17 @@ export const FolderIndexProvider: React.FC<{
 							syncKeyCovers(key, path, config),
 						)
 					: (state?.running.length ?? 0) > 0,
+			progressAt: (path) =>
+				Object.entries(state?.progress ?? {})
+					.filter(([key]) =>
+						syncKeyCovers(key, normalizeFolderPath(path), config),
+					)
+					.map(([key, progress]) => ({
+						...progress,
+						key,
+						typeId: key.slice(0, key.indexOf(":")),
+						root: key.slice(key.indexOf(":") + 1),
+					})),
 			isWaiting: (path) =>
 				(state?.queued ?? []).some((key) => syncKeyCovers(key, path, config)) ||
 				(state?.changesDueAt !== undefined &&

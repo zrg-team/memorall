@@ -516,7 +516,7 @@ exports[`Memorall flow registered contracts > registers every core step contract
         "messages": "messages",
         "tools": "tools",
       },
-      "description": "Run code, commands, npm packages, and web previews in a reusable browser sandbox session.",
+      "description": "Run code, commands, npm packages, and web previews in a reusable isolated sandbox session.",
       "enabledByDefault": false,
       "feature": {
         "graphTypes": [
@@ -539,7 +539,7 @@ exports[`Memorall flow registered contracts > registers every core step contract
         ],
         "outputs": [
           {
-            "description": "Messages with Browser Sandbox instructions",
+            "description": "Messages with Sandbox instructions",
             "name": "messages",
             "type": "Message[]",
           },
@@ -1651,7 +1651,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     },
   },
   {
-    "description": "Start, restart, stop, list, request, or render browser sandbox web previews.",
+    "description": "Start, restart, stop, list, request, or render sandbox web previews.",
     "name": "sandbox_preview",
     "parameters": {
       "properties": {

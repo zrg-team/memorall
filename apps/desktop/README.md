@@ -1,5 +1,14 @@
 # Memorall desktop shell
 
+Desktop sandbox execution uses bundled Ubuntu Minimal and QEMU, with native
+tools installed inside the VM on first use. It works through the shared sandbox
+service with or without memonOS. See [setup, isolation, resource sizes, and real
+VM tests](../../docs/desktop-vm-sandbox.md). The sandbox is available in
+**Runtime → Desktop Sandbox** and starts automatically when a sandbox tool needs it
+or a memonOS PC turns on. The PC starts it in the background while desktop files
+load, shows its status below the dock, and enables Terminal only when ready. The
+PC's Sandbox app can stop or restart it, including cancelling startup.
+
 This directory is intentionally a thin shell around the shared application in
 `src/main` and shared services in `src/services`.
 

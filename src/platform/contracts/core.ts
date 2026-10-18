@@ -106,6 +106,25 @@ export interface BrowserCommandPort {
 	subscribeEvents?(listener: (message: unknown) => void): () => void;
 }
 
+/** Native sandbox transport. Implementations never execute requests on the host. */
+export interface SandboxRuntimePort {
+	request<T>(
+		operation: string,
+		payload?: unknown,
+		timeoutMs?: number,
+	): Promise<T>;
+	stop(): Promise<void>;
+	status(): Promise<SandboxRuntimeStatus>;
+}
+
+export interface SandboxRuntimeStatus {
+	bootLog?: string;
+	ready: boolean;
+	state: "stopped" | "starting" | "ready" | "stopping" | "unavailable";
+	failure: string | null;
+	initializedAt: number | null;
+}
+
 export type ManagedBrowserReadiness =
 	| "initializing"
 	| "ready"
@@ -309,6 +328,7 @@ export interface PlatformComposition {
 	externalLinks: ExternalLinkPort;
 	runtimeDiagnostics: RuntimeDiagnosticsPort;
 	browserCommands: BrowserCommandPort;
+	sandboxRuntime?: SandboxRuntimePort;
 	browserAutomation?: BrowserAutomationControl;
 	/** Undefined where the platform needs no permission to call out. */
 	hostAccess?: HostAccessPort;

@@ -71,6 +71,32 @@ it("adds the native computer tools while preserving other feature tools and thei
 	// The first run loads the computer's modules cold.
 }, 30_000);
 
+it.each([false, true])(
+	"exposes the terminal tool only when Terminal is enabled (keepDirectTools: %s)",
+	async (keepDirectTools) => {
+		const tools = [hostTool("custom_tool")];
+		for (const terminal of [false, true]) {
+			const config = {
+				...DEFAULT_MEMON_FEATURE_CONFIG,
+				apps: { ...DEFAULT_MEMON_FEATURE_CONFIG.apps, terminal },
+				keepDirectTools,
+			};
+			const step = createMemonFeatureStep({}, config);
+			const result = await step.execute({ messages: [], tools });
+
+			expect(memonToolsFor(config).includes("memon_run")).toBe(terminal);
+			expect(result.output.tools?.includes("memon_run")).toBe(terminal);
+			expect(result.output.tools).toContain(tools[0]);
+			expect(result.output.tools).toContain("memon_screen");
+			expect(result.output.tools).toContain("memon_open");
+			expect(result.output.tools).toContain("memon_act");
+			expect(JSON.stringify(result.output.messages).includes("memon_run")).toBe(
+				terminal,
+			);
+		}
+	},
+);
+
 describe("buildMemonPrompt", () => {
 	it("explains only the apps the agent has", () => {
 		const prompt = buildMemonPrompt({

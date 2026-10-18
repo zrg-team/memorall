@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
 	requests: [] as UsageRequest[],
 	loadConversation: vi.fn(),
 	store: new Map<string, unknown>(),
+	error: null as string | null,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -18,7 +19,10 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../../services/usage-repository", () => ({
-	loadUsageRequests: async () => mocks.requests,
+	loadUsageRequests: async () => {
+		if (mocks.error) throw new Error(mocks.error);
+		return mocks.requests;
+	},
 	loadReportedSpend: async () => 1.5,
 	loadFeatureLabels: () => new Map([["step-web", "Web Browser"]]),
 }));
@@ -68,6 +72,7 @@ const request = (overrides: Partial<UsageRequest>): UsageRequest => ({
 
 describe("UsageDashboard", () => {
 	beforeEach(() => {
+		mocks.error = null;
 		mocks.store.clear();
 		mocks.loadConversation.mockReset();
 		mocks.requests = [
@@ -111,6 +116,14 @@ describe("UsageDashboard", () => {
 				outputTokens: 100,
 			}),
 		];
+	});
+
+	it("offers targeted recovery for TOAST damage without claiming there is no usage", async () => {
+		mocks.error =
+			"missing chunk number 0 for toast value 352266 in pg_toast_287161";
+		render(<UsageDashboard />);
+		expect(await screen.findByText("recovery.inspect")).toBeInTheDocument();
+		expect(screen.queryByText("empty.title")).not.toBeInTheDocument();
 	});
 
 	it("shows totals and every section for the loaded usage", async () => {

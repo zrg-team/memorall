@@ -5,6 +5,7 @@ import {
 	serveEmbeddedPage,
 } from "../embedded-browser";
 import {
+	frameOutline,
 	isLocalAddress,
 	sandboxServerUrl,
 	sandboxTargetOf,
@@ -32,6 +33,49 @@ const hostOutline: WebPageOutline = {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 describe("embedded page addresses", () => {
+	it("authenticates cross-origin preview replies and reports the guest address", async () => {
+		const iframe = document.createElement("iframe");
+		iframe.src =
+			"http://127.0.0.1:43000/?__memorall_guest_port=5173&__memorall_preview=secret";
+		document.body.appendChild(iframe);
+		const send = vi
+			.spyOn(iframe.contentWindow!, "postMessage")
+			.mockImplementation(() => undefined);
+		try {
+			const result = frameOutline(iframe);
+			const [request, origin] = send.mock.calls[0]!;
+			expect(origin).toBe("http://127.0.0.1:43000");
+			const response = {
+				type: "memorall-preview-response",
+				id: request.id,
+				result: { ...hostOutline, url: "http://127.0.0.1:43000/todos" },
+			};
+			let resolved = false;
+			void Promise.resolve(result).then(() => {
+				resolved = true;
+			});
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					source: iframe.contentWindow,
+					origin: "https://attacker.test",
+					data: response,
+				}),
+			);
+			await Promise.resolve();
+			expect(resolved).toBe(false);
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					source: iframe.contentWindow,
+					origin: String(origin),
+					data: response,
+				}),
+			);
+			expect((await result).url).toBe("http://localhost:5173/todos");
+		} finally {
+			send.mockRestore();
+			iframe.remove();
+		}
+	});
 	it("maps local addresses and the sandbox's own urls to servers", () => {
 		expect(isLocalAddress("localhost:3000/todos")).toBe(true);
 		expect(isLocalAddress("example.com")).toBe(false);

@@ -1,7 +1,7 @@
 import { logInfo, logError } from "@/utils/logger";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { sharedStorageService } from "@/services/shared-storage";
-import { closeOffscreenDocument, ensureOffscreenDocument } from "./offscreen";
+import { ensureOffscreenDocument } from "./offscreen";
 import { loadCurrentLanguage } from "./language";
 
 let initializationInProgress = false;
@@ -27,10 +27,6 @@ export async function init(): Promise<void> {
 	try {
 		logInfo("[BACKGROUND] Init - running in service worker context");
 
-		logInfo("🔄[BACKGROUND] Closing any existing offscreen document...");
-		await closeOffscreenDocument();
-		logInfo("✅[BACKGROUND] Offscreen cleanup completed");
-
 		await sharedStorageService.initialize();
 		logInfo("✅[BACKGROUND] Shared storage service initialized");
 
@@ -39,7 +35,10 @@ export async function init(): Promise<void> {
 
 		logInfo("✅[BACKGROUND] Job notification relay ready (inline)");
 
-		logInfo("🔄[BACKGROUND] Creating fresh offscreen document...");
+		// A watchdog or page can have started the database already. Closing its
+		// document here tears down PGlite without waiting for pending writes.
+		// Reuse that owner; ensureOffscreenDocument creates one only if missing.
+		logInfo("🔄[BACKGROUND] Ensuring offscreen document exists...");
 		await ensureOffscreenDocument();
 		logInfo("✅[BACKGROUND] Offscreen document created");
 

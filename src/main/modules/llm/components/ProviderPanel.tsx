@@ -580,6 +580,7 @@ export const ProviderPanel: React.FC<ProviderPanelProps> = ({
 			{activeLocalModels && (
 				<LocalModelsList
 					localModels={activeLocalModels.localModels}
+					category={modelCategory}
 					quickProvider={advancedProvider}
 					loading={loading || activeLocalModels.localModelsLoading}
 					current={current}

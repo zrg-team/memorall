@@ -5,6 +5,7 @@ import { joinStorePath, type IndexStoreIO, type LibraryIO } from "../storage";
 import type {
 	FolderIndexFileEntry,
 	FolderIndexSyncResult,
+	FolderIndexSyncOptions,
 	FolderIndexType,
 	FolderIndexTypeStatus,
 	IndexedFileInfo,
@@ -129,7 +130,7 @@ export class OkfIndex implements FolderIndexType {
 	async sync(
 		root: string,
 		files: IndexedFileInfo[],
-		options: { nestedRoots?: string[] } = {},
+		options: FolderIndexSyncOptions = {},
 	): Promise<FolderIndexSyncResult> {
 		const rootPath = normalizeFolderPath(root);
 		const bundle = okfStorePath(rootPath);
@@ -152,8 +153,17 @@ export class OkfIndex implements FolderIndexType {
 		>();
 		const foldersWithContent = new Set<string>([rootPath]);
 		const expectedCards = new Set<string>();
+		const reportProgress = (indexing = 0) =>
+			options.onProgress?.({
+				total: files.length,
+				successful: result.created + result.updated + result.unchanged,
+				indexing,
+				failed: 0,
+			});
+		reportProgress();
 
 		for (const file of files) {
+			reportProgress(1);
 			const cardPath = okfCardPath(file.path);
 			expectedCards.add(cardPath);
 			const existing = await this.readCard(file.path);
@@ -186,6 +196,7 @@ export class OkfIndex implements FolderIndexType {
 				foldersWithContent.add(current);
 				if (current === rootPath) break;
 			}
+			reportProgress();
 		}
 
 		// Bundles of nested roots live inside this one's folder; they are theirs.

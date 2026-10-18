@@ -1,20 +1,18 @@
-import { createHostedAppsPort } from "./apps/hosted/port";
-import { createMemonEmbeddedPort } from "./embedded-browser";
-import { cropScreenshot, pictureMaxSide, pictureOfImage } from "./page-capture";
-import { settleOutline } from "./settle-outline";
-import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
+import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import { platform } from "@/platform/current";
-import {
-	toAgentSandbox,
-	toFlowFileSystem,
-} from "@/services/flow-service-adapters";
+import { getLocalTimezone } from "@/services/cron-jobs/cron-expression";
+import type { CronJob } from "@/services/database/types";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import {
 	extractPercent,
 	extractZip,
 	zipFolder,
 } from "@/services/filesystem/folder-zip";
+import {
+	toAgentSandbox,
+	toFlowFileSystem,
+} from "@/services/flow-service-adapters";
 import {
 	captureWebSessionScreenshot,
 	closeWebSession,
@@ -28,6 +26,26 @@ import {
 	reserveWebSession,
 	watchWebSession,
 } from "@/services/flows-integrations/tools/web/web-tool-registry";
+import { isResidentLocalProvider } from "@/services/llm/provider-registry";
+import { STUDIO_USAGE_SOURCE } from "@/services/model-usage/model-usage-ledger";
+import {
+	type MemonHomeIO,
+	moveMemonHome,
+	prepareMemonHome,
+} from "./agent-home";
+import { createFxPort } from "./apps/fx/fx-port";
+import { createHostedAppsPort } from "./apps/hosted/port";
+import { createPiCodePort } from "./apps/pi-code/pi-code-port";
+import {
+	MEMON_GUEST_HOME,
+	MEMON_LEGACY_USERS_DIR,
+	memonHomeDir,
+	memonLegacyHomeDir,
+} from "./constants";
+import { loadMemonDesktopFiles, migrateMemonHomeFiles } from "./desktop-files";
+import { formatDownloadSize, MEMON_DOWNLOAD_MAX_BYTES } from "./download";
+import { createMemonEmbeddedPort } from "./embedded-browser";
+import { type MemonViewerKind, memonMimeType } from "./file-kinds";
 import type {
 	MemonAvailability,
 	MemonBrowserPort,
@@ -37,38 +55,20 @@ import type {
 	MemonPorts,
 	MemonSchedulerPort,
 } from "./memon-machine";
+import { createMemonModelsPort, type MemonModelsPort } from "./models-port";
+import { cropScreenshot, pictureMaxSide, pictureOfImage } from "./page-capture";
 import {
-	MEMON_GUEST_HOME,
-	MEMON_LEGACY_USERS_DIR,
-	memonHomeDir,
-	memonLegacyHomeDir,
-} from "./constants";
-import {
-	type MemonHomeIO,
-	moveMemonHome,
-	prepareMemonHome,
-} from "./agent-home";
-import { loadMemonDesktopFiles, migrateMemonHomeFiles } from "./desktop-files";
-import { getLocalTimezone } from "@/services/cron-jobs/cron-expression";
-import type { CronJob } from "@/services/database/types";
-import { type MemonViewerKind, memonMimeType } from "./file-kinds";
+	createMemonConnectionsPort,
+	createMemonSkillsPort,
+} from "./settings-ports";
+import { settleOutline } from "./settle-outline";
+import { createStudioPort, type MemonStudioPort } from "./studio-app";
 import type {
 	MemonCommandOutcome,
 	MemonTerminalPort,
 } from "./terminal/memon-terminal";
 import { toTerminalLines } from "./terminal/terminal-output";
 import type { MemonFileEntry, MemonSchedule } from "./types";
-import {
-	createMemonConnectionsPort,
-	createMemonSkillsPort,
-} from "./settings-ports";
-import { STUDIO_USAGE_SOURCE } from "@/services/model-usage/model-usage-ledger";
-import { createStudioPort, type MemonStudioPort } from "./studio-app";
-import { createFxPort } from "./apps/fx/fx-port";
-import { createPiCodePort } from "./apps/pi-code/pi-code-port";
-import { createMemonModelsPort, type MemonModelsPort } from "./models-port";
-import { formatDownloadSize, MEMON_DOWNLOAD_MAX_BYTES } from "./download";
-import { isResidentLocalProvider } from "@/services/llm/provider-registry";
 
 /** Page outline budget; the screen adds window chrome around it. */
 const OUTLINE_MAX_CHARS = 5_000;
@@ -409,10 +409,27 @@ export const resolveMemonSandbox = async (): Promise<IAgentSandboxService> => {
 	);
 };
 
+const requireReadyDesktopSandbox = async (): Promise<void> => {
+	if (!platform.sandboxRuntime) return;
+	const status = await platform.sandboxRuntime.status();
+	const { desktopSandboxController } = await import(
+		"@/services/sandbox-container/desktop-sandbox-controller"
+	);
+	const state = desktopSandboxController(platform.sandboxRuntime).getSnapshot();
+	if (!status.ready || status.state !== "ready" || state.action || state.error)
+		throw new Error(
+			"Terminal is unavailable until the sandbox is ready. Open computer settings to check its status or start it.",
+		);
+};
+
 export const createMemonTerminalPort = (
 	getSandbox: () => Promise<IAgentSandboxService> = resolveMemonSandbox,
 ): MemonTerminalPort => ({
 	async availability() {
+		// Native command support is fixed. Reading capabilities through the
+		// manager creates a session and boots the VM, delaying the desktop's
+		// first snapshot even when the user only wants to browse files.
+		if (platform.sandboxRuntime) return { available: true };
 		const sandbox = await getSandbox();
 		const capabilities = await sandbox.getCapabilities({
 			operationId: operationId("capabilities"),
@@ -421,11 +438,18 @@ export const createMemonTerminalPort = (
 			? { available: true }
 			: { available: false, reason: "this sandbox cannot run shell commands" };
 	},
-	async run(command, { cwd, waitMs, sessionKey }) {
+	async run(command, { cwd, waitMs, sessionKey, interactive }) {
+		await requireReadyDesktopSandbox();
 		const sandbox = await getSandbox();
 		const result = await sandbox.run(
 			{ operation: "command", command, cwd, waitTimeoutMs: waitMs },
-			{ operationId: operationId("run"), sessionKey },
+			{
+				operationId: operationId("run"),
+				sessionKey,
+				...(platform.sandboxRuntime && interactive
+					? { priority: "interactive" as const }
+					: {}),
+			},
 		);
 		if (result.kind !== "command") {
 			throw new Error("The sandbox returned a non-command result.");
@@ -438,11 +462,18 @@ export const createMemonTerminalPort = (
 			cursor: result.nextCursor,
 		} satisfies MemonCommandOutcome;
 	},
-	async read(processId, cursor, sessionKey, waitMs) {
+	async read(processId, cursor, sessionKey, waitMs, interactive) {
+		await requireReadyDesktopSandbox();
 		const sandbox = await getSandbox();
 		const result = await sandbox.process(
 			{ operation: "read", processId, cursor, waitMs },
-			{ operationId: operationId("read"), sessionKey },
+			{
+				operationId: operationId("read"),
+				sessionKey,
+				...(platform.sandboxRuntime && interactive
+					? { priority: "interactive" as const }
+					: {}),
+			},
 		);
 		if (!("events" in result)) {
 			throw new Error("The sandbox returned no process output.");
@@ -456,17 +487,25 @@ export const createMemonTerminalPort = (
 		};
 	},
 	async input(processId, text, sessionKey) {
+		await requireReadyDesktopSandbox();
 		const sandbox = await getSandbox();
 		await sandbox.process(
 			{ operation: "stdin", processId, input: text, appendNewline: true },
 			{ operationId: operationId("stdin"), sessionKey },
 		);
 	},
-	async stop(processId, sessionKey) {
+	async stop(processId, sessionKey, interactive) {
+		await requireReadyDesktopSandbox();
 		const sandbox = await getSandbox();
 		await sandbox.process(
 			{ operation: "stop", processId },
-			{ operationId: operationId("stop"), sessionKey },
+			{
+				operationId: operationId("stop"),
+				sessionKey,
+				...(platform.sandboxRuntime && interactive
+					? { priority: "interactive" as const }
+					: {}),
+			},
 		);
 	},
 });
@@ -646,7 +685,20 @@ export const createMemonPorts = (
 	models: MemonModelsPort = createMemonModelsPort(),
 ): MemonPorts => {
 	const skills = overrides.skills ?? createMemonSkillsPort();
+	const nativeRuntime = platform.sandboxRuntime;
 	return {
+		sandbox:
+			overrides.sandbox ??
+			(nativeRuntime
+				? {
+						async start() {
+							const { desktopSandboxController } = await import(
+								"@/services/sandbox-container/desktop-sandbox-controller"
+							);
+							await desktopSandboxController(nativeRuntime).start();
+						},
+					}
+				: undefined),
 		browser: overrides.browser ?? createMemonBrowserPort(),
 		embedded: overrides.embedded ?? createMemonEmbeddedPort(),
 		files: overrides.files ?? createMemonFilesPort(),

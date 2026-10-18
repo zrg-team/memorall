@@ -16,6 +16,8 @@ import {
 	type ImageGenerationOptions,
 	type ImageToolOptions,
 	runDecisionGeneration,
+	runOCRGeneration,
+	type OCROptions,
 	runImageGeneration,
 	runImageToolGeneration,
 	runSpeechGeneration,
@@ -41,6 +43,7 @@ export type {
 	SpeechOptions,
 	TextToolOptions,
 	TranscriptionOptions,
+	OCROptions,
 };
 
 /** Save a user-provided file (recording, upload) and return its payload form. */
@@ -296,6 +299,37 @@ export function runDecision(options: DecisionOptions): Promise<StudioItem> {
 			params: { questions: options.questions },
 		},
 		(_update, booking) => runDecisionGeneration({ ...options, booking }),
+	);
+}
+
+export function extractOCR(options: OCROptions): Promise<StudioItem> {
+	options.signal?.throwIfAborted();
+	return recordGeneration(
+		{
+			mode: "ocr",
+			model: options.model,
+			content: options.fileName,
+			inputParts: [
+				{
+					type: "image",
+					image: {
+						path: options.image.path,
+						mimeType: options.image.mimeType,
+						role: "input",
+					},
+				},
+			],
+			params: {
+				fileName: options.fileName,
+				pageNumber: options.pageNumber,
+				pageCount: options.pageCount,
+				batchId: options.batchId,
+				selectedPages: options.selectedPages,
+				instructions: options.instructions,
+				grounding: options.grounding,
+			},
+		},
+		(_update, booking) => runOCRGeneration({ ...options, booking }),
 	);
 }
 

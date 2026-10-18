@@ -57,6 +57,11 @@ export const StudioNoModels: React.FC<StudioNoModelsProps> = ({
 				</div>
 
 				{hasLocal ? <HubMediaModelList category={mode} /> : null}
+				{mode === "ocr" ? (
+					<div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+						<p>{t("ocr.setup")}</p>
+					</div>
+				) : null}
 
 				<div className="flex flex-wrap items-center justify-center gap-2">
 					{hasHosted ? (

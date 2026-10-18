@@ -6,6 +6,7 @@ import type {
 import { EmbeddingIndex, normalizedVector } from "../embedding/embedding-index";
 import { copyAudioWindow, mediaRanges, textChunks } from "../embedding/chunks";
 import type { PreparedChunk } from "../embedding/types";
+import type { FolderIndexProgress } from "../types";
 import { FolderIndexer } from "../folder-indexer";
 import { indexRootOf, indexRoots, parentFolder } from "../index-config";
 import { memoryLibrary, memoryStore } from "./test-io";
@@ -61,6 +62,48 @@ const files = async (library: ReturnType<typeof memoryLibrary>) =>
 	}));
 
 describe("EmbeddingGemma content index", () => {
+	it("reports successful, active and failed files, including unchanged files and deferred retries", async () => {
+		const { library, model, embeddings } = setup();
+		model.embed.mockImplementation(async (input: MultimodalEmbeddingInput) => {
+			if (input.kind === "text" && input.text.includes("cat"))
+				throw new Error("Cannot embed file");
+			return [2, 0, 0];
+		});
+		const progress: FolderIndexProgress[] = [];
+		const options = {
+			onProgress: (value: FolderIndexProgress) => progress.push(value),
+		};
+		await embeddings.sync("/Music", await files(library), options);
+		expect(progress[0]).toEqual({
+			total: 2,
+			successful: 0,
+			indexing: 0,
+			failed: 0,
+		});
+		expect(progress).toContainEqual({
+			total: 2,
+			successful: 1,
+			indexing: 1,
+			failed: 0,
+		});
+		expect(progress.at(-1)).toEqual({
+			total: 2,
+			successful: 1,
+			indexing: 0,
+			failed: 1,
+		});
+		progress.length = 0;
+		model.embed.mockClear();
+		await embeddings.sync("/Music", await files(library), options);
+		expect(model.embed).not.toHaveBeenCalled();
+		expect(progress.at(-1)).toEqual({
+			total: 2,
+			successful: 1,
+			indexing: 0,
+			failed: 1,
+		});
+	});
+
 	it("catches up saved folder rules when indexing resumes after outside edits", async () => {
 		const { store, library, model, embeddings } = setup();
 		const first = new FolderIndexer(store, library);

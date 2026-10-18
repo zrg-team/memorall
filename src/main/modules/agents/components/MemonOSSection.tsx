@@ -82,7 +82,7 @@ const isAvailableHere = (feature: AgentFeatureDefinition): boolean =>
 /**
  * MemonOS Bot, set apart above the features: turning it on gives the agent a
  * computer and turns on the features that become its apps (Web Browser,
- * File System, Browser Sandbox, Planner). Those stay switchable in Features
+ * File System, Sandbox, Planner). Those stay switchable in Features
  * below.
  */
 export const MemonOSSection: React.FC = () => {

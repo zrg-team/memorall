@@ -1,5 +1,6 @@
 import { runsAlongside } from "@/services/sandbox-container/alongside-commands";
 import { resolvePath } from "@/services/sandbox-container/host-commands/command-line";
+import { errorMessage } from "@/utils/error-message";
 import type { FxOpened } from "../apps/fx/fx-app";
 import type { PiCodeOpened } from "../apps/pi-code/pi-code-app";
 import { memonDisplayPath } from "../constants";
@@ -40,7 +41,12 @@ export interface MemonTerminalPort {
 	availability(): Promise<MemonAvailability>;
 	run(
 		command: string,
-		options: { cwd: string; waitMs: number; sessionKey: string },
+		options: {
+			cwd: string;
+			waitMs: number;
+			sessionKey: string;
+			interactive?: boolean;
+		},
 	): Promise<MemonCommandOutcome>;
 	/** New output of a running command; waits up to waitMs for some. */
 	read(
@@ -48,11 +54,16 @@ export interface MemonTerminalPort {
 		cursor: string | undefined,
 		sessionKey: string,
 		waitMs?: number,
+		interactive?: boolean,
 	): Promise<MemonCommandOutcome>;
 	/** Types a line into a running command. */
 	input(processId: string, text: string, sessionKey: string): Promise<void>;
 	/** Stops a running command (Ctrl+C). */
-	stop(processId: string, sessionKey: string): Promise<void>;
+	stop(
+		processId: string,
+		sessionKey: string,
+		interactive?: boolean,
+	): Promise<void>;
 }
 
 export interface MemonTerminalPorts {
@@ -122,6 +133,7 @@ const newTab = (id: string, cwd: string): TerminalTab => ({
 });
 
 interface RunningCommand {
+	interactive?: boolean;
 	command: string;
 	tabId: string;
 	startedAt: number;
@@ -194,7 +206,7 @@ export class MemonTerminal {
 	/** Ports the running command printed (http://localhost:3000). */
 	private mentionedPorts = new Set<number>();
 	private lastServerCheck = 0;
-	private readingOutput = false;
+	private readingOutput: RunningCommand | null = null;
 	private readonly settledWaiters = new Set<() => void>();
 	private availabilityState: MemonAvailability = { available: true };
 	private disposed = false;
@@ -270,7 +282,7 @@ export class MemonTerminal {
 		} catch (error) {
 			this.availabilityState = {
 				available: false,
-				reason: error instanceof Error ? error.message : String(error),
+				reason: errorMessage(error),
 			};
 		}
 	}
@@ -420,8 +432,16 @@ export class MemonTerminal {
 		if (fx) return this.openFx(tab, fx[1]?.trim() ?? "");
 		// What runs has `~` expanded; the tab shows the line as it was typed.
 		const line = expandHome(trimmed, this.host.home());
-		if (alongside) return this.runAlongside(tab, trimmed, line, cwd);
-		return this.startCommand(tab, trimmed, line, cwd, options.waitMs ?? 10_000);
+		if (alongside)
+			return this.runAlongside(tab, trimmed, line, cwd, options.byUser);
+		return this.startCommand(
+			tab,
+			trimmed,
+			line,
+			cwd,
+			options.waitMs ?? 10_000,
+			options.byUser,
+		);
 	}
 
 	/**
@@ -574,7 +594,7 @@ export class MemonTerminal {
 		try {
 			opened = await this.host.openPiCode(cwd, { continueLast });
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorMessage(error);
 			return this.finish(tab, 1, [
 				{ kind: "stderr", text: `picode: ${message}` },
 			]);
@@ -622,7 +642,7 @@ export class MemonTerminal {
 				continueLast: parsed.continueLast,
 			});
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorMessage(error);
 			return this.finish(tab, 1, [{ kind: "stderr", text: `fx: ${message}` }]);
 		}
 		const { keeps, running } = await this.leaveTab(tab);
@@ -712,6 +732,7 @@ export class MemonTerminal {
 		line: string,
 		cwd: string,
 		waitMs: number,
+		interactive = false,
 	): Promise<MemonCommandOutcome> {
 		// Without a server list it starts at once: running before any output.
 		const serversBefore = new Set(
@@ -719,6 +740,7 @@ export class MemonTerminal {
 		);
 		const startedAt = Date.now();
 		this.runningCommand = {
+			interactive,
 			command,
 			tabId: tab.id,
 			startedAt,
@@ -731,6 +753,7 @@ export class MemonTerminal {
 		let outcome: MemonCommandOutcome;
 		try {
 			outcome = await this.ports.terminal.run(line, {
+				...(interactive ? { interactive: true } : {}),
 				cwd,
 				waitMs: COMMAND_START_WAIT_MS,
 				sessionKey: this.host.sessionKey,
@@ -770,10 +793,12 @@ export class MemonTerminal {
 		command: string,
 		line: string,
 		cwd: string,
+		interactive = false,
 	): Promise<MemonCommandOutcome> {
 		this.host.changed();
 		const serversBefore = new Set(await this.listServers());
 		const outcome = await this.ports.terminal.run(line, {
+			...(interactive ? { interactive: true } : {}),
 			cwd,
 			waitMs: ALONGSIDE_WAIT_MS,
 			sessionKey: this.host.sessionKey,
@@ -782,7 +807,11 @@ export class MemonTerminal {
 		if (outcome.running && outcome.processId) {
 			// Only one command may keep running; this one had its time.
 			await this.ports.terminal
-				.stop(outcome.processId, this.host.sessionKey)
+				.stop(
+					outcome.processId,
+					this.host.sessionKey,
+					...(interactive ? ([true] as const) : ([] as const)),
+				)
 				.catch(() => undefined);
 			this.append(tab, [
 				{
@@ -808,10 +837,11 @@ export class MemonTerminal {
 	 * reader at a time; each read waits briefly for new output.
 	 */
 	private async readOutput(): Promise<void> {
-		if (this.readingOutput) return;
-		this.readingOutput = true;
+		const owner = this.runningCommand;
+		if (!owner?.processId || this.readingOutput === owner) return;
+		this.readingOutput = owner;
 		try {
-			while (this.runningCommand?.processId && !this.disposed) {
+			while (this.runningCommand === owner && !this.disposed) {
 				const running = this.runningCommand;
 				const processId = running.processId as string;
 				let outcome: MemonCommandOutcome;
@@ -821,18 +851,20 @@ export class MemonTerminal {
 						running.cursor,
 						this.host.sessionKey,
 						COMMAND_READ_WAIT_MS,
+						...(running.interactive ? ([true] as const) : ([] as const)),
 					);
 				} catch (error) {
+					if (this.runningCommand !== owner) return;
 					this.append(this.runningTab(), [
 						{
 							kind: "system",
-							text: `Lost the command's output: ${error instanceof Error ? error.message : String(error)}`,
+							text: `Lost the command's output: ${errorMessage(error)}`,
 						},
 					]);
 					this.settle(null);
 					return;
 				}
-				if (this.runningCommand?.processId !== processId) return;
+				if (this.runningCommand !== owner) return;
 				this.append(this.runningTab(), outcome.output);
 				if (outcome.output.length) running.lastOutputAt = Date.now();
 				running.cursor = outcome.cursor ?? running.cursor;
@@ -848,7 +880,7 @@ export class MemonTerminal {
 				}
 			}
 		} finally {
-			this.readingOutput = false;
+			if (this.readingOutput === owner) this.readingOutput = null;
 		}
 	}
 
@@ -935,7 +967,11 @@ export class MemonTerminal {
 		this.host.changed();
 		try {
 			if (running.processId) {
-				await this.ports.terminal.stop(running.processId, this.host.sessionKey);
+				await this.ports.terminal.stop(
+					running.processId,
+					this.host.sessionKey,
+					...(running.interactive ? ([true] as const) : ([] as const)),
+				);
 				void this.readOutput();
 				if (
 					!(await this.waitForCommand(STOP_GRACE_MS)) &&

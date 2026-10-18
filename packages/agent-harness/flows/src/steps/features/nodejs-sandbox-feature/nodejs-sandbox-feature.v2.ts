@@ -52,12 +52,13 @@ export type NodejsSandboxFeatureServices =
 	| undefined;
 
 export const BROWSER_SANDBOX_FEATURE_DESCRIPTION =
-	"Run code, commands, npm packages, and web previews in a reusable browser sandbox session.";
+	"Run code, commands, npm packages, and web previews in a reusable isolated sandbox session.";
 export const NODEJS_SANDBOX_FEATURE_DESCRIPTION =
 	BROWSER_SANDBOX_FEATURE_DESCRIPTION;
 
 /** Python as the sandbox reports it in `capabilities.extensions.python`. */
 export interface SandboxPythonCapability {
+	runtime?: "native";
 	/** Importable besides the standard library, by pip name; nothing else can be installed. */
 	packages: readonly string[];
 	/** The same packages described for the agent: what to import, and what for. */
@@ -79,12 +80,14 @@ export const readSandboxPython = (
 ): SandboxPythonCapability | undefined => {
 	const python = extensions?.python;
 	if (!python || typeof python !== "object") return undefined;
-	const { packages, summary, notes } = python as {
+	const { packages, summary, notes, runtime } = python as {
+		runtime?: unknown;
 		packages?: unknown;
 		summary?: unknown;
 		notes?: unknown;
 	};
 	return {
+		...(runtime === "native" ? { runtime: "native" as const } : {}),
 		packages: strings(packages),
 		...(typeof summary === "string" && summary.trim()
 			? { summary: summary.trim() }
@@ -94,6 +97,7 @@ export const readSandboxPython = (
 };
 
 const pythonGuidance = ({
+	runtime,
 	packages,
 	summary,
 	notes = [],
@@ -103,7 +107,9 @@ const pythonGuidance = ({
 		? `the standard library plus ${listed}`
 		: "the standard library only";
 	return [
-		`- Python: run \`py file.py\` or \`py -c "..."\` as a command. It is Pyodide in the browser with ${extras}; importing them loads them, and pip cannot install anything else. Use it when Python is asked for or suits the task.`,
+		runtime === "native"
+			? "- Python runs inside the Linux VM. Use py for system Python and a virtual environment with pip for project dependencies."
+			: `- Python: run \`py file.py\` or \`py -c "..."\` as a command. It is Pyodide in the browser with ${extras}; importing them loads them, and pip cannot install anything else. Use it when Python is asked for or suits the task.`,
 		...notes.map((note) => `- ${note}`),
 	].join("\n");
 };
@@ -157,9 +163,12 @@ export const readSandboxNotes = (
 
 const commandsGuidance = (
 	commands: readonly SandboxInstalledCommand[],
+	native = false,
 ): string =>
 	[
-		"- Installed by default, run as commands (never install them, with npm, pip, apt or anything else):",
+		native
+			? "- Available Linux commands (installed on first use when necessary):"
+			: "- Installed by default, run as commands (never install them, with npm, pip, apt or anything else):",
 		...commands.flatMap(({ names, summary, notes = [] }) => [
 			`  - ${names.map((name) => `\`${name}\``).join(", ")}${summary ? `: ${summary}.` : ""}`,
 			...notes.map((note) => `    ${note}`),
@@ -171,26 +180,31 @@ export const buildBrowserSandboxPrompt = (
 	python?: SandboxPythonCapability,
 	commands: readonly SandboxInstalledCommand[] = [],
 	notes: readonly string[] = [],
+	runtime = "almostnode",
 ): string =>
 	tools.length === 0
 		? ""
-		: `# BROWSER SANDBOX
-Use the active browser sandbox when code must be executed, packages tested, commands run, or a web app previewed.
+		: `# SANDBOX
+Use the active sandbox when code must be executed, packages tested, commands run, or a web app previewed.
 
 Available sandbox tools: ${tools.join(", ")}.
 
-- The runtime is AlmostNode in the browser, not OS Node.js. Browser-compatible JavaScript, TypeScript, npm packages, and common Node shims are supported; native addons and OS process assumptions are not.${python ? `\n${pythonGuidance(python)}` : ""}${commands.length ? `\n${commandsGuidance(commands)}` : ""}${notes.map((note) => `\n- ${note}`).join("")}
+${runtime.startsWith("qemu-") ? "- The runtime is an Ubuntu Linux VM with real shell commands and native Node.js. Tools install on first use and persist. Persistent REPL and snapshots are unavailable." : "- The runtime is AlmostNode in the browser, not OS Node.js. Browser-compatible JavaScript, TypeScript, npm packages, and common Node shims are supported; native addons and OS process assumptions are not."}${python ? `\n${pythonGuidance(python)}` : ""}${commands.length ? `\n${commandsGuidance(commands, runtime.startsWith("qemu-"))}` : ""}${notes.map((note) => `\n- ${note}`).join("")}
 ${[
 	tools.includes("sandbox_run") &&
 		"- Use the existing fs_read, fs_write, fs_edit, fs_ls, fs_glob, fs_grep, fs_mkdir, and fs_remove tools for workspace files. The harness synchronizes those files with the sandbox.",
 	tools.includes("sandbox_run") &&
-		"- Use sandbox_run for code, workspace files, commands, and REPL evaluation.",
+		(runtime.startsWith("qemu-")
+			? "- Use sandbox_run for code, workspace files, and shell commands."
+			: "- Use sandbox_run for code, workspace files, commands, and REPL evaluation."),
 	tools.includes("sandbox_process") &&
 		"- For a running command, continue with sandbox_process read and its returned nextCursor; never invent or alter opaque IDs and cursors. Output, logs, and response bodies are bounded; continue reads when output is truncated or the process is still running.",
 	tools.includes("sandbox_packages") &&
 		"- Use sandbox_packages only when a dependency is required.",
 	tools.includes("sandbox_preview") &&
-		"- Use sandbox_preview for web server lifecycle. Use request for APIs and render for visible web pages. Always use the returned preview URL or render result; never construct localhost URLs. After changing files used by a running preview, call sandbox_preview with restart before checking the result.",
+		(runtime.startsWith("qemu-")
+			? "- Use sandbox_preview for server lifecycle and HTTP requests. Open the returned preview URL with render_artifact to view a web page; never construct a localhost URL."
+			: "- Use sandbox_preview for web server lifecycle. Use request for APIs and render for visible web pages. Always use the returned preview URL or render result; never construct localhost URLs. After changing files used by a running preview, call sandbox_preview with restart before checking the result."),
 	tools.includes("sandbox_inspect") &&
 		"- Use sandbox_inspect for status and diagnostics. Reset only when session state must be discarded.",
 	tools.includes("sandbox_snapshot") &&
@@ -252,7 +266,15 @@ const definition = defineStep<
 			const messages = GraphBase.chat.systemMessage(
 				input.messages,
 				[
-					buildBrowserSandboxPrompt(sandboxTools, python, commands, notes),
+					buildBrowserSandboxPrompt(
+						sandboxTools,
+						python,
+						commands,
+						notes,
+						typeof extensions?.runtime === "string"
+							? extensions.runtime
+							: undefined,
+					),
 					ARTIFACT_FEATURE_SYSTEM_PROMPT,
 				]
 					.filter(Boolean)
@@ -269,7 +291,7 @@ const definition = defineStep<
 					errors: [
 						error instanceof Error
 							? error.message
-							: "Browser sandbox feature step failed",
+							: "Sandbox feature step failed",
 					],
 				},
 			};
@@ -316,7 +338,7 @@ stepRegistry.register(STEP_NAME, createNodejsSandboxFeatureStep, {
 			{
 				name: "messages",
 				type: "Message[]",
-				description: "Messages with Browser Sandbox instructions",
+				description: "Messages with Sandbox instructions",
 			},
 			{
 				name: "tools",

@@ -2,9 +2,12 @@ import { History, Loader2, Server, ShieldAlert, Square } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
+import { useDesktopSandbox } from "@/main/hooks/use-desktop-sandbox";
+import { platform } from "@/platform/current";
 import { memonDisplayPath } from "@/services/memon/constants";
 import { terminalRunsInFront } from "@/services/memon/terminal/terminal-state";
 import type { MemonTerminalState } from "@/services/memon/types";
+import { desktopSandboxLabel } from "@/services/sandbox-container/desktop-sandbox-controller";
 import type { MemonSend } from "../types";
 import { TerminalTabs } from "./TerminalTabs";
 import {
@@ -44,8 +47,10 @@ const TerminalWindowView: React.FC<{
 	/** The agent's home, shown as `~` in the prompt. */
 	home: string;
 	send: MemonSend;
-}> = ({ machineKey, terminal, home, send }) => {
+	onOpenSettings?(): void;
+}> = ({ machineKey, terminal, home, send, onOpenSettings }) => {
 	const { t } = useTranslation("common");
+	const sandbox = useDesktopSandbox(platform.sandboxRuntime);
 	const screenRef = React.useRef<XtermTerminalHandle>(null);
 	const history = terminal.history ?? [];
 	// The running command belongs to one tab; the others run next to it.
@@ -62,6 +67,25 @@ const TerminalWindowView: React.FC<{
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-1.5 p-2">
+			{!sandbox.ready ? (
+				<div
+					className="flex shrink-0 items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2 text-xs"
+					data-testid="terminal-sandbox-blocked"
+				>
+					<span className="min-w-0 flex-1">
+						Sandbox · {desktopSandboxLabel(sandbox)}. Terminal is available when
+						ready.
+					</span>
+					<Button
+						size="sm"
+						variant="outline"
+						className="h-7 text-xs"
+						onClick={onOpenSettings}
+					>
+						Open settings
+					</Button>
+				</div>
+			) : null}
 			<div className="flex shrink-0 items-center gap-1">
 				<div className="min-w-0 flex-1">
 					<TerminalTabs
@@ -139,6 +163,7 @@ const TerminalWindowView: React.FC<{
 							type="button"
 							size="sm"
 							className="h-7 text-[11px]"
+							disabled={!sandbox.ready}
 							onClick={() =>
 								void send("terminal.approval", {
 									key: machineKey,
@@ -156,6 +181,7 @@ const TerminalWindowView: React.FC<{
 				ref={screenRef}
 				machineKey={machineKey}
 				terminal={terminal}
+				disabled={!sandbox.ready}
 				home={home}
 				send={send}
 			/>

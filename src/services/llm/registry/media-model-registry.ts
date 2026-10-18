@@ -29,6 +29,7 @@ export const TASK_CATEGORY: Readonly<Record<MediaPipelineTask, MediaCategory>> =
 		"depth-estimation": "image-tools",
 		"object-detection": "image-tools",
 		"image-to-text": "image-tools",
+		"image-text-to-text": "ocr",
 		"image-classification": "image-tools",
 		"text-classification": "text-tools",
 		"zero-shot-classification": "text-tools",
@@ -56,9 +57,11 @@ export const isMediaPipelineTask = (
 export const imageToolTaskOf = (
 	config: Pick<MediaModelConfig, "task">,
 ): ImageToolTask | undefined =>
-	TASK_CATEGORY[config.task] === "image-tools"
-		? (config.task as ImageToolTask)
-		: undefined;
+	config.task === "image-text-to-text"
+		? "image-to-text"
+		: TASK_CATEGORY[config.task] === "image-tools"
+			? (config.task as ImageToolTask)
+			: undefined;
 
 /** Text-tools tasks are pipeline tasks too. */
 export const textToolTaskOf = (

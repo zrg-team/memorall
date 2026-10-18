@@ -1,8 +1,5 @@
 import { z } from "zod";
-import type {
-	Tool,
-	ToolFactory,
-} from "../../interfaces/engine/tool.js";
+import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import type { SandboxPreviewRequest } from "../../interfaces/services/agent-sandbox.js";
 import type { AllServices } from "../../interfaces/services/services.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
@@ -121,7 +118,7 @@ export const createSandboxPreviewTool: ToolFactory<Input, Services> = (
 	name: TOOL_NAME,
 	title: "Manage sandbox previews",
 	description:
-		"Start, restart, stop, list, request, or render browser sandbox web previews.",
+		"Start, restart, stop, list, request, or render sandbox web previews.",
 	schema,
 	outputSchema: SANDBOX_TOOL_OUTPUT_SCHEMA,
 	annotations: { readOnlyHint: false, idempotentHint: false },

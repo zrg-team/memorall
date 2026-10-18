@@ -50,12 +50,19 @@ export class SandboxManager implements IAgentSandboxService {
 		context?: Partial<SandboxCallContext>,
 	): SandboxCallContext {
 		if (context?.signal?.aborted) {
-			throw new SandboxError("timeout", `Sandbox operation cancelled: ${operation}`, {
-				operation,
-				retryable: true,
-			});
+			throw new SandboxError(
+				"timeout",
+				`Sandbox operation cancelled: ${operation}`,
+				{
+					operation,
+					retryable: true,
+				},
+			);
 		}
-		if (context?.deadlineMs !== undefined && this.platform.now() > context.deadlineMs) {
+		if (
+			context?.deadlineMs !== undefined &&
+			this.platform.now() > context.deadlineMs
+		) {
 			throw new SandboxError(
 				"timeout",
 				`Sandbox operation deadline exceeded: ${operation}`,
@@ -63,10 +70,12 @@ export class SandboxManager implements IAgentSandboxService {
 			);
 		}
 		return {
-			operationId: context?.operationId ?? `${operation}:${this.platform.randomUUID()}`,
+			operationId:
+				context?.operationId ?? `${operation}:${this.platform.randomUUID()}`,
 			sessionKey: context?.sessionKey ?? DEFAULT_SESSION_KEY,
 			signal: context?.signal,
 			deadlineMs: context?.deadlineMs,
+			...(context?.priority ? { priority: context.priority } : {}),
 		};
 	}
 
@@ -74,9 +83,7 @@ export class SandboxManager implements IAgentSandboxService {
 		request?: SandboxAcquireRequest,
 		context?: Partial<SandboxCallContext>,
 	): string {
-		return (
-			request?.sessionKey ?? context?.sessionKey ?? DEFAULT_SESSION_KEY
-		);
+		return request?.sessionKey ?? context?.sessionKey ?? DEFAULT_SESSION_KEY;
 	}
 
 	async acquire(
@@ -183,9 +190,9 @@ export class SandboxManager implements IAgentSandboxService {
 		try {
 			await this.workspaces.bind(session, request.workspace, callContext);
 		} catch (error) {
-			await session.close(
-				this.callContext("session.close", { ...context, sessionKey }),
-			).catch(() => undefined);
+			await session
+				.close(this.callContext("session.close", { ...context, sessionKey }))
+				.catch(() => undefined);
 			throw error;
 		}
 		this.sessions.set(sessionKey, session);
@@ -205,7 +212,9 @@ export class SandboxManager implements IAgentSandboxService {
 			session,
 			this.callContext("workspace.flush", { ...context, sessionKey }),
 		);
-		if ((this.config.sessionPolicy ?? "reuse-conversation") === "close-on-release") {
+		if (
+			(this.config.sessionPolicy ?? "reuse-conversation") === "close-on-release"
+		) {
 			await session.close(
 				this.callContext("session.close", { ...context, sessionKey }),
 			);
@@ -223,7 +232,10 @@ export class SandboxManager implements IAgentSandboxService {
 		await this.acquire({ sessionKey: key }, context);
 		const session = this.sessions.get(key);
 		if (!session) {
-			throw new SandboxError("session_not_found", `Sandbox session not found: ${key}`);
+			throw new SandboxError(
+				"session_not_found",
+				`Sandbox session not found: ${key}`,
+			);
 		}
 		return session;
 	}
@@ -324,11 +336,12 @@ export class SandboxManager implements IAgentSandboxService {
 		context?: Partial<SandboxCallContext>,
 	): Promise<SandboxRunResult> {
 		const session = await this.getSession(context);
-		this.requireCapability(session, `runtime.${request.operation}` as CoreSandboxCapability);
-		return this.withWorkspaceFlush(
+		this.requireCapability(
 			session,
-			context,
-			() => session.runtime.run(
+			`runtime.${request.operation}` as CoreSandboxCapability,
+		);
+		return this.withWorkspaceFlush(session, context, () =>
+			session.runtime.run(
 				request,
 				this.callContext(`runtime.${request.operation}`, context),
 			),
@@ -347,10 +360,11 @@ export class SandboxManager implements IAgentSandboxService {
 		return this.withWorkspaceFlush(
 			session,
 			context,
-			() => session.processes.manage(
-				request,
-				this.callContext(`process.${request.operation}`, context),
-			),
+			() =>
+				session.processes.manage(
+					request,
+					this.callContext(`process.${request.operation}`, context),
+				),
 			request.operation !== "list",
 		);
 	}
@@ -367,12 +381,13 @@ export class SandboxManager implements IAgentSandboxService {
 				: "packages.install",
 		);
 		if (!session.packages) {
-			throw new SandboxError("capability_unavailable", "Package API unavailable");
+			throw new SandboxError(
+				"capability_unavailable",
+				"Package API unavailable",
+			);
 		}
-		return this.withWorkspaceFlush(
-			session,
-			context,
-			() => session.packages!.manage(
+		return this.withWorkspaceFlush(session, context, () =>
+			session.packages!.manage(
 				request,
 				this.callContext(`packages.${request.operation}`, context),
 			),
@@ -392,12 +407,13 @@ export class SandboxManager implements IAgentSandboxService {
 					: "preview.start";
 		this.requireCapability(session, capability);
 		if (!session.previews) {
-			throw new SandboxError("capability_unavailable", "Preview API unavailable");
+			throw new SandboxError(
+				"capability_unavailable",
+				"Preview API unavailable",
+			);
 		}
-		return this.withWorkspaceFlush(
-			session,
-			context,
-			() => session.previews!.manage(
+		return this.withWorkspaceFlush(session, context, () =>
+			session.previews!.manage(
 				request,
 				this.callContext(`preview.${request.operation}`, context),
 			),
@@ -411,7 +427,10 @@ export class SandboxManager implements IAgentSandboxService {
 		const session = await this.getSession(context);
 		this.requireCapability(session, "network.fetch");
 		if (!session.network) {
-			throw new SandboxError("capability_unavailable", "Network API unavailable");
+			throw new SandboxError(
+				"capability_unavailable",
+				"Network API unavailable",
+			);
 		}
 		return session.network.fetch(
 			request,
@@ -426,17 +445,16 @@ export class SandboxManager implements IAgentSandboxService {
 		const session = await this.getSession(context);
 		this.requireCapability(
 			session,
-			request.operation === "create"
-				? "snapshot.capture"
-				: "snapshot.restore",
+			request.operation === "create" ? "snapshot.capture" : "snapshot.restore",
 		);
 		if (!session.snapshots) {
-			throw new SandboxError("capability_unavailable", "Snapshot API unavailable");
+			throw new SandboxError(
+				"capability_unavailable",
+				"Snapshot API unavailable",
+			);
 		}
-		return this.withWorkspaceFlush(
-			session,
-			context,
-			() => session.snapshots!.manage(
+		return this.withWorkspaceFlush(session, context, () =>
+			session.snapshots!.manage(
 				request,
 				this.callContext(`snapshot.${request.operation}`, context),
 			),

@@ -6,6 +6,7 @@ import React from "react";
 import { useTheme } from "@/main/components/molecules/ThemeContext";
 import { terminalRunsInFront } from "@/services/memon/terminal/terminal-state";
 import type { MemonTerminalState } from "@/services/memon/types";
+import { errorMessage } from "@/utils/error-message";
 import type { MemonSend } from "../../types";
 import {
 	editLine,
@@ -86,9 +87,6 @@ const THEMES: Record<"light" | "dark", ITheme> = {
 	},
 };
 
-const errorText = (error: unknown): string =>
-	error instanceof Error ? error.message : String(error);
-
 /** A localhost link as the computer's Browser opens it. */
 const browserUrl = (uri: string): string | null => {
 	try {
@@ -140,15 +138,23 @@ export const XtermTerminal = React.forwardRef<
 		/** The agent's home, shown as `~` in the prompt. */
 		home: string;
 		send: MemonSend;
+		disabled?: boolean;
 	}
->(({ machineKey, terminal, home, send }, ref) => {
+>(({ machineKey, terminal, home, send, disabled = false }, ref) => {
 	const { actualTheme } = useTheme();
 	const hostRef = React.useRef<HTMLDivElement>(null);
 	const termRef = React.useRef<Terminal | null>(null);
 	const screenRef = React.useRef<TerminalScreen | null>(null);
 	// What the handlers below read: always the latest props.
-	const live = React.useRef({ machineKey, terminal, home, send, actualTheme });
-	live.current = { machineKey, terminal, home, send, actualTheme };
+	const live = React.useRef({
+		machineKey,
+		terminal,
+		home,
+		send,
+		actualTheme,
+		disabled,
+	});
+	live.current = { machineKey, terminal, home, send, actualTheme, disabled };
 	/** Each tab's line being typed, as a shell keeps one per tab. */
 	const editors = React.useRef(new Map<string, LineEditorState>());
 	/** Commands sent that have not answered yet: no prompt until they do. */
@@ -171,7 +177,7 @@ export const XtermTerminal = React.forwardRef<
 		const syncInput = () => {
 			const { terminal } = live.current;
 			screenRef.current?.setInput({
-				promptCwd: takesInput() ? null : terminal.cwd,
+				promptCwd: takesInput() || live.current.disabled ? null : terminal.cwd,
 				view: lineEditorView(editor(), terminal.history ?? []),
 			});
 		};
@@ -198,17 +204,24 @@ export const XtermTerminal = React.forwardRef<
 				.then(() => {
 					setTimeout(() => screenRef.current?.settleEcho(echo), ECHO_GRACE_MS);
 				})
-				.catch((error) => screenRef.current?.settleEcho(echo, errorText(error)))
+				.catch((error) =>
+					screenRef.current?.settleEcho(echo, errorMessage(error)),
+				)
 				.finally(() => after?.());
 		};
 
 		const runTypeAhead = () => {
+			if (live.current.disabled) {
+				typeAhead.current = [];
+				return;
+			}
 			if (waiting.current > 0) return;
 			const next = typeAhead.current.shift();
 			if (next !== undefined) submit(next);
 		};
 
 		const submit = (line: string) => {
+			if (live.current.disabled) return;
 			const screen = screenRef.current;
 			const { terminal, machineKey: key, home, send } = live.current;
 			if (!screen) return;
@@ -281,6 +294,7 @@ export const XtermTerminal = React.forwardRef<
 				const state = editors.current.get(tab) ?? emptyLineEditor();
 				// Typed on meanwhile, or another tab: the answer is too late.
 				if (
+					live.current.disabled ||
 					tabId() !== tab ||
 					state.chars.slice(0, state.cursor).join("") !== before ||
 					state.chars.slice(state.cursor).join("") !== after
@@ -345,6 +359,7 @@ export const XtermTerminal = React.forwardRef<
 
 		/** Keys from xterm.js, through the line editor. */
 		const onData = (data: string) => {
+			if (live.current.disabled) return;
 			const screen = screenRef.current;
 			if (!screen) return;
 			screen.batch(() => {
@@ -469,6 +484,15 @@ export const XtermTerminal = React.forwardRef<
 		void fontReady.then(() => {
 			if (disposed) return;
 			term.open(host);
+			if (term.textarea) {
+				term.textarea.disabled = live.current.disabled;
+				term.textarea.setAttribute(
+					"aria-label",
+					live.current.disabled
+						? "Terminal unavailable until sandbox is ready"
+						: "Terminal input",
+				);
+			}
 			fitToHost();
 			handlers.sync();
 		});
@@ -495,8 +519,25 @@ export const XtermTerminal = React.forwardRef<
 	// The machine's state: new lines, another tab, the prompt's directory.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: sync reads the latest terminal and home; it runs when they change.
 	React.useEffect(() => {
+		if (termRef.current) {
+			termRef.current.options.disableStdin = disabled;
+			const input = termRef.current.textarea;
+			if (input) {
+				input.disabled = disabled;
+				input.setAttribute(
+					"aria-label",
+					disabled
+						? "Terminal unavailable until sandbox is ready"
+						: "Terminal input",
+				);
+			}
+		}
+		if (disabled) {
+			typeAhead.current = [];
+			editors.current.clear();
+		}
 		handlers.sync();
-	}, [handlers, terminal, home]);
+	}, [handlers, terminal, home, disabled]);
 
 	return (
 		<div
@@ -507,6 +548,7 @@ export const XtermTerminal = React.forwardRef<
 				ref={hostRef}
 				data-memon-ref="t1"
 				data-testid="memon-terminal-screen"
+				aria-disabled={disabled}
 				className="h-full w-full"
 			/>
 		</div>

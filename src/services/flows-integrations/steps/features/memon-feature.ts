@@ -25,6 +25,7 @@ import {
 	MEMON_FEATURE_ID,
 	MEMON_HOME_RUNTIME_KEY,
 	MEMON_MEMORY_FILE_NAME,
+	MEMON_RUN_TOOL,
 	MEMON_STEP_NAME,
 	MEMON_STUDIO_TOOL,
 	MEMON_TASKS_TOOL,
@@ -70,8 +71,9 @@ export const MEMON_FEATURE_DESCRIPTION =
 export const MEMON_FEATURE_TOOLS = [...MEMON_TOOL_NAMES];
 
 /**
- * The tools a run gets: memon_tasks only with the Tasks app, memon_studio
- * only when a studio has a model, memon_code only while pi code is on.
+ * The tools a run gets: memon_run only with Terminal, memon_tasks only with
+ * Tasks, memon_studio only when a studio has a model, memon_code only while
+ * pi code is on.
  */
 export const memonToolsFor = (
 	config: MemonFeatureConfig,
@@ -79,6 +81,7 @@ export const memonToolsFor = (
 ) =>
 	MEMON_FEATURE_TOOLS.filter(
 		(tool) =>
+			(tool !== MEMON_RUN_TOOL || config.apps.terminal) &&
 			(tool !== MEMON_TASKS_TOOL || config.apps.tasks) &&
 			(tool !== MEMON_VISUALIZE_TOOL || config.apps.visualize) &&
 			(tool !== MEMON_CODE_TOOL || config.piCode) &&

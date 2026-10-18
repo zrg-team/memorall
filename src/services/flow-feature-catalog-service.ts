@@ -677,7 +677,7 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 		description:
 			"Enable isolated Node.js container tools for runtime execution, command execution/listening, npm, filesystem, server lifecycle, logs, and resource fetch.",
 		descriptionKey: "flowBuilder.features.nodejsSandboxFeature.description",
-		displayName: "Node.js Sandbox",
+		displayName: "Sandbox",
 		nameKey: "flowBuilder.features.nodejsSandboxFeature.name",
 		tools: [
 			"container_run_code",
@@ -885,7 +885,7 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 FEATURE_UI_METADATA["step-nodejs-sandbox-feature"] = {
 	...FEATURE_UI_METADATA["step-nodejs-sandbox-feature"],
 	description: BROWSER_SANDBOX_FEATURE_DESCRIPTION,
-	displayName: "Browser Sandbox",
+	displayName: "Sandbox",
 	tools: [...BROWSER_SANDBOX_FEATURE_TOOLS],
 	systemPrompt: BROWSER_SANDBOX_FEATURE_SYSTEM_PROMPT,
 	icon: { name: "SquareTerminal", type: "lucide" },

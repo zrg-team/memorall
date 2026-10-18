@@ -8,6 +8,7 @@ import {
 	attachSandboxFrame,
 	frameAct,
 	frameCapture,
+	frameHistory,
 	frameOutline,
 	type SandboxFrameHost,
 	type SandboxTarget,
@@ -264,6 +265,10 @@ export const createMemonEmbeddedPort = (
 		}
 		const sandbox = await getSandbox();
 		const iframe = document.createElement("iframe");
+		iframe.setAttribute(
+			"sandbox",
+			"allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-same-origin allow-scripts",
+		);
 		iframe.style.cssText =
 			"position:fixed;top:-9999px;left:-9999px;width:1280px;height:800px;opacity:0;pointer-events:none;";
 		iframe.setAttribute("aria-hidden", "true");
@@ -385,8 +390,7 @@ export const createMemonEmbeddedPort = (
 			);
 			if (hosted) return;
 			const frame = await ownFrame(session);
-			if (direction === "back") frame.contentWindow?.history.back();
-			else frame.contentWindow?.history.forward();
+			await frameHistory(frame, direction);
 		},
 
 		// The page is the window itself; there is no other to bring forward.

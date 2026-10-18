@@ -1,6 +1,8 @@
 mod fs_map;
+mod child_job;
 mod mcp_stdio;
 mod sidecar;
+mod sandbox;
 
 use serde_json::{json, Value};
 use sidecar::{BrowserBridgeError, SidecarSupervisor};
@@ -170,6 +172,9 @@ pub fn run() {
             app_data_path,
             show_main_window,
             sidecar_status,
+            sandbox::desktop_sandbox_request,
+            sandbox::desktop_sandbox_stop,
+            sandbox::desktop_sandbox_status,
             desktop_browser_status,
             desktop_browser_request,
             desktop_browser_configure,

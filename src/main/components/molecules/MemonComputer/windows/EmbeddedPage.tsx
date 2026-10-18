@@ -7,6 +7,7 @@ import {
 	attachSandboxFrame,
 	frameAct,
 	frameCapture,
+	frameHistory,
 	frameOutline,
 	sandboxTargetOf,
 } from "@/services/memon/embedded-frame";
@@ -103,8 +104,7 @@ export const EmbeddedPage: React.FC<{
 					async history(direction) {
 						const loaded = waitForPage();
 						agentNavigation.current = direction;
-						if (direction === "back") iframe.contentWindow?.history.back();
-						else iframe.contentWindow?.history.forward();
+						await frameHistory(iframe, direction);
 						await loaded;
 					},
 				});

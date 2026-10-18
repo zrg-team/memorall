@@ -2116,7 +2116,7 @@ dependencies = [
 
 [[package]]
 name = "memorall-desktop"
-version = "0.5.48"
+version = "0.5.49"
 dependencies = [
  "notify",
  "serde",
@@ -2128,6 +2128,7 @@ dependencies = [
  "tauri-plugin-shell",
  "thiserror 2.0.20",
  "tokio",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
