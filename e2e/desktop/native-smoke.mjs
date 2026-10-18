@@ -635,6 +635,10 @@ async function assertWindowsMemonTerminal(browser) {
 			.getByTestId("memon-taskbar")
 			.getByTestId("memon-settings-tray");
 		await footer.waitFor({ timeout: 20000 });
+		const barBounds = await page.getByTestId("memon-taskbar").boundingBox();
+		const trayBounds = await footer.boundingBox();
+		if (!barBounds || !trayBounds || barBounds.height > 56 || trayBounds.y < barBounds.y || trayBounds.y + trayBounds.height > barBounds.y + barBounds.height)
+			throw new Error("Computer settings must fit within the single apps taskbar");
 		const openSettings = async () => {
 			if (!(await page.getByTestId("memon-config-panel").isVisible()))
 				await footer
