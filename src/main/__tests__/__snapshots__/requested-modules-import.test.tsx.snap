@@ -227,6 +227,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/files/folder-index/FolderIndexGraphDialog.tsx",
   "../modules/files/folder-index/FolderIndexMappedConfirm.tsx",
   "../modules/files/folder-index/FolderIndexMenuItems.tsx",
+  "../modules/files/folder-index/FolderIndexProgress.tsx",
   "../modules/files/folder-index/FolderIndexesButton.tsx",
   "../modules/files/folder-index/FolderIndexesDialog.tsx",
   "../modules/files/folder-index/IndexTypeBadge.tsx",
