@@ -5,6 +5,11 @@ import {
 	type PageOutlineBlock,
 } from "@/co-agent/dom/page-outline";
 import type { SandboxHandleSwRequestResult } from "@/services/sandbox-container";
+import type {
+	WebOutlineActionRequest,
+	WebOutlineActionResult,
+	WebPageOutline,
+} from "@/services/web-browser/web-browser-protocol";
 import {
 	captureElement,
 	captureViewport,
@@ -12,11 +17,6 @@ import {
 	type MemonPageCapture,
 	pictureMaxSide,
 } from "./page-capture";
-import type {
-	WebOutlineActionRequest,
-	WebOutlineActionResult,
-	WebPageOutline,
-} from "@/services/web-browser/web-browser-protocol";
 
 /**
  * Embedded Browser tabs: pages of servers started in the computer's
@@ -166,6 +166,19 @@ export const attachSandboxFrame = (
 	const onMessage = (event: MessageEvent<unknown>) => {
 		if (event.source !== iframe.contentWindow || !isRecord(event.data)) return;
 		const data = event.data;
+		if (
+			data.type === "memorall-preview-ready" &&
+			isDesktopPreview(iframe) &&
+			event.origin === new URL(iframe.src).origin &&
+			typeof data.path === "string" &&
+			data.path.startsWith("/")
+		) {
+			const port = Number(
+				new URL(iframe.src).searchParams.get("__memorall_guest_port"),
+			);
+			onReady(sandboxServerUrl({ port, path: data.path }));
+			return;
+		}
 		if (data.type === "virtual-renderer-ready") {
 			ready();
 			return;
@@ -317,22 +330,130 @@ const toServerUrls = (outline: WebPageOutline): WebPageOutline => {
 	};
 };
 
+const isDesktopPreview = (iframe: HTMLIFrameElement): boolean => {
+	try {
+		const url = new URL(iframe.src);
+		const port = Number(url.searchParams.get("__memorall_guest_port"));
+		return (
+			url.protocol === "http:" &&
+			url.hostname === "127.0.0.1" &&
+			Number.isInteger(port) &&
+			port >= 1024 &&
+			port <= 65535
+		);
+	} catch {
+		return false;
+	}
+};
+
+const desktopOutline = (
+	iframe: HTMLIFrameElement,
+	outline: WebPageOutline,
+): WebPageOutline => {
+	const native = new URL(iframe.src);
+	const port = Number(native.searchParams.get("__memorall_guest_port"));
+	const logical = (value: string) => {
+		try {
+			const url = new URL(value);
+			return url.origin === native.origin
+				? sandboxServerUrl({ port, path: url.pathname + url.search })
+				: value;
+		} catch {
+			return value;
+		}
+	};
+	return {
+		...outline,
+		url: logical(outline.url),
+		blocks: outline.blocks.map((block) =>
+			block.kind === "link" ? { ...block, href: logical(block.href) } : block,
+		),
+	};
+};
+
+const remoteFrame = <T>(
+	iframe: HTMLIFrameElement,
+	operation: string,
+	payload: unknown,
+): Promise<T> => {
+	const view = iframe.ownerDocument.defaultView ?? window;
+	const origin = new URL(iframe.src).origin;
+	const id = crypto.randomUUID();
+	return new Promise((resolve, reject) => {
+		const cleanup = () => {
+			clearTimeout(timer);
+			view.removeEventListener("message", listener);
+		};
+		const listener = (event: MessageEvent) => {
+			if (
+				event.source !== iframe.contentWindow ||
+				event.origin !== origin ||
+				event.data?.type !== "memorall-preview-response" ||
+				event.data.id !== id
+			)
+				return;
+			cleanup();
+			event.data.error
+				? reject(new Error(String(event.data.error)))
+				: resolve(event.data.result as T);
+		};
+		const timer = setTimeout(() => {
+			cleanup();
+			reject(new Error("Preview did not respond"));
+		}, 15_000);
+		view.addEventListener("message", listener);
+		iframe.contentWindow?.postMessage(
+			{ type: "memorall-preview-request", id, operation, payload },
+			origin,
+		);
+	});
+};
+
+export const frameHistory = async (
+	iframe: HTMLIFrameElement,
+	direction: "back" | "forward",
+): Promise<void> => {
+	if (isDesktopPreview(iframe)) {
+		await remoteFrame(iframe, "history", direction);
+		return;
+	}
+	if (direction === "back") iframe.contentWindow?.history.back();
+	else iframe.contentWindow?.history.forward();
+};
+
 export const frameOutline = (
 	iframe: HTMLIFrameElement,
 	maxChars?: number,
-): WebPageOutline =>
-	toServerUrls(buildPageOutline(frameDocument(iframe), { maxChars }));
+): WebPageOutline | Promise<WebPageOutline> => {
+	if (isDesktopPreview(iframe))
+		return remoteFrame<WebPageOutline>(iframe, "outline", { maxChars }).then(
+			(outline) => desktopOutline(iframe, outline),
+		);
+	return toServerUrls(buildPageOutline(frameDocument(iframe), { maxChars }));
+};
 
 export const frameAct = async (
 	iframe: HTMLIFrameElement,
 	request: WebOutlineActionRequest,
 	maxChars?: number,
 ): Promise<{ result: WebOutlineActionResult; outline?: WebPageOutline }> => {
+	if (isDesktopPreview(iframe)) {
+		const response = await remoteFrame<{
+			result: WebOutlineActionResult;
+			outline?: WebPageOutline;
+		}>(iframe, "act", { request, maxChars });
+		return {
+			...response,
+			outline: response.outline
+				? desktopOutline(iframe, response.outline)
+				: undefined,
+		};
+	}
 	const result = actOnRef(frameDocument(iframe), request);
 	await new Promise((resolve) => setTimeout(resolve, 120));
 	let outline: WebPageOutline | undefined;
 	try {
-		outline = frameOutline(iframe, maxChars);
+		outline = await frameOutline(iframe, maxChars);
 	} catch {
 		outline = undefined;
 	}
@@ -344,6 +465,7 @@ export const frameCapture = async (
 	iframe: HTMLIFrameElement,
 	request: MemonCaptureRequest,
 ): Promise<MemonPageCapture> => {
+	if (isDesktopPreview(iframe)) return remoteFrame(iframe, "capture", request);
 	const doc = frameDocument(iframe);
 	const maxSide = pictureMaxSide(request);
 	// No ref: the page as its viewport shows it, a rectangle of it, or all of it.

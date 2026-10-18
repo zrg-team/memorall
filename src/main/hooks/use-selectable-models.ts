@@ -126,6 +126,12 @@ export const toSelectable = (
 	if (LOCAL_PROVIDERS.has(provider) && !isDownloaded(model)) return null;
 
 	const categories = resolveModelCategories(serviceName, model.id, model);
+	if (
+		category === "ocr" &&
+		model.supportsVision === false &&
+		!categories.includes("ocr")
+	)
+		return null;
 	// A hosted model whose id reveals nothing is classified as chat. Media
 	// pickers still offer it (after the recognised ones): the provider knows
 	// what it serves, the id pattern only guesses. Decisions are the exception:

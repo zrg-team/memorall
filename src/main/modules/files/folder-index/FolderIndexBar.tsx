@@ -17,6 +17,7 @@ import {
 import { useFolderIndex } from "./FolderIndexContext";
 import { IndexTypeBadge } from "./IndexTypeBadge";
 import { EmbeddingSearchDialog } from "./EmbeddingSearchDialog";
+import { FolderIndexProgress } from "./FolderIndexProgress";
 
 /**
  * Above a folder's files when the folder has an index: which types, how many
@@ -56,6 +57,7 @@ export const FolderIndexBar: React.FC<{
 	const entries = index.entriesOf(path);
 	const withEntry = entries ? entries.byFile.size : 0;
 	const busy = index.isRunning(path);
+	const progress = index.progressAt(path);
 	const activity = Object.entries(index.state?.activity ?? {}).filter(
 		([key]) => {
 			const root = key.slice(key.indexOf(":") + 1);
@@ -81,12 +83,24 @@ export const FolderIndexBar: React.FC<{
 					/>
 				))}
 			</span>
-			<span className="min-w-0 flex-1 text-muted-foreground">
+			<div className="min-w-0 flex-1 basis-48 text-muted-foreground">
 				{busy ? (
-					<span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-						<Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
-						{t(checking ? "folderIndex.checking" : "folderIndex.indexing")}
-					</span>
+					<>
+						<span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+							<Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
+							{t(checking ? "folderIndex.checking" : "folderIndex.indexing")}
+						</span>
+						{progress.map((run) => (
+							<FolderIndexProgress
+								key={run.key}
+								progress={run}
+								label={
+									index.types.find((type) => type.id === run.typeId)?.label ??
+									run.typeId
+								}
+							/>
+						))}
+					</>
 				) : waiting ? (
 					<span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
 						<Clock className="h-3 w-3" />
@@ -105,7 +119,7 @@ export const FolderIndexBar: React.FC<{
 							: null}
 					</>
 				)}
-			</span>
+			</div>
 			{effective.includes("okf") && (
 				<Button
 					variant="outline"

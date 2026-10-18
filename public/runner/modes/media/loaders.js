@@ -1,8 +1,7 @@
 // Loads and disposes media pipelines.
 //
-// Every model goes through `pipeline(task, repoId)`: transformers.js reads the
-// repo's config and picks the architecture, tokenizer and processor, so this
-// file never needs to know which model it is loading.
+// Pipelines and the OCR AutoModel adapter read each repo's config to select
+// its architecture, tokenizer and processor.
 //
 // A bundle is `{ id, task, device, dtype, pipe }`.
 import { withGPULock } from "../../utils/gpu-lock.js";
@@ -15,6 +14,7 @@ import {
 import { ModelLoadError } from "./cancellation.js";
 import { loadDecisionBundle } from "./decision-model.js";
 import { createDownloadProgress } from "./progress.js";
+import { loadOCRBundle } from "./ocr.js";
 
 /**
  * The transformers.js pipeline that loads a task's models. Text ranking has no
@@ -42,6 +42,9 @@ async function createPipeline({
 			? { session_options: { graphOptimizationLevel: optimization } }
 			: {}),
 	};
+	if (config.task === "image-text-to-text") {
+		return loadOCRBundle({ transformers, config, device, dtype, options });
+	}
 	const create = () =>
 		transformers.pipeline(pipelineTaskFor(config.task), config.id, options);
 	const pipe = device === "webgpu" ? await withGPULock(create) : await create();

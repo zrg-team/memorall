@@ -1,15 +1,16 @@
 import type { PlatformComposition } from "../contracts/core";
 import { BaseUrlAssetResolver } from "../core/asset-resolver";
 import { MutableCapabilityRegistry } from "../core/capability-registry";
-import { IndexedDbKeyValueStore } from "../core/indexeddb-key-value-store";
 import { InMemoryKeyValueStore } from "../core/in-memory-key-value-store";
+import { IndexedDbKeyValueStore } from "../core/indexeddb-key-value-store";
 import { NoopNavigationPort } from "../core/noop-ports";
 import { hasOriginPrivateFileSystem } from "../core/origin-private-file-system";
-import { WindowExternalLinkPort } from "../core/window-external-link-port";
 import { UnavailableRuntimeDiagnostics } from "../core/unavailable-runtime-diagnostics";
+import { WindowExternalLinkPort } from "../core/window-external-link-port";
 import { DesktopBrowserCommandPort } from "./desktop-browser-command-port";
 import { DesktopMcpStdioPort } from "./desktop-mcp-stdio-port";
 import { DesktopNativeFilesystemPort } from "./desktop-native-filesystem-port";
+import { DesktopSandboxRuntimePort } from "./desktop-sandbox-runtime-port";
 
 const capabilities = new MutableCapabilityRegistry({
 	"page.capture": { available: false, reason: "No extension tab access." },
@@ -29,8 +30,9 @@ const capabilities = new MutableCapabilityRegistry({
 	// (visibility off, Chromium missing) rather than silently doing nothing.
 	"co-agent": { available: true },
 	"sandbox.browser": {
-		available: false,
-		reason: "Desktop uses the local executor.",
+		available: true,
+		reason:
+			"Commands run in the bundled Linux VM; hardware virtualization is required.",
 	},
 	"executor.local": {
 		available: false,
@@ -78,6 +80,7 @@ export const platform: PlatformComposition = {
 	externalLinks: new WindowExternalLinkPort(),
 	runtimeDiagnostics: new UnavailableRuntimeDiagnostics(),
 	browserCommands: browserAutomation,
+	sandboxRuntime: new DesktopSandboxRuntimePort(),
 	browserAutomation,
 	nativeFilesystem,
 	mcpStdio: new DesktopMcpStdioPort(),

@@ -47,6 +47,9 @@ const ImageToolsStudio = lazy(() =>
 		default: module.ImageToolsStudio,
 	})),
 );
+const OCRStudio = lazy(() =>
+	import("./ocr/OCRStudio").then((module) => ({ default: module.OCRStudio })),
+);
 const DecisionStudio = lazy(() =>
 	import("./decision/DecisionStudio").then((module) => ({
 		default: module.DecisionStudio,
@@ -68,6 +71,7 @@ const CANVASES: Record<
 	"speech-to-text": TranscriptionStudio,
 	"image-generation": ImageGenerationStudio,
 	"image-tools": ImageToolsStudio,
+	ocr: OCRStudio,
 	"text-tools": TextToolsStudio,
 };
 

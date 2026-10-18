@@ -1,8 +1,15 @@
-import { render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+	SandboxRuntimePort,
+	SandboxRuntimeStatus,
+} from "@/platform/contracts/core";
+import { platform } from "@/platform/current";
 import type { MemonTerminalState } from "@/services/memon/types";
+import { desktopSandboxController } from "@/services/sandbox-container/desktop-sandbox-controller";
 import type { MemonSend } from "../types";
 import { TerminalWindow } from "../windows/TerminalWindow";
+import { TerminalScreen } from "../windows/terminal/terminal-screen";
 
 const request = vi.fn();
 vi.mock("@/services/memon/memon-client", () => ({
@@ -86,7 +93,46 @@ const renderTerminal = async (terminal: MemonTerminalState) => {
 };
 
 describe("TerminalWindow", () => {
+	const originalRuntime = platform.sandboxRuntime;
+	afterEach(() => {
+		platform.sandboxRuntime = originalRuntime;
+	});
 	beforeEach(() => request.mockReset());
+	it("blocks typing, paste, Enter and completion until the sandbox is ready", async () => {
+		let status: SandboxRuntimeStatus = {
+			ready: false,
+			state: "starting",
+			failure: null,
+			initializedAt: null,
+		};
+		const runtime: SandboxRuntimePort = {
+			status: vi.fn(async () => status),
+			request: vi.fn(),
+			stop: vi.fn(),
+		};
+		platform.sandboxRuntime = runtime;
+		const { send } = await renderTerminal(terminalState());
+		expect(
+			screen.getByTestId("terminal-sandbox-blocked").textContent,
+		).toContain("Starting");
+		expect(textarea().disabled).toBe(true);
+		typeText("ls");
+		press("Enter");
+		press("Tab");
+		expect(send).not.toHaveBeenCalled();
+		expect(request).not.toHaveBeenCalled();
+		status = { ...status, ready: true, state: "ready" };
+		await act(() => desktopSandboxController(runtime).refresh());
+		expect(textarea().disabled).toBe(false);
+		expect(screen.queryByTestId("terminal-sandbox-blocked")).toBeNull();
+		typeText("ls");
+		press("Enter");
+		expect(send).toHaveBeenCalledWith(
+			"terminal.exec",
+			{ key: "m1", command: "ls", terminalId: "1" },
+			{ rethrow: true },
+		);
+	});
 
 	it("runs the line typed at the prompt on Enter", async () => {
 		const { send } = await renderTerminal(terminalState());
@@ -108,6 +154,35 @@ describe("TerminalWindow", () => {
 			expect.objectContaining({ command: "npm run dev" }),
 			{ rethrow: true },
 		);
+	});
+
+	it("shows a structured command failure's message and accepts another command", async () => {
+		const settled = vi.spyOn(TerminalScreen.prototype, "settleEcho");
+		try {
+			const { send } = await renderTerminal(terminalState());
+			send.mockRejectedValueOnce({
+				code: "VM_START_FAILED",
+				message: "Sandbox could not start",
+			});
+			typeText("ls");
+			press("Enter");
+			await waitFor(() =>
+				expect(settled).toHaveBeenCalledWith(
+					expect.any(Number),
+					"Sandbox could not start",
+				),
+			);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			typeText("pwd");
+			press("Enter");
+			expect(send).toHaveBeenLastCalledWith(
+				"terminal.exec",
+				{ key: "m1", command: "pwd", terminalId: "1" },
+				{ rethrow: true },
+			);
+		} finally {
+			settled.mockRestore();
+		}
 	});
 
 	it("completes with Tab, from what the computer has", async () => {

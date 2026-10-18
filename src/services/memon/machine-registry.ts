@@ -4,8 +4,8 @@ import {
 	DEFAULT_MEMON_FEATURE_CONFIG,
 	type MemonFeatureConfig,
 } from "./feature-config";
-import { MemonMachine, type MemonPorts } from "./memon-machine";
 import { publishMemonChange } from "./memon-events";
+import { MemonMachine, type MemonPorts } from "./memon-machine";
 
 /** Trailing-edge throttle for bus messages. */
 const PUBLISH_THROTTLE_MS = 120;
@@ -92,6 +92,10 @@ export const getMemonMachine = async (
 	// browser services, which importing a tool must not start.
 	const { createMemonPorts } = await import("./ports");
 	const ports = createMemonPorts(options.ports);
+	// Power-on starts the VM without delaying the desktop or its first files.
+	void ports.sandbox
+		?.start()
+		.catch((error) => logWarn("[MEMON] Sandbox startup failed:", error));
 	const home =
 		options.home ??
 		(await ports.homes?.resolve(options.agentId ?? null).catch((error) => {

@@ -229,6 +229,73 @@ describe("WorkspaceSync", () => {
 		vi.unstubAllGlobals();
 	});
 
+	it("coalesces slow background polls and flushes changes made during an in-flight pull", async () => {
+		const host = createHost();
+		const sandbox = createSandbox();
+		const sync = new WorkspaceSync(host.port, sandbox.runtime);
+		sync.start();
+		await sync.ready();
+		vi.mocked(host.port.catchUp).mockClear();
+		let release!: () => void;
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const collect = vi.mocked(sandbox.runtime.collect).getMockImplementation();
+		if (!collect) throw new Error("The sandbox collect fixture is missing");
+		const collectSpy = vi
+			.spyOn(sandbox.runtime, "collect")
+			.mockImplementationOnce(async (options) => {
+				const batch = await collect(options);
+				await blocked;
+				return batch;
+			});
+		const first = sync.flush();
+		await vi.advanceTimersByTimeAsync(0);
+		sandbox.fs().writeFileSync("/late.txt", "saved while polling");
+		for (let second = 0; second < 20; second++) {
+			host.write("/host.txt", `host change ${second}`);
+			sync.notePending();
+			await vi.advanceTimersByTimeAsync(1000);
+		}
+		const latest = sync.flush();
+		expect(sync.flush()).toBe(latest);
+		expect(collectSpy).toHaveBeenCalledTimes(1);
+		release();
+		await Promise.all([first, latest]);
+		expect(collectSpy).toHaveBeenCalledTimes(2);
+		expect(host.port.catchUp).toHaveBeenCalledTimes(1);
+		expect(read(sandbox, "/host.txt")).toBe("host change 19");
+		expect(decoder.decode(host.files.get("/late.txt")?.bytes)).toBe(
+			"saved while polling",
+		);
+	});
+
+	it("drains every saved batch before startup becomes ready", async () => {
+		const host = createHost();
+		const sandbox = createSandbox();
+		const sync = new WorkspaceSync(host.port, sandbox.runtime);
+		await sync.ready();
+		const { vfsId } = await sandbox.runtime.state();
+		vi.mocked(sandbox.runtime.collect)
+			.mockResolvedValueOnce({
+				vfsId,
+				batchId: 1,
+				ops: [{ op: "write", path: "/first.txt", offset: 0, length: 3 }],
+				buffer: encoder.encode("one").buffer,
+			})
+			.mockResolvedValueOnce({
+				vfsId,
+				batchId: 2,
+				ops: [{ op: "write", path: "/second.txt", offset: 0, length: 3 }],
+				buffer: encoder.encode("two").buffer,
+			})
+			.mockResolvedValueOnce({ vfsId, batchId: null, ops: [] });
+		await sync.drain();
+		expect(sandbox.runtime.collect).toHaveBeenCalledTimes(3);
+		expect(decoder.decode(host.files.get("/first.txt")?.bytes)).toBe("one");
+		expect(decoder.decode(host.files.get("/second.txt")?.bytes)).toBe("two");
+	});
+
 	it("fills a new VFS once: content within budget, the rest as stubs", async () => {
 		const host = createHost();
 		host.write("/agents/bot/Bot.md", "# Bot", false);

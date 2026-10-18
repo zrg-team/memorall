@@ -1,14 +1,15 @@
-import React from "react";
+import type React from "react";
 import { useTranslation } from "react-i18next";
+import { platform } from "@/platform/current";
+import { CommandCard } from "./CommandCard";
+import { DesktopSandboxCard } from "./DesktopSandboxCard";
+import { ManagedBrowserCard } from "./ManagedBrowserCard";
+import { ServerCard } from "./ServerCard";
 import type {
 	RuntimeSessionsSharedProps,
 	RuntimeSessionsVariant,
 } from "./types";
-import { CommandCard } from "./CommandCard";
-import { ServerCard } from "./ServerCard";
 import { WebBrowserSessionCard } from "./WebBrowserSessionCard";
-import { ManagedBrowserCard } from "./ManagedBrowserCard";
-import { platform } from "@/platform/current";
 
 export const RuntimeSessionsSectionList: React.FC<
 	RuntimeSessionsSharedProps & {
@@ -20,6 +21,9 @@ export const RuntimeSessionsSectionList: React.FC<
 
 	return (
 		<div className="space-y-3">
+			{variant === "docked" && platform.sandboxRuntime ? (
+				<DesktopSandboxCard runtime={platform.sandboxRuntime} />
+			) : null}
 			{variant === "docked" && platform.browserAutomation ? (
 				<div className="space-y-2">
 					<div className="px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">

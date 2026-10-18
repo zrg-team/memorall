@@ -3,6 +3,7 @@
 import { MediaInputError } from "./cancellation.js";
 import { runOnDevice } from "./device.js";
 import { decodeImage, encodePng } from "./image-encode.js";
+import { runDocumentOCR } from "./ocr.js";
 
 function normalizeThreshold(value) {
 	const threshold = Number(value);
@@ -82,6 +83,8 @@ export async function runImageTool({
 	payload,
 	cancellation,
 }) {
+	if (bundle.task === "image-text-to-text")
+		return runDocumentOCR({ transformers, bundle, payload, cancellation });
 	const task = payload?.task;
 	const handler = TASK_HANDLERS[task];
 	if (!handler) throw new MediaInputError(`Unsupported image task: ${task}`);

@@ -7,16 +7,16 @@ import {
 	createWriteStream,
 	existsSync,
 	mkdirSync,
-	readFileSync,
 	readdirSync,
+	readFileSync,
 	renameSync,
 	rmSync,
 	statSync,
 	writeFileSync,
 } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { join, relative, resolve } from "node:path";
 import { buildSync } from "esbuild";
 
 const root = process.cwd();
@@ -153,6 +153,18 @@ buildSync({
 	format: "iife",
 	target: "chrome120",
 	sourcemap: false,
+	minify: true,
+	define: { "process.env.NODE_ENV": '"production"' },
+	tsconfig: resolve(root, "tsconfig.json"),
+});
+
+buildSync({
+	entryPoints: [resolve(root, "src/services/memon/desktop-preview-entry.ts")],
+	outfile: join(sidecarOutput, "desktop-preview.js"),
+	bundle: true,
+	platform: "browser",
+	format: "iife",
+	target: "es2022",
 	minify: true,
 	define: { "process.env.NODE_ENV": '"production"' },
 	tsconfig: resolve(root, "tsconfig.json"),

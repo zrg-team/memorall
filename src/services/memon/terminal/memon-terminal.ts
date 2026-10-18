@@ -1,5 +1,6 @@
 import { runsAlongside } from "@/services/sandbox-container/alongside-commands";
 import { resolvePath } from "@/services/sandbox-container/host-commands/command-line";
+import { errorMessage } from "@/utils/error-message";
 import type { FxOpened } from "../apps/fx/fx-app";
 import type { PiCodeOpened } from "../apps/pi-code/pi-code-app";
 import { memonDisplayPath } from "../constants";
@@ -194,7 +195,7 @@ export class MemonTerminal {
 	/** Ports the running command printed (http://localhost:3000). */
 	private mentionedPorts = new Set<number>();
 	private lastServerCheck = 0;
-	private readingOutput = false;
+	private readingOutput: RunningCommand | null = null;
 	private readonly settledWaiters = new Set<() => void>();
 	private availabilityState: MemonAvailability = { available: true };
 	private disposed = false;
@@ -270,7 +271,7 @@ export class MemonTerminal {
 		} catch (error) {
 			this.availabilityState = {
 				available: false,
-				reason: error instanceof Error ? error.message : String(error),
+				reason: errorMessage(error),
 			};
 		}
 	}
@@ -574,7 +575,7 @@ export class MemonTerminal {
 		try {
 			opened = await this.host.openPiCode(cwd, { continueLast });
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorMessage(error);
 			return this.finish(tab, 1, [
 				{ kind: "stderr", text: `picode: ${message}` },
 			]);
@@ -622,7 +623,7 @@ export class MemonTerminal {
 				continueLast: parsed.continueLast,
 			});
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = errorMessage(error);
 			return this.finish(tab, 1, [{ kind: "stderr", text: `fx: ${message}` }]);
 		}
 		const { keeps, running } = await this.leaveTab(tab);
@@ -808,10 +809,11 @@ export class MemonTerminal {
 	 * reader at a time; each read waits briefly for new output.
 	 */
 	private async readOutput(): Promise<void> {
-		if (this.readingOutput) return;
-		this.readingOutput = true;
+		const owner = this.runningCommand;
+		if (!owner?.processId || this.readingOutput === owner) return;
+		this.readingOutput = owner;
 		try {
-			while (this.runningCommand?.processId && !this.disposed) {
+			while (this.runningCommand === owner && !this.disposed) {
 				const running = this.runningCommand;
 				const processId = running.processId as string;
 				let outcome: MemonCommandOutcome;
@@ -823,16 +825,17 @@ export class MemonTerminal {
 						COMMAND_READ_WAIT_MS,
 					);
 				} catch (error) {
+					if (this.runningCommand !== owner) return;
 					this.append(this.runningTab(), [
 						{
 							kind: "system",
-							text: `Lost the command's output: ${error instanceof Error ? error.message : String(error)}`,
+							text: `Lost the command's output: ${errorMessage(error)}`,
 						},
 					]);
 					this.settle(null);
 					return;
 				}
-				if (this.runningCommand?.processId !== processId) return;
+				if (this.runningCommand !== owner) return;
 				this.append(this.runningTab(), outcome.output);
 				if (outcome.output.length) running.lastOutputAt = Date.now();
 				running.cursor = outcome.cursor ?? running.cursor;
@@ -848,7 +851,7 @@ export class MemonTerminal {
 				}
 			}
 		} finally {
-			this.readingOutput = false;
+			if (this.readingOutput === owner) this.readingOutput = null;
 		}
 	}
 

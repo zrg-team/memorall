@@ -300,7 +300,7 @@
 				"description": "[Cũ] Công cụ tệp cơ bản. Nên dùng documents-fs-feature thay thế."
 			},
 			"nodejsSandboxFeature": {
-				"name": "Môi trường Node.js",
+				"name": "Sandbox",
 				"description": "Chạy JavaScript/TypeScript, lệnh shell, cài gói npm và khởi động máy chủ trong môi trường cách ly."
 			},
 			"webFeature": {

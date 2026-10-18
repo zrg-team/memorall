@@ -88,6 +88,7 @@ import {
 	type MemonFeatureConfig,
 	memonConfigFromFlow,
 } from "@/services/memon/feature-config";
+import { startDesktopSandboxForAgent } from "@/services/sandbox-container/agent-sandbox-startup";
 import type { AttachedDocumentRef } from "@/types/chat";
 import { isPopupSurface } from "@/utils/dom";
 
@@ -865,6 +866,7 @@ ${text}`
 				]);
 				if (cancelled) return;
 
+				startDesktopSandboxForAgent(config, { automatic: true });
 				const catalogFeatures = new Map(
 					catalog.steps
 						.filter((step) => step.type === "feature")

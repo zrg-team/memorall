@@ -198,6 +198,8 @@ export const MemonDock: React.FC<{
 	piAttention?: boolean;
 	/** fx is mid-turn. */
 	fxWorking?: boolean;
+	/** Settings and status stay at the right end of the same taskbar. */
+	tray?: React.ReactNode;
 	onOpen: (app: MemonWindowApp) => void;
 }> = ({
 	label,
@@ -208,6 +210,7 @@ export const MemonDock: React.FC<{
 	piWorking,
 	piAttention,
 	fxWorking,
+	tray,
 	onOpen,
 }) => {
 	const { t } = useTranslation();
@@ -239,32 +242,40 @@ export const MemonDock: React.FC<{
 	return (
 		<nav
 			aria-label={label}
+			data-testid="memon-taskbar"
 			className={cn(
-				"flex shrink-0 items-center overflow-x-auto overflow-y-hidden border-t bg-background px-2",
+				"flex shrink-0 items-center border-t bg-background px-2",
 				compact ? "h-12" : "h-14",
 			)}
 		>
-			<div className="mx-auto flex items-center gap-1">
-				{entries.map((entry) =>
-					entry.kind === "app" ? (
-						button(entry.launcher)
-					) : (
-						<DockGroup
-							key={entry.id}
-							id={entry.id}
-							launchers={entry.launchers}
-							compact={compact}
-							markOf={markOf}
-							onOpen={onOpen}
-						/>
-					),
-				)}
-				{running.length || editorOpen ? (
-					<span aria-hidden className="mx-1 h-7 w-px shrink-0 bg-border" />
-				) : null}
-				{running.map(button)}
-				{editorOpen ? button({ id: "editor", available: true }) : null}
+			<div className="flex h-full min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden">
+				<div className="mx-auto flex items-center gap-1">
+					{entries.map((entry) =>
+						entry.kind === "app" ? (
+							button(entry.launcher)
+						) : (
+							<DockGroup
+								key={entry.id}
+								id={entry.id}
+								launchers={entry.launchers}
+								compact={compact}
+								markOf={markOf}
+								onOpen={onOpen}
+							/>
+						),
+					)}
+					{running.length || editorOpen ? (
+						<span aria-hidden className="mx-1 h-7 w-px shrink-0 bg-border" />
+					) : null}
+					{running.map(button)}
+					{editorOpen ? button({ id: "editor", available: true }) : null}
+				</div>
 			</div>
+			{tray ? (
+				<div className="ml-2 flex shrink-0 items-center border-l border-border/60 pl-2">
+					{tray}
+				</div>
+			) : null}
 		</nav>
 	);
 };

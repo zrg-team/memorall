@@ -35,6 +35,7 @@ import {
 	useHubMediaModels,
 } from "../../hooks/use-hub-media-models";
 import { studioModeDescriptor } from "../../studio-modes";
+import { OCRModelRecommendations } from "../ocr/OCRModelRecommendations";
 
 interface HubMediaModelListProps {
 	category: MediaCategory;
@@ -165,6 +166,14 @@ export const HubMediaModelList: React.FC<HubMediaModelListProps> = ({
 
 	return (
 		<div className="space-y-3" data-hub-media-models={hub.filter}>
+			{hub.filter === "ocr" && !hub.query.trim() ? (
+				<OCRModelRecommendations
+					onSearch={hub.setQuery}
+					onUse={(id) => use(id, "image-text-to-text")}
+					busy={hub.busy}
+					percent={hub.percent}
+				/>
+			) : null}
 			{hub.installed.length > 0 ? (
 				<section className="space-y-2">
 					<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -446,7 +455,7 @@ export const HubMediaModelList: React.FC<HubMediaModelListProps> = ({
 													})
 												: t("models.unavailable.customRuntime", {
 														defaultValue:
-															"Needs its own runtime: its ONNX files have no transformers.js model type, so the browser studio can't load it. Serve it behind an OpenAI-compatible API to use it here.",
+															"This export needs inference code that the local runtime does not support. Choose a compatible export.",
 													})}
 								</p>
 							)}

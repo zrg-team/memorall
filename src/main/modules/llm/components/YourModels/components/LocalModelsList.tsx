@@ -9,6 +9,8 @@ import { DEFAULT_SERVICES } from "@/services/llm/constants";
 import { logInfo } from "@/utils/logger";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import type { CurrentModel } from "@/main/hooks/use-current-model";
+import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
+import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
 
 interface LocalModelsListProps {
 	localModels: ModelInfo[];
@@ -16,6 +18,7 @@ interface LocalModelsListProps {
 	loading: boolean;
 	current: CurrentModel | null;
 	onModelLoaded?: (modelId: string, provider: ServiceProvider) => void;
+	category?: WorkspaceMode;
 }
 
 export const LocalModelsList: React.FC<LocalModelsListProps> = ({
@@ -24,8 +27,10 @@ export const LocalModelsList: React.FC<LocalModelsListProps> = ({
 	loading,
 	current,
 	onModelLoaded,
+	category = "chat",
 }) => {
 	const { t } = useTranslation("llm");
+	const setWorkspaceMode = useWorkspaceModeStore((state) => state.setMode);
 	const [searchFilter, setSearchFilter] = useState("");
 
 	// Filter models by name
@@ -107,11 +112,13 @@ export const LocalModelsList: React.FC<LocalModelsListProps> = ({
 											quickProvider === "openai"
 												? DEFAULT_SERVICES.OPENAI
 												: quickProvider;
-										await serviceManager.llmService.setCurrentModel(
+										await serviceManager.llmService.setCurrentModelFor(
+											category,
 											quickProvider,
 											model.id,
 											serviceName,
 										);
+										if (category !== "chat") setWorkspaceMode(category);
 										logInfo(`${model.name || model.id} set as current model`);
 										onModelLoaded?.(model.id, quickProvider);
 									}}

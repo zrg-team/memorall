@@ -106,6 +106,7 @@ export const STUDIO_MESSAGE_TYPES: Record<MediaCategory, string> = {
 	"speech-to-text": "transcription",
 	"image-generation": "image_generation",
 	"image-tools": "image_tool",
+	ocr: "ocr",
 	"text-tools": "text_tool",
 	"text-to-audio": "text_to_audio",
 };

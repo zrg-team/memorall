@@ -2,6 +2,7 @@ import { Loader2, Power } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { Button } from "@/main/components/ui/button";
 import {
 	Select,
@@ -13,7 +14,6 @@ import {
 import { useChatStore } from "@/main/stores/chat";
 import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import { MEMON_APP_IDS, MEMON_BUILTIN_APPS } from "@/services/memon/constants";
-import { cn } from "@/lib/utils";
 import {
 	MEMON_APP_ICONS,
 	MEMON_APP_TINTS,

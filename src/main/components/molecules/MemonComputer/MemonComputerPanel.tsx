@@ -19,22 +19,23 @@ import {
 } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import { Button } from "@/main/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/main/components/ui/tabs";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/main/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/main/components/ui/tabs";
 import { useMediaQuery } from "@/main/hooks/use-viewport";
+import type { HostedAppFrameHandle } from "@/main/modules/files/components/HostedAppFrame";
+import { useMemonMachineStore } from "@/main/stores/memon-machine";
 import { useShellLayoutStore } from "@/main/stores/shell-layout";
 import { useWorkspaceModeStore } from "@/main/stores/workspace-mode";
-import { logError } from "@/utils/logger";
-import { type CaptureCrop, captureComputerScreen } from "./capture-screen";
-import { MemonCaptureOverlay } from "./MemonCaptureOverlay";
-import { cn } from "@/lib/utils";
-import { useMemonMachineStore } from "@/main/stores/memon-machine";
+import { platform } from "@/platform/current";
+import { isZipFileName } from "@/services/filesystem/folder-zip";
+import { isHostedAppId } from "@/services/memon/apps/hosted/catalog";
 import {
 	MEMON_BUILTIN_APPS,
 	MEMON_TASKS_FILE_NAME,
@@ -48,35 +49,36 @@ import type {
 	MemonStatus,
 	MemonWindowState,
 } from "@/services/memon/types";
+import { logError } from "@/utils/logger";
 import { askInChat, memonWindowTarget } from "./ask-in-chat";
+import { type CaptureCrop, captureComputerScreen } from "./capture-screen";
 import {
 	addContextMenuActions,
 	fileMenuActions,
 	pasteMenuAction,
 } from "./context-menu-actions";
-import { MemonAgentCursor, MemonUserCursor } from "./MemonAgentCursor";
-import { MemonDesktopIcons } from "./MemonDesktopIcons";
+import { MemonConfigPanel } from "./MemonConfigPanel";
 import type { MemonDockLauncher } from "./dock-layout";
+import { MemonAgentCursor, MemonUserCursor } from "./MemonAgentCursor";
+import { MemonCaptureOverlay } from "./MemonCaptureOverlay";
+import { MemonDesktopIcons } from "./MemonDesktopIcons";
 import { MemonDock } from "./MemonDock";
+import { MemonWindowErrorBoundary } from "./MemonWindowErrorBoundary";
 import { MemonLogo, MemonWindowFrame } from "./MemonWindowFrame";
+import { useDeleteConfirm } from "./use-delete-confirm";
+import { useMemonExportDownloads } from "./use-export-downloads";
+import { useMemonAskMenu } from "./use-memon-ask-menu";
 import { BrowserWindow } from "./windows/BrowserWindow";
 import { EditorWindow } from "./windows/EditorWindow";
 import { FilesWindow } from "./windows/FilesWindow";
-import { TerminalWindow } from "./windows/TerminalWindow";
 import { FxWindow } from "./windows/FxWindow";
-import { VideoWindow } from "./windows/VideoWindow";
-import { PiCodeWindow } from "./windows/PiCodeWindow";
-import { MemonWindowErrorBoundary } from "./MemonWindowErrorBoundary";
-import { ViewerWindow } from "./windows/ViewerWindow";
-import { KitWindow } from "./windows/KitWindow";
-import { VisualizeWindow } from "./windows/VisualizeWindow";
 import { HostedAppWindow } from "./windows/HostedAppWindow";
-import type { HostedAppFrameHandle } from "@/main/modules/files/components/HostedAppFrame";
-import { isHostedAppId } from "@/services/memon/apps/hosted/catalog";
-import { useDeleteConfirm } from "./use-delete-confirm";
-import { useMemonAskMenu } from "./use-memon-ask-menu";
-import { useMemonExportDownloads } from "./use-export-downloads";
-import { isZipFileName } from "@/services/filesystem/folder-zip";
+import { KitWindow } from "./windows/KitWindow";
+import { PiCodeWindow } from "./windows/PiCodeWindow";
+import { TerminalWindow } from "./windows/TerminalWindow";
+import { VideoWindow } from "./windows/VideoWindow";
+import { ViewerWindow } from "./windows/ViewerWindow";
+import { VisualizeWindow } from "./windows/VisualizeWindow";
 
 const COMPACT_WIDTH = 600;
 /** Where the app shell stacks chat and the right panel instead. */
@@ -259,6 +261,8 @@ export const MemonComputerPanel = React.memo<{
 	const error = useMemonMachineStore((state) => state.error);
 	const clearError = useMemonMachineStore((state) => state.clearError);
 	const [view, setView] = React.useState<"desktop" | "text">("desktop");
+	const [settingsOpen, setSettingsOpen] = React.useState(false);
+	const openSettings = React.useCallback(() => setSettingsOpen(true), []);
 	const desktopRef = React.useRef<HTMLDivElement>(null);
 	// Desktop plus dock: where the user's own cursor is drawn.
 	const areaRef = React.useRef<HTMLDivElement>(null);
@@ -506,6 +510,7 @@ export const MemonComputerPanel = React.memo<{
 						terminal={snapshot.terminal}
 						home={snapshot.home}
 						send={send}
+						onOpenSettings={openSettings}
 					/>
 				);
 			case "pi":
@@ -1009,6 +1014,16 @@ export const MemonComputerPanel = React.memo<{
 						piAttention={Boolean(snapshot.piCode?.approval)}
 						fxWorking={snapshot.fx?.working}
 						onOpen={openApp}
+						tray={
+							platform.sandboxRuntime ? (
+								<MemonConfigPanel
+									runtime={platform.sandboxRuntime}
+									open={settingsOpen}
+									onOpenChange={setSettingsOpen}
+									compact={compact}
+								/>
+							) : null
+						}
 					/>
 					<MemonUserCursor
 						areaRef={areaRef}

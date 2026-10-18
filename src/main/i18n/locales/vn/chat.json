@@ -588,10 +588,10 @@
 		"appOf": "Ứng dụng trên {{name}}",
 		"appOfHint": "Khi {{name}} bật, tính năng này chạy như một ứng dụng trên máy tính của nó thay vì thêm công cụ riêng.",
 		"memon": {
-			"appsHint": "Ứng dụng đi theo tính năng: Trình duyệt web cho Trình duyệt, Hệ thống tệp cho Tệp, Trình soạn thảo và Trình xem, Browser Sandbox cho Terminal, Lập kế hoạch cho Công việc, và Phản hồi trực quan cho Trực quan hóa. Bật tắt chúng trong Tính năng.",
+			"appsHint": "Ứng dụng đi theo tính năng: Trình duyệt web cho Trình duyệt, Hệ thống tệp cho Tệp, Trình soạn thảo và Trình xem, Sandbox cho Terminal, Lập kế hoạch cho Công việc, và Phản hồi trực quan cho Trực quan hóa. Bật tắt chúng trong Tính năng.",
 			"appOn": "Bật",
 			"appOff": "Tắt",
-			"sectionHint": "Khi bật, Trình duyệt web, Hệ thống tệp, Browser Sandbox và Lập kế hoạch bên dưới cũng được bật thành ứng dụng trên máy tính.",
+			"sectionHint": "Khi bật, Trình duyệt web, Hệ thống tệp, Sandbox và Lập kế hoạch bên dưới cũng được bật thành ứng dụng trên máy tính.",
 			"settings": "Cài đặt",
 			"builtIn": "Có sẵn",
 			"builtInHint": "Máy tính MemonOS Bot nào cũng có: lịch chạy, kỹ năng, kết nối của agent, các studio của bạn, và pi code nếu bạn không tắt nó.",
@@ -617,7 +617,7 @@
 				},
 				"terminal": {
 					"name": "Terminal",
-					"description": "Shell của Browser Sandbox với node, npm, git và py."
+					"description": "Shell của Sandbox với node, npm, git và py."
 				},
 				"tasks": {
 					"name": "Công việc",

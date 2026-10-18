@@ -3,6 +3,7 @@ import type { Flow } from "@/services/database/types";
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
 
 const mocks = vi.hoisted(() => ({
+	startDesktopSandboxForAgent: vi.fn(),
 	flowBuilderService: {
 		getCatalog: vi.fn(),
 		getFlowConfig: vi.fn(),
@@ -19,6 +20,9 @@ vi.mock("@/services", () => ({
 	serviceManager: {
 		flowBuilderService: mocks.flowBuilderService,
 	},
+}));
+vi.mock("@/services/sandbox-container/agent-sandbox-startup", () => ({
+	startDesktopSandboxForAgent: mocks.startDesktopSandboxForAgent,
 }));
 
 vi.mock("@memorall/agent-harness-flows/registries/tool-registry", () => ({
@@ -328,6 +332,17 @@ describe("useAgentConfigStore", () => {
 			(feature) => feature.name === "mcp-feature",
 		);
 		expect(ungated?.requiresCapability).toBeUndefined();
+	});
+	it("starts the sandbox when its feature is enabled and does not stop shared work when disabled", () => {
+		useAgentConfigStore.setState({
+			draftFeatures: { "nodejs-sandbox-feature": false },
+		});
+		useAgentConfigStore.getState().toggleFeature("nodejs-sandbox-feature");
+		expect(mocks.startDesktopSandboxForAgent).toHaveBeenCalledExactlyOnceWith({
+			steps: [{ name: "nodejs-sandbox-feature", enabled: true }],
+		});
+		useAgentConfigStore.getState().toggleFeature("nodejs-sandbox-feature");
+		expect(mocks.startDesktopSandboxForAgent).toHaveBeenCalledOnce();
 	});
 
 	it("derives the legacy editor state from unified flow config", async () => {

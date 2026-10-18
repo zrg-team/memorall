@@ -11,6 +11,10 @@ import type { ModelCategory } from "../interfaces/model-category";
 const RULES: { pattern: RegExp; categories: ModelCategory[] }[] = [
 	{ pattern: /(^|[-_/:.])(moderation|realtime)([-_/:.]|$)/i, categories: [] },
 	{
+		pattern: /ocr(?=$|[-_/:.]|\d)/i,
+		categories: ["ocr"],
+	},
+	{
 		pattern: /(^|[-_/:.])(tts|speech)([-_/:.]|$)/i,
 		categories: ["text-to-speech"],
 	},
@@ -52,6 +56,9 @@ export function classifyByModalities(modalities: {
 	}
 	const categories: ModelCategory[] = [];
 	if (output.includes("text")) categories.push("chat");
+	if (output.includes("text") && modalities.input?.includes("image")) {
+		categories.push("ocr");
+	}
 	if (output.includes("image")) categories.push("image-generation");
 	if (output.includes("audio") && !output.includes("text")) {
 		categories.push("text-to-speech");

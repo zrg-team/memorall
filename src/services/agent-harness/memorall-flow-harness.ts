@@ -17,6 +17,7 @@ import {
 } from "@memorall/agent-harness-flows/context/runtime-context";
 import { normalizeLangGraphStreamChunk } from "@memorall/agent-harness-flows/utils/langgraph-stream";
 import { sanitizeForJson } from "@/utils/sanitize-json";
+import { startDesktopSandboxForAgent } from "@/services/sandbox-container/agent-sandbox-startup";
 
 export const MEMORALL_FLOW_GRAPH_ID = "memorall.compatibility-flow";
 const LEGACY_CUSTOM_CHANNEL = "memorall.legacy.custom";
@@ -152,14 +153,16 @@ export const createMemorallFlowRun = ({
 	input,
 	services,
 	signal,
-}: CreateMemorallFlowRunOptions): HarnessRun =>
-	getMemorallAgentHarness().run({
+}: CreateMemorallFlowRunOptions): HarnessRun => {
+	if (!signal?.aborted) startDesktopSandboxForAgent(input.config);
+	return getMemorallAgentHarness().run({
 		runId,
 		graph: MEMORALL_FLOW_GRAPH_ID,
 		input,
 		services: { [MEMORALL_FLOW_SERVICES.id]: services },
 		signal,
 	});
+};
 
 export async function* toLegacyFlowStream(
 	run: HarnessRun,

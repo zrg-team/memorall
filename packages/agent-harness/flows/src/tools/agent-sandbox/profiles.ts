@@ -25,15 +25,10 @@ export type SandboxToolName = (typeof SANDBOX_STATEFUL_TOOLS)[number];
 const REQUIREMENTS: Record<SandboxToolName, readonly CoreSandboxCapability[]> =
 	{
 		sandbox_inspect: [],
-		sandbox_run: [
-			"runtime.code",
-			"runtime.file",
-			"runtime.command",
-			"runtime.repl",
-		],
+		sandbox_run: ["runtime.code", "runtime.file", "runtime.command"],
 		sandbox_process: ["process.background", "process.stdin"],
 		sandbox_packages: ["packages.install", "packages.manifest"],
-		sandbox_preview: ["preview.start", "preview.request", "preview.render"],
+		sandbox_preview: ["preview.start", "preview.request"],
 		sandbox_network: ["network.fetch"],
 		sandbox_snapshot: ["snapshot.capture", "snapshot.restore"],
 	};

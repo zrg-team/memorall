@@ -82,6 +82,9 @@ export async function ensureOffscreenDocument(): Promise<void> {
 		}
 
 		logInfo("🔄 Creating offscreen document", { url: offscreenUrl });
+		// Progress belongs to the document that owns the database. Only reset it
+		// when creating a new owner; a reused document keeps its current status.
+		await resetOffscreenProgress();
 
 		try {
 			await chrome.offscreen.createDocument({
@@ -103,7 +106,12 @@ export async function ensureOffscreenDocument(): Promise<void> {
 		}
 	})();
 
-	return offscreenInitPromise;
+	try {
+		await offscreenInitPromise;
+	} finally {
+		// A failed create must not permanently cache a rejected promise.
+		offscreenInitPromise = null;
+	}
 }
 
 export async function offscreenWatchdogCheck(): Promise<void> {

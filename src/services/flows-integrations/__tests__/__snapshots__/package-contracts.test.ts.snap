@@ -2485,7 +2485,7 @@ exports[`flows-integrations registered contracts > registers every integrations 
       "description": "Read the computer screen.",
       "properties": {
         "waitSeconds": {
-          "description": "Wait this long first (a page loading, a server starting, the user acting), then read the screen.",
+          "description": "Wait this many seconds first (1–86400, up to 24 hours; a page loading, a server starting, the user acting), then read the screen.",
           "type": "number",
         },
         "window": {

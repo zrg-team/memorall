@@ -50,11 +50,27 @@ export const RemoteModelsSection: React.FC<RemoteModelsSectionProps> = ({
 	const setWorkspaceMode = useWorkspaceModeStore((state) => state.setMode);
 	providers = providers.map((providerState) => ({
 		...providerState,
-		models: providerState.models.filter((model) =>
-			resolveModelCategories(providerState.provider, model.id, model).includes(
-				category,
-			),
-		),
+		models: providerState.models.filter((model) => {
+			const categories = resolveModelCategories(
+				providerState.provider,
+				model.id,
+				model,
+			);
+			if (
+				category === "ocr" &&
+				model.supportsVision === false &&
+				!categories.includes("ocr")
+			)
+				return false;
+			// APIs without modality metadata leave vision models classified as chat,
+			// just as in the workspace picker. Keep them available for OCR setup.
+			return (
+				categories.includes(category) ||
+				(category === "ocr" &&
+					categories.length === 1 &&
+					categories[0] === "chat")
+			);
+		}),
 	}));
 	const [collapsedProviders, setCollapsedProviders] = React.useState<
 		Partial<Record<"openai" | "openrouter" | "custom", boolean>>

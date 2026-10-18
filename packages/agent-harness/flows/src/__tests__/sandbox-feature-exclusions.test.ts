@@ -25,9 +25,7 @@ describe("partial sandbox replacement", () => {
 		expect(JSON.stringify(result.output.messages)).toContain(
 			"ARTIFACT RENDERING",
 		);
-		expect(JSON.stringify(result.output.messages)).not.toContain(
-			"BROWSER SANDBOX",
-		);
+		expect(JSON.stringify(result.output.messages)).not.toContain("# SANDBOX");
 		expect(getCapabilities).not.toHaveBeenCalled();
 	});
 

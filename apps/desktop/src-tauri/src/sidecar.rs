@@ -69,9 +69,14 @@ struct SidecarResponseError {
 
 type PendingSender = oneshot::Sender<Result<Value, BrowserBridgeError>>;
 
+struct SupervisedChild {
+    command: CommandChild,
+    _job: crate::child_job::ChildProcessJob,
+}
+
 pub struct SidecarSupervisor {
     app: AppHandle,
-    child: Arc<Mutex<Option<CommandChild>>>,
+    child: Arc<Mutex<Option<SupervisedChild>>>,
     pending: Arc<Mutex<HashMap<String, PendingSender>>>,
     start_lock: tokio::sync::Mutex<()>,
     request_counter: AtomicU64,
@@ -127,7 +132,7 @@ impl SidecarSupervisor {
     pub async fn shutdown(&self) {
         if self.status().running {
             let _ = self
-                .request_once("shutdown", json!({}), Duration::from_secs(5))
+                .request_once("shutdown", json!({}), Duration::from_secs(25))
                 .await;
         }
         self.terminate_child();
@@ -171,6 +176,7 @@ impl SidecarSupervisor {
             })?
             .as_mut()
             .ok_or_else(|| BrowserBridgeError::exited("Desktop sidecar is not running."))?
+            .command
             .write(&framed);
         if let Err(error) = write_result {
             self.remove_pending(&id);
@@ -274,6 +280,7 @@ impl SidecarSupervisor {
             .arg(&script_path)
             .current_dir(sidecar_directory)
             .env("MEMORALL_DESKTOP_APP_DATA_DIR", &app_data_path)
+            .env("MEMORALL_VM_RUNTIME_DIR", Self::node_compatible_path(self.resource_path("sandbox-runtime")?))
             .env("MEMORALL_BROWSER_RUNTIME_DIR", &browser_runtime_path)
             .env(
                 "MEMORALL_BROWSEROS_BROWSER_PATH",
@@ -301,9 +308,16 @@ impl SidecarSupervisor {
                 format!("Failed to start bundled desktop sidecar: {error}"),
             )
         })?;
+        let job = match crate::child_job::ChildProcessJob::attach(child.pid()) {
+            Ok(job) => job,
+            Err(error) => {
+                let _ = child.kill();
+                return Err(BrowserBridgeError::new("SIDECAR_LIFETIME_FAILED", format!("Cannot supervise desktop child processes: {error}")));
+            }
+        };
         *self.child.lock().map_err(|_| {
             BrowserBridgeError::new("SIDECAR_STATE_ERROR", "Sidecar child state is poisoned.")
-        })? = Some(child);
+        })? = Some(SupervisedChild { command: child, _job: job });
         Self::spawn_reader(receiver, self.child.clone(), self.pending.clone());
         Ok(())
     }
@@ -330,7 +344,7 @@ impl SidecarSupervisor {
 
     fn spawn_reader(
         mut receiver: Receiver<CommandEvent>,
-        child: Arc<Mutex<Option<CommandChild>>>,
+        child: Arc<Mutex<Option<SupervisedChild>>>,
         pending: Arc<Mutex<HashMap<String, PendingSender>>>,
     ) {
         tauri::async_runtime::spawn(async move {
@@ -457,7 +471,7 @@ impl SidecarSupervisor {
             framed.push(b'\n');
             if let Ok(mut child) = self.child.lock() {
                 if let Some(child) = child.as_mut() {
-                    let _ = child.write(&framed);
+                    let _ = child.command.write(&framed);
                 }
             }
         }
@@ -477,10 +491,10 @@ impl SidecarSupervisor {
         );
     }
 
-    fn kill_shared_child(child: &Arc<Mutex<Option<CommandChild>>>) {
+    fn kill_shared_child(child: &Arc<Mutex<Option<SupervisedChild>>>) {
         if let Ok(mut child) = child.lock() {
             if let Some(child) = child.take() {
-                let _ = child.kill();
+                let _ = child.command.kill();
             }
         }
     }

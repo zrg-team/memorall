@@ -27,7 +27,7 @@ vi.mock("@/main/stores/agent-config", async () => {
 			feature("memon-feature", "MemonOS Bot"),
 			feature("web-feature", "Web Browser"),
 			feature("fs-feature", "File System"),
-			feature("nodejs-sandbox-feature", "Browser Sandbox"),
+			feature("nodejs-sandbox-feature", "Sandbox"),
 		],
 		draftFeatures: {},
 		toggleFeature: (name) =>

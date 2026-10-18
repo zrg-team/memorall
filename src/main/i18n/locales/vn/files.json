@@ -254,6 +254,11 @@
 		"files": "Tệp",
 		"toggleType": "Chỉ mục {{type}} cho {{folder}}",
 		"indexing": "Đang lập chỉ mục…",
+		"progress": {
+			"label": "Tiến độ lập chỉ mục {{type}} cho {{folder}}",
+			"counts": "{{successful}} thành công · {{indexing}} đang lập chỉ mục · {{total}} tệp tổng cộng",
+			"failed": "{{count}} thất bại"
+		},
 		"turnedOff": "Đã tắt ở đây",
 		"rebuild": "Lập lại",
 		"addHint": "Cũng có thể thêm hoặc bỏ chỉ mục bằng nút Chỉ mục, menu của thư mục, hoặc nút Lập chỉ mục trên tệp đang mở.",

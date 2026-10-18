@@ -1,5 +1,17 @@
 {
 	"title": "Usage & cost",
+	"recovery": {
+		"description": "A stored value is damaged. Back up your extension data first. Try rebuilding its storage index without removing data, then retry. If that fails, inspect the damaged fields.",
+		"rebuildIndex": "Rebuild storage index",
+		"indexRebuilt": "Storage index rebuilt. Reloading usage…",
+		"inspect": "Inspect damaged fields",
+		"working": "Working…",
+		"noneFound": "No damaged usage fields found. Retry usage; the error may involve another field or index.",
+		"lossWarning": "Found {{count}} unreadable fields, listed below. Clearing them permanently removes their saved metadata, tool history, usage totals or labels. Message text and conversations remain. Restore a backup instead if you need those values.",
+		"storageError": "Storage error",
+		"clear": "Clear {{count}} damaged fields",
+		"cleared": "Cleared {{count}} damaged fields. Reloading usage…"
+	},
 	"description": "What your agents spend across models, features and tools. Local models are free and only count tokens.",
 	"actions": {
 		"refresh": "Refresh",

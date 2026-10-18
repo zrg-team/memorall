@@ -1,5 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { rootErrorMessage } from "../error-message";
+import { errorMessage, rootErrorMessage } from "../error-message";
+
+describe("errorMessage", () => {
+	it("reads a native error's message after serialization", () => {
+		expect(
+			errorMessage({
+				code: "VM_START_FAILED",
+				message: "Enable virtualization",
+			}),
+		).toBe("Enable virtualization");
+	});
+	it("keeps structured details when there is no message", () => {
+		expect(errorMessage({ code: "DISCONNECTED" })).toBe(
+			'{"code":"DISCONNECTED"}',
+		);
+	});
+	it("handles an object that cannot be serialized", () => {
+		const error: Record<string, unknown> = {};
+		error.self = error;
+		expect(errorMessage(error)).toBe("Unknown error");
+	});
+});
 
 describe("rootErrorMessage", () => {
 	it("reads the error a failed query wraps, not its SQL", () => {

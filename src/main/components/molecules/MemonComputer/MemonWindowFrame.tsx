@@ -6,6 +6,7 @@ import {
 	FileText,
 	FolderOpen,
 	Globe,
+	LayoutDashboard,
 	ListChecks,
 	Maximize2,
 	MessageSquarePlus,
@@ -20,7 +21,6 @@ import {
 	SquareFunction,
 	SquareTerminal,
 	WandSparkles,
-	LayoutDashboard,
 	X,
 } from "lucide-react";
 import React from "react";

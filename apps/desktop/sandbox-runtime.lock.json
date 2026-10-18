@@ -1,0 +1,41 @@
+{
+	"schemaVersion": 1,
+	"ubuntu": {
+		"release": "24.04-minimal-20261017",
+		"baseUrl": "https://cloud-images.ubuntu.com/minimal/releases/noble/release-20261017/",
+		"targets": {
+			"x64": {
+				"file": "ubuntu-24.04-minimal-cloudimg-amd64.img",
+				"sha256": "b3296484e362ba2e713489a5de6225c719d9500962bde25d15f2f21e512c7658"
+			},
+			"arm64": {
+				"file": "ubuntu-24.04-minimal-cloudimg-arm64.img",
+				"sha256": "11378ad399741da3884b4343a9b06c1a1bb3d8cb71e309a4a11cadc2b516d0f9"
+			}
+		}
+	},
+	"qemu": {
+		"version": "11.1.1",
+		"source": "https://download.qemu.org/qemu-11.1.1.tar.xz",
+		"builderSource": "https://github.com/jzombie/lab-qemu-portable/tree/qemu-v11.1.1-48",
+		"baseUrl": "https://github.com/jzombie/lab-qemu-portable/releases/download/qemu-v11.1.1-48/",
+		"targets": {
+			"win32-x64": {
+				"file": "qemu-portable-win-x64-UCRT64-11.1.1.zip",
+				"sha256": "f85fe8d106c388d92bee351ae68b17ddf55c526830c1aa63ac7d9e4c06f15585"
+			},
+			"darwin-arm64": {
+				"file": "qemu-portable-macos-arm64-11.1.1.tar.gz",
+				"sha256": "5424a4b998a9dddc8b5c67c515e64d0d653f5e786068c86ec6bd70063ad4a9ec"
+			},
+			"linux-x64": {
+				"file": "qemu-portable-linux-x86_64-11.1.1.tar.xz",
+				"sha256": "ebf52e87cd5887c68d14ff5e4dac6549f38a671a37167b517e4502f8b0ac884e"
+			},
+			"linux-arm64": {
+				"file": "qemu-portable-linux-aarch64-11.1.1.tar.xz",
+				"sha256": "530f871ccb7ed6da34367dbe9126ddc6660d2989555d0e913ec3dec179ed42bc"
+			}
+		}
+	}
+}

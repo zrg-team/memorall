@@ -23,6 +23,7 @@ import {
 	estimateDownloadBytes,
 	estimateHubDownload,
 	fetchHubDownloadSizes,
+	fetchHubModelSummary,
 	inspectHubModel,
 	browserRunnability,
 	hubBrowseUrl,
@@ -45,6 +46,11 @@ describe("classifyRemoteModel", () => {
 	it.each([
 		["some-chat-model", ["chat"]],
 		["vendor/model-7b-instruct", ["chat"]],
+		["lightonai/LightOnOCR-3-4B", ["ocr"]],
+		["lightonai/LightOnOCR-3-1B", ["ocr"]],
+		["lightonai/LightOnOCR-3-0.8B", ["ocr"]],
+		["vendor/deepseek-ocr", ["ocr"]],
+		["vendor/socratic-model", ["chat"]],
 		["acme-tts-2", ["text-to-speech"]],
 		["acme-speech-hd", ["text-to-speech"]],
 		["acme-transcribe", ["speech-to-text"]],
@@ -64,6 +70,9 @@ describe("classifyRemoteModel", () => {
 			"image-generation",
 		]);
 		expect(classifyByModalities({})).toBeNull();
+		expect(
+			classifyByModalities({ input: ["text", "image"], output: ["text"] }),
+		).toEqual(["chat", "ocr"]);
 	});
 });
 
@@ -202,6 +211,127 @@ describe("download size estimates", () => {
 });
 
 describe("Hub model inspection", () => {
+	it("checks featured models from their files without claiming PyTorch or custom graphs run locally", async () => {
+		const metadata = {
+			id: "lightonai/LightOnOCR-3-4B",
+			config: { model_type: "qwen3_5" },
+			siblings: [{ rfilename: "model.safetensors" }],
+		};
+		const fetchMock = vi.fn(async () => json(metadata));
+		expect(
+			await fetchHubModelSummary(metadata.id, "image-text-to-text", {
+				fetch: fetchMock as typeof fetch,
+			}),
+		).toMatchObject({ runnable: false, reason: "no-onnx" });
+		expect(
+			browserRunnability(
+				{
+					config: metadata.config,
+					siblings: [
+						{ rfilename: "onnx/prefill.onnx" },
+						{ rfilename: "onnx/decode.onnx" },
+					],
+				},
+				"image-text-to-text",
+			),
+		).toMatchObject({ runnable: false, reason: "custom-runtime" });
+		expect(
+			browserRunnability(
+				{
+					config: metadata.config,
+					siblings: [
+						"vision_encoder",
+						"embed_tokens",
+						"decoder_model_merged",
+					].map((name) => ({ rfilename: `onnx/${name}_q4.onnx` })),
+				},
+				"image-text-to-text",
+			),
+		).toEqual({ runnable: true });
+	});
+	it("keeps compatible OCR models below the initial top 20 and also searches tagged vision models", async () => {
+		const supported = (id: string) => ({
+			id,
+			config: { model_type: "lighton_ocr" },
+			siblings: ["vision_encoder", "embed_tokens", "decoder_model_merged"].map(
+				(name) => ({ rfilename: `onnx/${name}_q4.onnx` }),
+			),
+		});
+		const candidates = [
+			...Array.from({ length: 25 }, (_, index) => ({
+				id: `org/detector-${index}`,
+				siblings: [{ rfilename: "inference.onnx" }],
+			})),
+			supported("org/other-ocr"),
+		];
+		const fetchMock = vi.fn(async (url: string) => {
+			const params = new URL(url).searchParams;
+			return json(
+				params.getAll("filter").includes("ocr")
+					? [supported("onnx-community/LightOnOCR-2-1B-ONNX")]
+					: params.get("filter") === "onnx"
+						? candidates.slice(0, Number(params.get("limit")))
+						: [{ ...supported("org/general-vision"), downloads: 1_000_000 }],
+			);
+		});
+		const results = await searchHubModels("ocr", "", {
+			fetch: fetchMock as typeof fetch,
+			limit: 2,
+		});
+		expect(results.map((model) => model.id)).toEqual([
+			"org/other-ocr",
+			"onnx-community/LightOnOCR-2-1B-ONNX",
+		]);
+		const requests = fetchMock.mock.calls.map(
+			([url]) => new URL(url).searchParams,
+		);
+		expect(
+			requests.some(
+				(params) =>
+					params.get("filter") === "transformers.js" &&
+					params.get("pipeline_tag") === "image-text-to-text",
+			),
+		).toBe(true);
+		expect(
+			requests.find((params) => params.get("filter") === "onnx")?.get("limit"),
+		).toBe("100");
+		expect(
+			requests.some(
+				(params) =>
+					params.getAll("filter").includes("ocr") && !params.has("search"),
+			),
+		).toBe(true);
+	});
+	it("recognizes local OCR ONNX exports, including repositories without a pipeline tag", async () => {
+		const config = await inspectHubModel("org/ocr", {
+			fetch: (async () =>
+				json({
+					id: "org/ocr",
+					config: { model_type: "lighton_ocr" },
+					siblings: [
+						{ rfilename: "onnx/vision_encoder_q4.onnx", size: 100 },
+						{ rfilename: "onnx/embed_tokens_q4.onnx", size: 200 },
+						{ rfilename: "onnx/decoder_model_merged_q4.onnx", size: 300 },
+					],
+				})) as typeof fetch,
+		});
+		expect(config).toMatchObject({
+			task: "image-text-to-text",
+			category: "ocr",
+			dtype: "q4",
+			sizeByDevice: { webgpu: 600, wasm: 600 },
+		});
+		expect(imageToolTaskOf(config)).toBe("image-to-text");
+		expect(
+			browserRunnability(
+				{
+					config: { model_type: "unimplemented_ocr" },
+					siblings: [{ rfilename: "onnx/model.onnx" }],
+				},
+				"image-text-to-text",
+			).runnable,
+		).toBe(false);
+	});
 	it("builds a studio config for any runnable repo from its metadata", async () => {
 		const fetchMock = vi.fn(async () =>
 			json({

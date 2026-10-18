@@ -30,6 +30,7 @@ import {
 import { ADD_SKILL_CONTEXT_STEP_NAME } from "@memorall/agent-harness-flows/steps/common/add-skill-context";
 import { logError } from "@/utils/logger";
 import { applySettingsToRunningComputer } from "@/services/memon/agent-settings-sync";
+import { startDesktopSandboxForAgent } from "@/services/sandbox-container/agent-sandbox-startup";
 import { deepEqual } from "@/utils/deep-equal";
 import type {
 	FeatureCatalogMetadata,
@@ -447,6 +448,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				isLegacyConfig: false,
 			});
 			// A running computer of the agent follows the saved settings at once.
+			startDesktopSandboxForAgent(unifiedConfig);
 			if (targetFlowId) {
 				void applySettingsToRunningComputer(targetFlowId, unifiedConfig).catch(
 					(error) =>
@@ -710,6 +712,10 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				...get().draftFeatures,
 				[featureName]: !get().draftFeatures[featureName],
 			};
+			if (featureName === "nodejs-sandbox-feature" && next[featureName])
+				startDesktopSandboxForAgent({
+					steps: [{ name: featureName, enabled: true }],
+				});
 			set({
 				draftFeatures: next,
 				isDirty: computeDirty(

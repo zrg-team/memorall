@@ -1,7 +1,7 @@
-import { logError, logInfo, logWarn } from "@/utils/logger";
 import { platform } from "@/platform/current";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { normalizeSandboxPath } from "@/services/filesystem/sandbox-paths";
+import { logError, logInfo, logWarn } from "@/utils/logger";
 import { runHostCommandLine, usesHostCommand } from "./host-commands";
 import { createCurlHttp } from "./host-commands/curl/http";
 import type { HostFiles } from "./host-commands/types";
@@ -11,7 +11,6 @@ import {
 	createOpfsLocalTreeStore,
 	LocalTreeCache,
 } from "./local-tree-cache";
-import { DEFAULT_WORKSPACE_SYNC_LIMITS, WorkspaceSync } from "./workspace-sync";
 import {
 	decodeSwResponseBodyPreview,
 	delay,
@@ -22,21 +21,27 @@ import {
 import type {
 	SandboxCommandResult,
 	SandboxErrorEnvelope,
+	SandboxExecuteCommandRequest,
 	SandboxExecutionRequest,
 	SandboxExecutionResult,
 	SandboxFsExistsRequest,
 	SandboxFsExistsResult,
 	SandboxFsMkdirRequest,
-	SandboxFsReadFileRequest,
-	SandboxFsReadFileResult,
 	SandboxFsReaddirRequest,
 	SandboxFsReaddirResult,
+	SandboxFsReadFileRequest,
+	SandboxFsReadFileResult,
 	SandboxFsRenameRequest,
 	SandboxFsUnlinkRequest,
 	SandboxFsWriteFileRequest,
+	SandboxGetLogsRequest,
+	SandboxGetLogsResult,
+	SandboxHandleSwRequestResult,
 	SandboxListCommandsResult,
-	SandboxListServersResult,
 	SandboxListenCommandRequest,
+	SandboxListServersResult,
+	SandboxNetworkFetchRequest,
+	SandboxNetworkFetchResult,
 	SandboxNpmInstallFromPackageJsonRequest,
 	SandboxNpmInstallRequest,
 	SandboxNpmInstallResult,
@@ -45,26 +50,21 @@ import type {
 	SandboxOperationPayloadMap,
 	SandboxOperationResultMap,
 	SandboxRequestEnvelope,
+	SandboxResponseMessage,
 	SandboxRestoreSnapshotRequest,
 	SandboxRunFileRequest,
 	SandboxRunFileResult,
 	SandboxSendCommandInputRequest,
-	SandboxStartServerRequest,
-	SandboxStartServerResult,
-	SandboxExecuteCommandRequest,
-	SandboxStopCommandRequest,
-	SandboxStopServerRequest,
-	SandboxGetLogsRequest,
-	SandboxGetLogsResult,
-	SandboxNetworkFetchRequest,
-	SandboxNetworkFetchResult,
-	SandboxServerRequest,
-	SandboxServerRequestResult,
 	SandboxServerRenderUrlRequest,
 	SandboxServerRenderUrlResult,
-	SandboxHandleSwRequestResult,
-	SandboxResponseMessage,
+	SandboxServerRequest,
+	SandboxServerRequestResult,
+	SandboxStartServerRequest,
+	SandboxStartServerResult,
+	SandboxStopCommandRequest,
+	SandboxStopServerRequest,
 } from "./types";
+import { DEFAULT_WORKSPACE_SYNC_LIMITS, WorkspaceSync } from "./workspace-sync";
 
 interface PendingRequest {
 	timeoutId: number;
@@ -183,6 +183,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	private swInstance: ServiceWorker | null = null;
 	/** Keepalive timer — sends a periodic ping to prevent Chrome from killing the SW. */
 	private swKeepaliveTimer: ReturnType<typeof setInterval> | null = null;
+	private vmSyncTimer: ReturnType<typeof setInterval> | null = null;
 
 	private constructor(options: SandboxContainerInitOptions = {}) {
 		this.options = {
@@ -243,7 +244,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	isReady(): boolean {
-		return this.initialized && this.iframe !== null;
+		return (
+			this.initialized &&
+			(platform.sandboxRuntime !== undefined || this.iframe !== null)
+		);
 	}
 
 	/**
@@ -275,7 +279,25 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		}
 	}
 
+	async prepareWorkspace(): Promise<void> {
+		await this.initialize();
+		if (!platform.sandboxRuntime) return;
+		await this.workspaceSync.ready();
+		await this.workspaceSync.drain();
+	}
+
 	private async initializeInternal(): Promise<void> {
+		if (platform.sandboxRuntime) {
+			await platform.sandboxRuntime.request("health", undefined, 180_000);
+			this.initialized = true;
+			this.initializedAt = Date.now();
+			this.workspaceSync.start();
+			this.vmSyncTimer = setInterval(
+				() => this.workspaceSync.notePending(),
+				1000,
+			);
+			return;
+		}
 		if (typeof window === "undefined" || typeof document === "undefined") {
 			throw new Error("SandboxContainerService requires DOM APIs.");
 		}
@@ -699,6 +721,13 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		transfer: Transferable[] = [],
 	): Promise<SandboxOperationResultMap[T]> {
 		await this.initialize();
+		if (platform.sandboxRuntime) {
+			return platform.sandboxRuntime.request<SandboxOperationResultMap[T]>(
+				operation,
+				payload,
+				timeoutMs,
+			);
+		}
 		if (!this.iframe?.contentWindow) {
 			throw new Error("Sandbox iframe is not available.");
 		}
@@ -760,12 +789,23 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	async dispose(): Promise<void> {
+		if (this.vmSyncTimer) {
+			clearInterval(this.vmSyncTimer);
+			this.vmSyncTimer = null;
+		}
+		if (platform.sandboxRuntime && this.initialized)
+			await this.workspaceSync
+				.flush()
+				.catch((error) =>
+					logWarn("Could not save VM files before shutdown", error),
+				);
 		for (const [, pending] of this.pending) {
 			window.clearTimeout(pending.timeoutId);
 			pending.reject(new Error("Sandbox service disposed."));
 		}
 		this.pending.clear();
 		this.workspaceSync.dispose();
+		if (platform.sandboxRuntime) await platform.sandboxRuntime.stop();
 		if (this.swKeepaliveTimer !== null) {
 			clearInterval(this.swKeepaliveTimer);
 			this.swKeepaliveTimer = null;
@@ -833,7 +873,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	async executeCommand(
 		request: SandboxExecuteCommandRequest,
 	): Promise<SandboxCommandResult> {
-		if (usesHostCommand(request.command)) {
+		if (!platform.sandboxRuntime && usesHostCommand(request.command)) {
 			// Host commands (git, py, curl, ffmpeg, magick) read the host's
 			// files: the sandbox's changes first, and every other context's, so
 			// they read the latest.
@@ -1201,7 +1241,7 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	): Promise<SandboxOperationResultMap[T]> {
 		const maxRetries = 5;
 		const retriedPaths = new Set<string>();
-		await this.workspaceSync.ready();
+		await this.workspaceSync.ready(platform.sandboxRuntime ? ["/"] : []);
 		try {
 			for (let attempt = 0; attempt < maxRetries; attempt++) {
 				const result = await this.request(operation, payload);
@@ -1225,7 +1265,11 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		request: SandboxNpmInstallRequest,
 	): Promise<SandboxNpmInstallResult> {
 		await this.workspaceSync.ready();
-		const result = await this.request("npm.install", request);
+		const result = await this.request(
+			"npm.install",
+			request,
+			platform.sandboxRuntime ? 660_000 : this.options.requestTimeoutMs,
+		);
 		await this.workspaceSync.flush();
 		return result;
 	}
@@ -1234,7 +1278,11 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		request: SandboxNpmInstallFromPackageJsonRequest = {},
 	): Promise<SandboxNpmInstallResult> {
 		await this.workspaceSync.ready();
-		const result = await this.request("npm.installFromPackageJson", request);
+		const result = await this.request(
+			"npm.installFromPackageJson",
+			request,
+			platform.sandboxRuntime ? 660_000 : this.options.requestTimeoutMs,
+		);
 		await this.workspaceSync.flush();
 		return result;
 	}
@@ -1344,7 +1392,11 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		);
 
 		// Allow extra time when a template will be scaffolded + npm-installed.
-		const timeoutMs = request.template ? 300_000 : 60_000;
+		const timeoutMs = platform.sandboxRuntime
+			? 660_000
+			: request.template
+				? 300_000
+				: 60_000;
 		const result = await this.request(
 			"server.start",
 			{
@@ -1381,6 +1433,12 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	async requestServer(
 		request: SandboxServerRequest,
 	): Promise<SandboxServerRequestResult> {
+		if (platform.sandboxRuntime)
+			return this.request(
+				"server.request",
+				request,
+				request.timeoutMs ?? 120_000,
+			);
 		if (request.useIframe) {
 			return this.renderViaIframe(request);
 		}
@@ -1534,6 +1592,8 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	async getServerRenderUrl(
 		request: SandboxServerRenderUrlRequest,
 	): Promise<SandboxServerRenderUrlResult> {
+		if (platform.sandboxRuntime)
+			return this.request("server.renderUrl", request);
 		const serviceWorker = navigator.serviceWorker;
 		const sw = serviceWorker
 			? (this.swInstance ??

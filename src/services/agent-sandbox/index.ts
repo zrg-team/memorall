@@ -1,16 +1,21 @@
-import type { ISandboxContainerService } from "@/services/sandbox-container";
-import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
 import { createBrowserPlatform } from "@memorall/agent-harness-browser";
+import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
 import {
+	type IAgentSandboxService,
 	SandboxManager,
 	SandboxProviderRegistry,
 	SandboxWorkspaceCoordinator,
-	type IAgentSandboxService,
 } from "@memorall/agent-harness-sandbox";
+import { platform } from "@/platform/current";
+import type { ISandboxContainerService } from "@/services/sandbox-container";
 import {
-	BrowserSandboxProvider,
 	BROWSER_SANDBOX_PROVIDER_ID,
+	BrowserSandboxProvider,
 } from "./browser-sandbox-provider";
+import {
+	DESKTOP_VM_CAPABILITIES,
+	DESKTOP_VM_PROVIDER_ID,
+} from "./desktop-vm-capabilities";
 
 export * from "./browser-sandbox-provider";
 export * from "./provider-registry";
@@ -35,12 +40,19 @@ export const createAgentSandboxService = (
 	const cached = serviceCache.get(containerService);
 	if (cached) return cached;
 	const providers = new SandboxProviderRegistry().register(
-		new BrowserSandboxProvider(containerService),
+		new BrowserSandboxProvider(
+			containerService,
+			platform.sandboxRuntime
+				? { id: DESKTOP_VM_PROVIDER_ID, capabilities: DESKTOP_VM_CAPABILITIES }
+				: {},
+		),
 	);
 	const service = new SandboxManager(
 		providers,
 		{
-			providerId: BROWSER_SANDBOX_PROVIDER_ID,
+			providerId: platform.sandboxRuntime
+				? DESKTOP_VM_PROVIDER_ID
+				: BROWSER_SANDBOX_PROVIDER_ID,
 			sessionPolicy: "reuse-conversation",
 		},
 		createBrowserPlatform({ runtime: "extension-worker" }),

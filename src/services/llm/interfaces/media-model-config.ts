@@ -18,6 +18,7 @@ export type MediaPipelineTask =
 	| "depth-estimation"
 	| "object-detection"
 	| "image-to-text"
+	| "image-text-to-text"
 	| "image-classification"
 	| "text-classification"
 	| "zero-shot-classification"

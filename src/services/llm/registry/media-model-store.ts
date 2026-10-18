@@ -134,6 +134,38 @@ export interface HubModelSummary {
 	modelType?: string;
 }
 
+function summarizeHubModel(
+	model: HubModel,
+	task: MediaPipelineTask,
+): HubModelSummary {
+	const runnability = browserRunnability(model, task);
+	return {
+		id: model.id,
+		task,
+		downloads: model.downloads ?? 0,
+		likes: model.likes ?? 0,
+		languages: languagesFromTags(model.tags),
+		runnable: runnability.runnable,
+		...(runnability.runnable
+			? {}
+			: { reason: runnability.reason, modelType: runnability.modelType }),
+	};
+}
+
+/** Check a featured repo's actual files before offering a local download. */
+export async function fetchHubModelSummary(
+	repoId: string,
+	task: MediaPipelineTask,
+	options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
+): Promise<HubModelSummary> {
+	const response = await (options.fetch ?? fetch)(`${HUB_API}/${repoId}`, {
+		signal: options.signal,
+	});
+	if (!response.ok)
+		throw new Error(`Could not check ${repoId} (${response.status}).`);
+	return summarizeHubModel((await response.json()) as HubModel, task);
+}
+
 const toArray = (value: string | string[] | undefined): string[] =>
 	Array.isArray(value) ? value : value ? [value] : [];
 
@@ -397,6 +429,23 @@ export function browserRunnability(
 			return { runnable: false, reason: "unsupported-architecture", modelType };
 		}
 	}
+	if (task === "image-text-to-text" && model.siblings) {
+		// The native vision-language loader needs these sessions. Some exports
+		// use a supported architecture but ship custom prefill/decode graphs
+		// that require their own inference loop instead of this loader.
+		const graphs = new Set(
+			model.siblings.flatMap((file) => {
+				const parsed = parseOnnxFile(file.rfilename);
+				return parsed ? [parsed.graph.split("/").at(-1)] : [];
+			}),
+		);
+		if (
+			["vision_encoder", "embed_tokens", "decoder_model_merged"].some(
+				(graph) => !graphs.has(graph),
+			)
+		)
+			return { runnable: false, reason: "custom-runtime" };
+	}
 	return { runnable: true };
 }
 
@@ -419,7 +468,7 @@ export function unavailableReasonText(
 		case "unsupported-architecture":
 			return `${repoId} is a "${runnability.modelType}" model, an architecture the in-browser runtime cannot run${task ? ` for ${task}` : ""} yet. Pick another model, or serve this one behind an OpenAI-compatible API to use it here.`;
 		default:
-			return `${repoId} needs its own runtime (its config.json names no model type the browser runtime knows), so it cannot run in the browser studio. Serve it behind an OpenAI-compatible API to use it here.`;
+			return `${repoId} needs inference code that the local runtime does not support. Choose a compatible export.`;
 	}
 }
 
@@ -443,7 +492,15 @@ export async function inspectHubModel(
 	const variants = decisionVariantsOf(model.siblings);
 	const task =
 		options.task ??
-		(variants.length > 0 ? "typed-decisions" : model.pipeline_tag);
+		(variants.length > 0
+			? "typed-decisions"
+			: (model.pipeline_tag ??
+				(model.config?.model_type &&
+				PIPELINE_ARCHITECTURES["image-text-to-text"]?.architectures.includes(
+					model.config.model_type,
+				)
+					? "image-text-to-text"
+					: undefined)));
 	if (!isMediaPipelineTask(task)) {
 		throw new Error(
 			`${model.id} is a "${model.pipeline_tag ?? "unknown"}" model; the studios run ${Object.keys(TASK_CATEGORY).join(", ")}`,
@@ -453,7 +510,17 @@ export async function inspectHubModel(
 	if (!runnability.runnable) {
 		throw new Error(unavailableReasonText(model.id, runnability, task));
 	}
-	const sizeByDevice = estimateDeviceDownloads(model.siblings);
+	const dtype =
+		task === "image-text-to-text" &&
+		model.siblings?.some((file) => /_q4\.onnx$/i.test(file.rfilename))
+			? "q4"
+			: undefined;
+	const quantizedBytes = dtype
+		? estimateDownloadBytes(model.siblings, dtype)
+		: undefined;
+	const sizeByDevice = quantizedBytes
+		? { webgpu: quantizedBytes, wasm: quantizedBytes }
+		: estimateDeviceDownloads(model.siblings);
 	const voices = discoverVoices(model.id, model.siblings);
 	return {
 		id: model.id,
@@ -466,6 +533,7 @@ export async function inspectHubModel(
 		languages: toArray(model.cardData?.language),
 		license: model.cardData?.license,
 		voices: voices.length > 0 ? voices : undefined,
+		...(dtype ? { dtype } : {}),
 		...(task === "typed-decisions"
 			? { decision: { variants, variant: variants[0]?.id } }
 			: {}),
@@ -554,6 +622,11 @@ export async function searchHubModels(
 		options.tasks ?? (category ? (CATEGORY_TASKS[category] ?? []) : []);
 	const limit = options.limit ?? 20;
 	const text = repoIdFromInput(query) ?? query.trim();
+	const ocrMatches = new Set<string>();
+	const prioritizeOCR = (models: HubModelSummary[]) => {
+		for (const model of models) ocrMatches.add(model.id.toLowerCase());
+		return models;
+	};
 
 	const fetchSummaries = async (
 		task: MediaPipelineTask,
@@ -574,20 +647,7 @@ export async function searchHubModels(
 		const response = await fetcher(`${HUB_API}?${params}`);
 		if (!response.ok) return [];
 		const models = (await response.json()) as HubModel[];
-		return models.map((model): HubModelSummary => {
-			const runnability = browserRunnability(model, task);
-			return {
-				id: model.id,
-				task,
-				downloads: model.downloads ?? 0,
-				likes: model.likes ?? 0,
-				languages: languagesFromTags(model.tags),
-				runnable: runnability.runnable,
-				...(runnability.runnable
-					? {}
-					: { reason: runnability.reason, modelType: runnability.modelType }),
-			};
-		});
+		return models.map((model) => summarizeHubModel(model, task));
 	};
 
 	const request = (task: MediaPipelineTask, browserOnly: boolean) => {
@@ -598,7 +658,19 @@ export async function searchHubModels(
 		});
 		if (browserOnly) params.set("filter", "transformers.js");
 		if (text) params.set("search", text);
-		return fetchSummaries(task, params);
+		if (task === "image-text-to-text" && !browserOnly) {
+			// OCR ONNX exports may omit the transformers.js/pipeline tags.
+			// Fetch enough candidates before compatibility filtering: the most
+			// downloaded OCR repos are often custom-runtime detector graphs.
+			params.delete("pipeline_tag");
+			params.set("filter", "onnx");
+			params.set("search", text || "ocr");
+			params.set("limit", String(Math.min(1000, Math.max(100, limit * 5))));
+		}
+		const found = fetchSummaries(task, params);
+		return task === "image-text-to-text" && !browserOnly
+			? found.then(prioritizeOCR)
+			: found;
 	};
 
 	// Decision repos carry no pipeline tag of their own: look for ONNX repos by
@@ -616,14 +688,28 @@ export async function searchHubModels(
 			if (text) params.set("search", text);
 			return fetchSummaries(task, params);
 		});
+	// Hub keyword search uses tokens: "ocr" can miss names such as
+	// LightOnOCR. Capability tags find these without naming vendors.
+	const taggedOCRRequest = () => {
+		const params = new URLSearchParams({
+			sort: "downloads",
+			limit: String(Math.min(1000, Math.max(100, limit * 5))),
+		});
+		params.append("filter", "onnx");
+		params.append("filter", "ocr");
+		if (text) params.set("search", text);
+		return fetchSummaries("image-text-to-text", params).then(prioritizeOCR);
+	};
 
 	const results = await Promise.all(
 		tasks.flatMap((task) =>
 			task === "typed-decisions"
 				? decisionRequests(task)
-				: text
-					? [request(task, true), request(task, false)]
-					: [request(task, true)],
+				: task === "image-text-to-text"
+					? [request(task, true), request(task, false), taggedOCRRequest()]
+					: text
+						? [request(task, true), request(task, false)]
+						: [request(task, true)],
 		),
 	);
 	const byId = new Map<string, HubModelSummary>();
@@ -636,10 +722,21 @@ export async function searchHubModels(
 	// for by name is the exception: it stays, marked with why it cannot run,
 	// rather than looking like it does not exist.
 	return Array.from(byId.values())
-		.filter((result) => result.runnable || isSpecificMatch(result.id, text))
+		.filter(
+			(result) =>
+				result.runnable ||
+				isSpecificMatch(result.id, text) ||
+				(result.task === "image-text-to-text" &&
+					Boolean(text) &&
+					result.id.toLowerCase().includes(text.toLowerCase())),
+		)
 		.sort(
 			(left, right) =>
 				Number(right.runnable) - Number(left.runnable) ||
+				(tasks.length === 1 && tasks[0] === "image-text-to-text"
+					? Number(ocrMatches.has(right.id.toLowerCase())) -
+						Number(ocrMatches.has(left.id.toLowerCase()))
+					: 0) ||
 				right.downloads - left.downloads,
 		)
 		.slice(0, limit);

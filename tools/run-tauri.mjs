@@ -4,8 +4,8 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
-	readFileSync,
 	readdirSync,
+	readFileSync,
 	renameSync,
 	rmSync,
 	writeFileSync,
@@ -83,7 +83,7 @@ function windowsProcessesUsingDirectory(directory) {
 	}
 }
 
-function stageDesktopArtifacts() {
+async function stageDesktopArtifacts() {
 	const releaseDirectory = join(cargoTargetDirectory, "release");
 	const destination = resolve("publish", "desktop", platformName);
 	const destinationParent = resolve("publish", "desktop");
@@ -114,6 +114,7 @@ function stageDesktopArtifacts() {
 		for (const directory of [
 			"desktop-sidecar",
 			"browser-runtime",
+			"sandbox-runtime",
 			"licenses",
 		]) {
 			const source = resolve("publish", ".cache", "tauri-resources", directory);
@@ -153,7 +154,29 @@ function stageDesktopArtifacts() {
 			throw error;
 		}
 
-		renameSync(stagingDirectory, destination);
+		for (let attempt = 0; ; attempt += 1) {
+			try {
+				renameSync(stagingDirectory, destination);
+				break;
+			} catch (error) {
+				if (
+					process.platform !== "win32" ||
+					!["EPERM", "EBUSY", "EACCES"].includes(error.code)
+				)
+					throw error;
+				if (attempt >= 12) {
+					// Some Windows directory watchers prevent renaming a populated
+					// tree. The destination was cleared after checking for running
+					// app processes, so publishing the same tree by copy is safe.
+					cpSync(stagingDirectory, destination, {
+						recursive: true,
+						preserveTimestamps: true,
+					});
+					break;
+				}
+				await new Promise((resolve) => setTimeout(resolve, 250));
+			}
+		}
 	} finally {
 		if (existsSync(stagingDirectory)) {
 			rmSync(stagingDirectory, { recursive: true, force: true });
@@ -317,6 +340,6 @@ if (code !== 0 && command === "build" && !isInformationalCommand) {
 	});
 }
 if (code === 0 && command === "build" && !isInformationalCommand) {
-	stageDesktopArtifacts();
+	await stageDesktopArtifacts();
 }
 process.exitCode = code;

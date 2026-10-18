@@ -589,10 +589,10 @@
 		"appOfHint": "While {{name}} is on, this runs as an app on its computer instead of adding separate tools.",
 		"memon": {
 			"appsLabel": "Apps on the desktop",
-			"appsHint": "Apps follow your features: Web Browser gives the Browser, File System gives Files, Editor and Viewer, Browser Sandbox gives the Terminal, Planner gives Tasks, and Visualize response gives Visualize. Switch them in Features.",
+			"appsHint": "Apps follow your features: Web Browser gives the Browser, File System gives Files, Editor and Viewer, Sandbox gives the Terminal, Planner gives Tasks, and Visualize response gives Visualize. Switch them in Features.",
 			"appOn": "On",
 			"appOff": "Off",
-			"sectionHint": "Turning it on also turns on Web Browser, File System, Browser Sandbox and Planner below, as apps on the computer.",
+			"sectionHint": "Turning it on also turns on Web Browser, File System, Sandbox and Planner below, as apps on the computer.",
 			"settings": "Settings",
 			"builtIn": "Built in",
 			"builtInHint": "Every MemonOS Bot computer has these: the agent's schedules, skills and connections, your studios, and pi code unless you turn it off.",
@@ -617,7 +617,7 @@
 				},
 				"terminal": {
 					"name": "Terminal",
-					"description": "The Browser Sandbox shell with node, npm, git and py."
+					"description": "The Sandbox shell with node, npm, git and py."
 				},
 				"tasks": {
 					"name": "Tasks",

@@ -63,6 +63,16 @@ describe("provider tabs by model category", () => {
 	it("offers only on-device runners for image tools", () => {
 		expect(tabsFor("image-tools")).toEqual(["transformer-media"]);
 	});
+	it("offers OCR through hosted and local vision servers", () => {
+		expect(tabsFor("ocr")).toEqual([
+			"transformer-media",
+			"openai",
+			"openrouter",
+			"custom",
+			"lmstudio",
+			"ollama",
+		]);
+	});
 });
 
 describe("ModelCategoryChips", () => {

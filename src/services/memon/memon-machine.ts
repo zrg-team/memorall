@@ -1,3 +1,10 @@
+import { validateCronExpression } from "@/services/cron-jobs/cron-expression";
+import type {
+	FolderZip,
+	ZipExtraction,
+} from "@/services/filesystem/folder-zip";
+import { isHyperframesComposition } from "@/services/flows-integrations/tools/hyperframes/reference";
+import { isScreenCaptureWithheldMessage } from "@/services/web-browser/site-access";
 import type {
 	WebHistoryDirection,
 	WebOutlineActionRequest,
@@ -5,75 +12,11 @@ import type {
 	WebPageOutline,
 	WebSessionEvent,
 } from "@/services/web-browser/web-browser-protocol";
-import {
-	MEMON_AGENT_TURN_CEILING_MS,
-	MEMON_APP_IDS,
-	MEMON_BUILTIN_APPS,
-	MEMON_GUEST_HOME,
-	MEMON_STUDIO_EXTENSION,
-	MEMON_TASKS_EXTENSION,
-	MEMON_TERMINAL_EXTENSION,
-	MEMON_VISUAL_EXTENSION,
-	MEMON_VISUALS_DIR,
-	memonDisplayPath,
-	memonHomePaths,
-	MEMON_TEXT_PAGE_LINES,
-	type MemonAppId,
-	type MemonBuiltinApp,
-	type MemonStudioToolId,
-	type MemonWindowApp,
-} from "./constants";
-import { MemonFileSync } from "./file-sync";
-import {
-	isTaskOpen,
-	numberedChecklist,
-	parseTasksFile,
-	serializeTasksFile,
-} from "./tasks-file";
-import {
-	parseTerminalHistory,
-	parseTerminalLauncher,
-	serializeTerminalHistory,
-	serializeTerminalLauncher,
-} from "./terminal/terminal-history";
-import {
-	type MemonStudioAppConfig,
-	parseStudioAppFile,
-	serializeStudioAppFile,
-} from "./studio-app-file";
-import {
-	DEFAULT_MEMON_FEATURE_CONFIG,
-	type MemonFeatureConfig,
-} from "./feature-config";
-import { validateCronExpression } from "@/services/cron-jobs/cron-expression";
-import {
-	changeDesktopEntries,
-	listDesktopEntries,
-	loadMemonDesktopFiles,
-	MEMON_BOT_TEMPLATE,
-	MEMON_MEMORY_TEMPLATE,
-	migrateMemonHomeFiles,
-	type MemonDesktopEntryChange,
-} from "./desktop-files";
-import { memonFileKind, type MemonViewerKind } from "./file-kinds";
-import {
-	downloadFileName,
-	MEMON_DOWNLOADS_DIR,
-	MEMON_PICTURES_DIR,
-} from "./download";
-import type {
-	FolderZip,
-	ZipExtraction,
-} from "@/services/filesystem/folder-zip";
-import {
-	listFileRefs,
-	type MemonWindowScrollDirection,
-	nextWindowScroll,
-	serializeScreen,
-} from "./screen-serializer";
 import { controlsByRef } from "./app-kit/render-text";
 import type { MemonControlValue } from "./app-kit/types";
+import { MemonApprovalRequiredError } from "./approval-error";
 import { kitAppForRef } from "./apps";
+import { type FxOpened, MemonFx, type MemonFxPort } from "./apps/fx/fx-app";
 import {
 	HOSTED_APP_IDS,
 	type HostedAppId,
@@ -83,54 +26,110 @@ import {
 	MemonHostedApps,
 	type MemonHostedAppsPort,
 } from "./apps/hosted/hosted-apps-app";
-import { studioDraftsFromSettings } from "./apps/studio-view";
-import { MemonApprovalRequiredError } from "./approval-error";
-import { findVerificationWall } from "./verification-wall";
 import {
 	MemonPiCode,
 	type MemonPiCodePort,
 	type PiCodeOpened,
 } from "./apps/pi-code/pi-code-app";
-import { type FxOpened, MemonFx, type MemonFxPort } from "./apps/fx/fx-app";
+import { studioDraftsFromSettings } from "./apps/studio-view";
 import { MemonVideo, type VideoExportResult } from "./apps/video/video-app";
-import { isHyperframesComposition } from "@/services/flows-integrations/tools/hyperframes/reference";
+import {
+	MEMON_AGENT_TURN_CEILING_MS,
+	MEMON_APP_IDS,
+	MEMON_BUILTIN_APPS,
+	MEMON_GUEST_HOME,
+	MEMON_STUDIO_EXTENSION,
+	MEMON_TASKS_EXTENSION,
+	MEMON_TERMINAL_EXTENSION,
+	MEMON_TEXT_PAGE_LINES,
+	MEMON_VISUAL_EXTENSION,
+	MEMON_VISUALS_DIR,
+	type MemonAppId,
+	type MemonBuiltinApp,
+	type MemonStudioToolId,
+	type MemonWindowApp,
+	memonDisplayPath,
+	memonHomePaths,
+} from "./constants";
+import {
+	changeDesktopEntries,
+	listDesktopEntries,
+	loadMemonDesktopFiles,
+	MEMON_BOT_TEMPLATE,
+	MEMON_MEMORY_TEMPLATE,
+	type MemonDesktopEntryChange,
+	migrateMemonHomeFiles,
+} from "./desktop-files";
+import {
+	downloadFileName,
+	MEMON_DOWNLOADS_DIR,
+	MEMON_PICTURES_DIR,
+} from "./download";
 import type { MemonEmbeddedPort } from "./embedded-browser";
+import {
+	isLocalAddress,
+	isLoopbackUrl,
+	sandboxTargetOf,
+} from "./embedded-frame";
+import {
+	DEFAULT_MEMON_FEATURE_CONFIG,
+	type MemonFeatureConfig,
+} from "./feature-config";
+import { type MemonViewerKind, memonFileKind } from "./file-kinds";
+import { MemonFileSync } from "./file-sync";
 import type { MemonModelsPort } from "./models-port";
 import type {
 	CaptureRect,
 	MemonCaptureRequest,
 	MemonPageCapture,
 } from "./page-capture";
-import { isScreenCaptureWithheldMessage } from "@/services/web-browser/site-access";
 import {
-	isLocalAddress,
-	isLoopbackUrl,
-	sandboxTargetOf,
-} from "./embedded-frame";
+	listFileRefs,
+	type MemonWindowScrollDirection,
+	nextWindowScroll,
+	serializeScreen,
+} from "./screen-serializer";
 import type { MemonStudioPort, MemonStudioRequest } from "./studio-app";
+import {
+	type MemonStudioAppConfig,
+	parseStudioAppFile,
+	serializeStudioAppFile,
+} from "./studio-app-file";
+import {
+	isTaskOpen,
+	numberedChecklist,
+	parseTasksFile,
+	serializeTasksFile,
+} from "./tasks-file";
 import {
 	MemonTerminal,
 	type MemonTerminalPort,
 } from "./terminal/memon-terminal";
+import {
+	parseTerminalHistory,
+	parseTerminalLauncher,
+	serializeTerminalHistory,
+	serializeTerminalLauncher,
+} from "./terminal/terminal-history";
 import type {
 	MemonAppAvailability,
 	MemonBrowserShot,
 	MemonBrowserTab,
+	MemonConnectionItem,
 	MemonCursorState,
 	MemonDriver,
 	MemonFileClipboard,
-	MemonFileExport,
 	MemonFileEntry,
+	MemonFileExport,
 	MemonFileUnzip,
 	MemonMachineSnapshot,
-	MemonSchedule,
-	MemonScheduleStatus,
 	MemonMachineSummary,
-	MemonStatus,
-	MemonConnectionItem,
 	MemonOpenSkill,
 	MemonPiCodeBrowse,
+	MemonSchedule,
+	MemonScheduleStatus,
 	MemonSkillItem,
+	MemonStatus,
 	MemonStudioAppFile,
 	MemonStudioRun,
 	MemonStudioToolState,
@@ -139,6 +138,7 @@ import type {
 	MemonVideoExportSettings,
 	MemonWindowState,
 } from "./types";
+import { findVerificationWall } from "./verification-wall";
 
 // ─── Ports: the existing services, behind narrow interfaces ──────────────────
 
@@ -298,6 +298,8 @@ export interface MemonHomePort {
 }
 
 export interface MemonPorts {
+	/** Native VM warm-up runs alongside desktop preparation. */
+	sandbox?: { start(): Promise<void> };
 	browser: MemonBrowserPort;
 	/** Pages of servers started in the Terminal, shown in the window. */
 	embedded?: MemonEmbeddedPort;

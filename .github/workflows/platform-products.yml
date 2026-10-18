@@ -448,6 +448,9 @@ jobs:
         env:
           EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
         run: node -e "if (process.arch !== process.env.EXPECTED_ARCHITECTURE) { console.error('Expected ' + process.env.EXPECTED_ARCHITECTURE + ', got ' + process.arch); process.exit(1); }"
+      - name: Install QEMU for Intel Mac packaging
+        if: env.RUN == 'true' && runner.os == 'macOS' && matrix.architecture == 'x64'
+        run: brew install qemu
       - name: Install Linux Tauri and smoke-test dependencies
         if: env.RUN == 'true' && runner.os == 'Linux'
         run: |

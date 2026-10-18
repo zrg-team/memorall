@@ -1,5 +1,17 @@
 {
 	"title": "Mức dùng & chi phí",
+	"recovery": {
+		"description": "Một giá trị đã lưu bị hỏng. Hãy sao lưu dữ liệu tiện ích trước. Thử tạo lại chỉ mục lưu trữ mà không xóa dữ liệu, rồi thử lại. Nếu vẫn lỗi, kiểm tra các trường bị hỏng.",
+		"rebuildIndex": "Tạo lại chỉ mục lưu trữ",
+		"indexRebuilt": "Đã tạo lại chỉ mục. Đang tải lại mức sử dụng…",
+		"inspect": "Kiểm tra trường bị hỏng",
+		"working": "Đang xử lý…",
+		"noneFound": "Không tìm thấy trường sử dụng bị hỏng. Hãy thử lại; lỗi có thể nằm ở trường hoặc chỉ mục khác.",
+		"lossWarning": "Tìm thấy {{count}} trường không đọc được bên dưới. Xóa các trường này sẽ mất vĩnh viễn siêu dữ liệu, lịch sử công cụ, tổng mức sử dụng hoặc nhãn đã lưu trong đó. Nội dung tin nhắn và cuộc trò chuyện vẫn còn. Hãy khôi phục bản sao lưu nếu cần giữ các giá trị này.",
+		"storageError": "Lỗi lưu trữ",
+		"clear": "Xóa {{count}} trường bị hỏng",
+		"cleared": "Đã xóa {{count}} trường bị hỏng. Đang tải lại mức sử dụng…"
+	},
 	"description": "Các agent đã chi bao nhiêu cho từng mô hình, tính năng và công cụ. Mô hình cục bộ miễn phí và chỉ đếm token.",
 	"actions": {
 		"refresh": "Làm mới",

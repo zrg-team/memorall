@@ -60,7 +60,7 @@ const unavailableReasonKey = (app: MemonAppId): string | null => {
 /**
  * MemonOS Bot settings: when the computer opens and what the agent must ask
  * before doing, stored on the memon-feature step config. The apps follow the
- * Web Browser, File System, Browser Sandbox and Planner features, so they are shown
+ * Web Browser, File System, Sandbox and Planner features, so they are shown
  * here but switched in Features.
  */
 export const MemonBotFeatureConfig: React.FC = () => {

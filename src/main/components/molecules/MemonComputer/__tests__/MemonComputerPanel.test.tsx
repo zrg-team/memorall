@@ -1,5 +1,14 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
+import { platform } from "@/platform/current";
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({ t: (key: string) => key }),
@@ -103,6 +112,10 @@ beforeAll(() => {
 });
 
 describe("MemonComputerPanel in full screen", () => {
+	const originalRuntime = platform.sandboxRuntime;
+	afterEach(() => {
+		platform.sandboxRuntime = originalRuntime;
+	});
 	beforeEach(() => {
 		useMemonMachineStore.setState({
 			snapshots: { "agent-1": snapshot },
@@ -133,6 +146,34 @@ describe("MemonComputerPanel in full screen", () => {
 		fireEvent.click(screen.getByLabelText("memonComputer.hideChat"));
 		expect(screen.queryByLabelText("memonComputer.chatPanel")).toBeNull();
 		expect(useShellLayoutStore.getState().chatThreadSlot).toBeNull();
+	});
+	it("opens bottom-right settings without creating an app or restarting a stopped VM", async () => {
+		useMemonMachineStore.setState({ watch: () => () => undefined });
+		const runtime = {
+			status: vi.fn().mockResolvedValue({
+				ready: false,
+				state: "stopped",
+				failure: null,
+				initializedAt: null,
+			}),
+			request: vi.fn(),
+			stop: vi.fn(),
+		};
+		platform.sandboxRuntime = runtime;
+		const { unmount } = render(<MemonComputerPanel machineKey="agent-1" />);
+		await screen.findByRole("status", { name: "Sandbox: Stopped" });
+		const settings = screen.getByRole("button", {
+			name: "Open computer settings",
+		});
+		expect(screen.getByTestId("memon-taskbar").contains(settings)).toBe(true);
+		fireEvent.click(settings);
+		expect(await screen.findByTestId("memon-config-panel")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Start sandbox" })).toBeTruthy();
+		expect(useMemonMachineStore.getState().send).not.toHaveBeenCalled();
+		unmount();
+		render(<MemonComputerPanel machineKey="agent-1" />);
+		await screen.findByRole("status", { name: "Sandbox: Stopped" });
+		expect(runtime.request).not.toHaveBeenCalled();
 	});
 
 	it("closes the chat panel with full screen", () => {

@@ -1,19 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	SCREEN_CAPTURE_WITHHELD_MARKER,
+	screenCaptureWithheldMessage,
+} from "@/services/web-browser/site-access";
 import type {
 	WebPageOutline,
 	WebSessionEvent,
 } from "@/services/web-browser/web-browser-protocol";
-import {
-	DEFAULT_MEMON_FEATURE_CONFIG,
-	type MemonFeatureConfig,
-} from "../feature-config";
-import type { MemonEmbeddedPort } from "../embedded-browser";
 import { MemonApprovalRequiredError } from "../approval-error";
 import type { FxRunner, MemonFxPort } from "../apps/fx/fx-app";
 import type {
 	MemonPiCodePort,
 	PiCodeRunner,
 } from "../apps/pi-code/pi-code-app";
+import type { MemonEmbeddedPort } from "../embedded-browser";
+import {
+	DEFAULT_MEMON_FEATURE_CONFIG,
+	type MemonFeatureConfig,
+} from "../feature-config";
 import {
 	MemonMachine,
 	type MemonPorts,
@@ -21,10 +25,6 @@ import {
 	normalizeBrowserUrl,
 	screenshotName,
 } from "../memon-machine";
-import {
-	SCREEN_CAPTURE_WITHHELD_MARKER,
-	screenCaptureWithheldMessage,
-} from "@/services/web-browser/site-access";
 import type { MemonStudioRequest } from "../studio-app";
 import { runTerminalAction } from "../terminal/terminal-actions";
 import type { MemonPiCodeFolder, MemonSchedule } from "../types";
@@ -936,6 +936,71 @@ describe("MemonMachine", () => {
 			"the Terminal let it go",
 		);
 	});
+	it.each(["resolve", "reject"])(
+		"reads a new command while a stopped command's old read is pending (%s)",
+		async (completion) => {
+			const { machine, ports } = createMachine();
+			type Outcome = Awaited<ReturnType<typeof ports.terminal.read>>;
+			let finishOld!: (value: Outcome) => void;
+			let failOld!: (error: Error) => void;
+			let finishNew!: (value: Outcome) => void;
+			const oldRead = new Promise<Outcome>((resolve, reject) => {
+				finishOld = resolve;
+				failOld = reject;
+			});
+			const newRead = new Promise<Outcome>((resolve) => {
+				finishNew = resolve;
+			});
+			vi.mocked(ports.terminal.read).mockImplementation((processId) =>
+				processId === "old" ? oldRead : newRead,
+			);
+			vi.mocked(ports.terminal.run)
+				.mockResolvedValueOnce({
+					processId: "old",
+					running: true,
+					exitCode: null,
+					output: [],
+				})
+				.mockResolvedValueOnce({
+					processId: "new",
+					running: true,
+					exitCode: null,
+					output: [],
+				});
+			await machine.terminal.runCommand("sleep 60", { waitMs: 0 });
+			vi.mocked(ports.terminal.stop).mockRejectedValueOnce(
+				new Error("Sandbox stopped"),
+			);
+			await machine.terminal.stopCommand();
+			await machine.terminal.runCommand("ls", { waitMs: 0 });
+			expect(ports.terminal.read).toHaveBeenCalledWith(
+				"new",
+				undefined,
+				"conversation-1",
+				expect.any(Number),
+			);
+			if (completion === "resolve")
+				finishOld({
+					running: false,
+					exitCode: 130,
+					output: [{ kind: "stdout", text: "old output" }],
+				});
+			else failOld(new Error("Old control channel closed"));
+			await vi.advanceTimersByTimeAsync(0);
+			expect(machine.terminal.running?.command).toBe("ls");
+			finishNew({
+				running: false,
+				exitCode: 0,
+				output: [{ kind: "stdout", text: "Bot.md Memory.md" }],
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			expect(machine.terminal.running).toBeNull();
+			expect(machine.snapshot().terminal.lastExitCode).toBe(0);
+			expect(
+				machine.snapshot().terminal.lines.map((line) => line.text),
+			).not.toContain("old output");
+		},
+	);
 
 	it("downloads a web file into Files in one step, without overwriting", async () => {
 		const { machine, ports, files } = createMachine();

@@ -194,6 +194,9 @@ type PendingFile = {
 
 export class WorkspaceSync {
 	private chain: Promise<unknown> = Promise.resolve();
+	/** At most one pull may wait behind other sync work. */
+	private queuedPull: Promise<void> | null = null;
+	private queuedHostPush: Promise<void> | null = null;
 	/** The VFS that was filled; another one (a runtime reset) is filled again. */
 	private vfsId: string | null = null;
 	/** What the sandbox has of the host's files, as it was last sent or saved. */
@@ -281,11 +284,21 @@ export class WorkspaceSync {
 			this.pullTimer = null;
 		}
 		this.pullDeadline = null;
-		return this.enqueue(() => this.pull());
+		return this.enqueuePull();
+	}
+
+	/** Startup restores all saved batches before the runtime is presented as ready. */
+	drain(): Promise<void> {
+		return this.enqueue(async () => {
+			while (await this.pull()) {
+				// A collect is bounded; another batch may still be waiting.
+			}
+		});
 	}
 
 	/** The sandbox says changes are waiting: they are saved shortly. */
 	notePending(): void {
+		if (this.queuedPull) return;
 		const now = Date.now();
 		this.pullDeadline ??= now + SANDBOX_PULL_MAX_DELAY_MS;
 		if (this.pullTimer) clearTimeout(this.pullTimer);
@@ -296,7 +309,7 @@ export class WorkspaceSync {
 		this.pullTimer = setTimeout(() => {
 			this.pullTimer = null;
 			this.pullDeadline = null;
-			void this.enqueue(() => this.pull()).catch((error) =>
+			void this.enqueuePull().catch((error) =>
 				logWarn("[workspace-sync] Could not save the sandbox's changes", error),
 			);
 		}, wait);
@@ -341,6 +354,18 @@ export class WorkspaceSync {
 		return run;
 	}
 
+	private enqueuePull(): Promise<void> {
+		if (this.queuedPull) return this.queuedPull;
+		const run = this.enqueue(async () => {
+			// A caller arriving during this pull needs one fresh follow-up, since
+			// the running collect may already have captured its batch.
+			this.queuedPull = null;
+			await this.pull();
+		});
+		this.queuedPull = run;
+		return run;
+	}
+
 	// ── Host → sandbox ────────────────────────────────────────────────────
 
 	/** A change was announced: the journal says what it was. */
@@ -350,10 +375,16 @@ export class WorkspaceSync {
 	}
 
 	private scheduleHostPush(): void {
+		if (this.queuedHostPush) return;
 		if (this.hostTimer) clearTimeout(this.hostTimer);
 		this.hostTimer = setTimeout(() => {
 			this.hostTimer = null;
-			void this.enqueue(() => this.pushHostChanges()).catch((error) =>
+			const run = this.enqueue(async () => {
+				this.queuedHostPush = null;
+				await this.pushHostChanges();
+			});
+			this.queuedHostPush = run;
+			void run.catch((error) =>
 				logWarn("[workspace-sync] Could not send host changes", error),
 			);
 		}, HOST_CHANGE_DELAY_MS);
@@ -699,12 +730,12 @@ export class WorkspaceSync {
 	// ── Sandbox → host ────────────────────────────────────────────────────
 
 	/** Saves the sandbox's waiting changes on the host, as one batch. */
-	private async pull(): Promise<void> {
+	private async pull(): Promise<boolean> {
 		// Nothing of this host's is in flight now: a batch the sandbox still
 		// waits on was lost (the host was restarted), and is sent again.
 		const batch = await this.runtime.collect({ orphansFailed: true });
 		this.noteLocalDirty(batch.localDirty ?? []);
-		if (batch.batchId === null || !batch.ops.length) return;
+		if (batch.batchId === null || !batch.ops.length) return false;
 		const failures = await this.files
 			.apply(batch.ops, batch.buffer, SANDBOX_SYNC_ORIGIN)
 			.catch((error: unknown) =>
@@ -725,7 +756,11 @@ export class WorkspaceSync {
 				"[workspace-sync] The host refused some sandbox changes",
 				failures,
 			);
+			throw new Error(
+				"Some sandbox files could not be saved. Check available storage and retry.",
+			);
 		}
+		return true;
 	}
 
 	/** What the sandbox has now matches the host for a change just saved. */

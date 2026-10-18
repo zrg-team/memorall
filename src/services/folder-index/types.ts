@@ -61,6 +61,27 @@ export interface FolderIndexSyncResult {
 	skipped: number;
 }
 
+/** File counts for one running index root, including its covered subfolders. */
+export interface FolderIndexProgress {
+	/** Eligible files in this run, after applying the folder's skip rules. */
+	total: number;
+	/** Files successfully indexed or verified as already up to date. */
+	successful: number;
+	/** Files currently being checked or indexed. */
+	indexing: number;
+	/** Files that failed, including failures waiting for a retry. */
+	failed: number;
+}
+
+export interface FolderIndexSyncOptions {
+	nestedRoots?: string[];
+	signal?: AbortSignal;
+	batchSize?: number;
+	pauseMs?: number;
+	onActivity?: () => void;
+	onProgress?: (progress: FolderIndexProgress) => void;
+}
+
 /** A short record of one file's entry, for the Files list. */
 export interface FolderIndexFileEntry {
 	path: string;
@@ -92,13 +113,7 @@ export interface FolderIndexType {
 	sync(
 		root: string,
 		files: IndexedFileInfo[],
-		options?: {
-			nestedRoots?: string[];
-			signal?: AbortSignal;
-			batchSize?: number;
-			pauseMs?: number;
-			onActivity?: () => void;
-		},
+		options?: FolderIndexSyncOptions,
 	): Promise<FolderIndexSyncResult>;
 	/** Removes everything this type built for `root`. */
 	remove(root: string): Promise<void>;

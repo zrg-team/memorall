@@ -72,6 +72,7 @@ export const PROVIDER_REGISTRY: Readonly<
 		residentLocal: true,
 		requiresAuth: false,
 		categories: [
+			"ocr",
 			"text-to-speech",
 			"speech-to-text",
 			"image-tools",
@@ -91,6 +92,7 @@ export const PROVIDER_REGISTRY: Readonly<
 		encryptionKey: "openai_config",
 		categories: [
 			"chat",
+			"ocr",
 			"text-to-speech",
 			"speech-to-text",
 			"image-generation",
@@ -106,7 +108,7 @@ export const PROVIDER_REGISTRY: Readonly<
 		requiresAuth: true,
 		readyKey: "openrouter_ready",
 		encryptionKey: "openrouter_config",
-		categories: ["chat", "image-generation", "decision"],
+		categories: ["chat", "ocr", "image-generation", "decision"],
 	},
 	custom: {
 		id: "custom",
@@ -119,6 +121,7 @@ export const PROVIDER_REGISTRY: Readonly<
 		encryptionKey: "custom_config",
 		categories: [
 			"chat",
+			"ocr",
 			"text-to-speech",
 			"speech-to-text",
 			"image-generation",
@@ -132,7 +135,7 @@ export const PROVIDER_REGISTRY: Readonly<
 		residentLocal: false,
 		requiresAuth: false,
 		configKey: "lmstudio_config",
-		categories: ["chat"],
+		categories: ["chat", "ocr"],
 	},
 	ollama: {
 		id: "ollama",
@@ -142,7 +145,7 @@ export const PROVIDER_REGISTRY: Readonly<
 		residentLocal: false,
 		requiresAuth: false,
 		configKey: "ollama_config",
-		categories: ["chat"],
+		categories: ["chat", "ocr"],
 	},
 };
 
