@@ -15,3 +15,4 @@ export * from "./service-tokens.js";
 export * from "./services.js";
 export * from "./step.js";
 export * from "./tool.js";
+export * from "./tool-input-fields.js";

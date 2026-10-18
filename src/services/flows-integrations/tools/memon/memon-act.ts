@@ -57,7 +57,6 @@ const schema = z
 		path: z
 			.string()
 			.trim()
-			.min(1)
 			.optional()
 			.describe(
 				'describe: the exact image file path from search results, such as "/agents/Bot/assets/hero.webp" or "~/assets/hero.webp". No Files ref or open Viewer is needed. A folder opens in Files so you can choose an image.',
@@ -82,12 +81,12 @@ const schema = z
 			.object({
 				x: z.number(),
 				y: z.number(),
-				width: z.number().min(1),
-				height: z.number().min(1),
+				width: z.number(),
+				height: z.number(),
 			})
 			.optional()
 			.describe(
-				'screenshot: only this part, in CSS pixels, as the screen gives places ("[b9] canvas 800×600 at 0,120" is { x: 0, y: 120, width: 800, height: 600 }): of the view, or with capture "page", of the page from its top.',
+				'screenshot only: capture this part, in CSS pixels, with width and height at least 1 ("[b9] canvas 800×600 at 0,120" is { x: 0, y: 120, width: 800, height: 600 }): of the view, or with capture "page", of the page from its top. Omit for other actions, including click.',
 			),
 		to: z
 			.string()
@@ -107,10 +106,35 @@ const schema = z
 			),
 		tab: z
 			.number()
-			.int()
-			.min(1)
 			.optional()
-			.describe("select_tab/close_tab: the tab number from the screen."),
+			.describe(
+				"select_tab/close_tab only: the whole-number tab number from the screen, starting at 1. Omit for other actions, including click.",
+			),
+	})
+	.superRefine((input, ctx) => {
+		// Models sometimes fill every optional field with a placeholder. Check
+		// action-specific limits only when the action actually uses that field.
+		if (input.action === "screenshot" && input.region) {
+			for (const dimension of ["width", "height"] as const) {
+				if (input.region[dimension] >= 1) continue;
+				ctx.addIssue({
+					code: "custom",
+					path: ["region", dimension],
+					message: `screenshot: ${dimension} must be at least 1 CSS pixel; omit region to capture the current view.`,
+				});
+			}
+		}
+		if (
+			(input.action === "select_tab" || input.action === "close_tab") &&
+			input.tab !== undefined &&
+			(!Number.isInteger(input.tab) || input.tab < 1)
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["tab"],
+				message: `${input.action}: tab must be a whole number starting at 1, as listed on the screen.`,
+			});
+		}
 	})
 	.describe("Act on the computer screen.");
 
@@ -334,7 +358,7 @@ const act = async (
 			return (result.ok && result.detail) || `Scrolled ${direction}.`;
 		}
 		case "describe":
-			return describe(machine, input.ref, input.path ?? input.text);
+			return describe(machine, input.ref, input.path || input.text);
 		case "screenshot":
 			return screenshot(machine, input, app);
 		case "back":
@@ -538,7 +562,7 @@ const act = async (
 export const createMemonActTool: ToolFactory<Input> = (): Tool<Input> => ({
 	name: MEMON_ACT_TOOL,
 	description:
-		"Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, save a screenshot of the page to Files, or write and save in the Editor. Returns the new screen.",
+		'Act on the computer: click, hover or type on a ref from the latest screen (or click a page point by x, y), press keys, scroll, go back/forward, switch tabs, save a screenshot of the page to Files, or write and save in the Editor. A ref click needs only { action: "click", ref: "b12" }; omit unused fields. Returns the new screen.',
 	schema,
 	execute: (input, context) =>
 		runMemonTool(
@@ -549,7 +573,7 @@ export const createMemonActTool: ToolFactory<Input> = (): Tool<Input> => ({
 				: input.action === "screenshot"
 					? "Taking a screenshot"
 					: input.action === "describe" && (input.path || input.text)
-						? `Looking at ${input.path ?? input.text}`
+						? `Looking at ${input.path || input.text}`
 						: input.action === "describe" && !input.ref
 							? "Looking at the screen"
 							: input.ref

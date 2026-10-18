@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseToolInput } from "@memorall/agent-harness-flows/interfaces/engine/tool";
+import { convertToolToOpenAI } from "@memorall/agent-harness-flows/registries/tool-registry";
 
 vi.mock("@/services/memon/machine-registry", () => ({
 	getMemonMachine: vi.fn(),
@@ -61,7 +63,117 @@ const describeRef = async (machine: ReturnType<typeof fakeMachine>) => {
 	);
 };
 
+describe("memon_act arguments", () => {
+	const parse = (input: unknown) => {
+		const tool = createMemonActTool();
+		return parseToolInput<Parameters<typeof tool.execute>[0]>(
+			tool.schema,
+			input,
+			tool.name,
+		);
+	};
+
+	it("executes a click with unused screenshot and tab placeholders", async () => {
+		const machine = fakeMachine({ looks: true });
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		const input = parse({
+			ref: "b23",
+			action: "click",
+			text: "",
+			path: "",
+			x: 0,
+			y: 0,
+			capture: "view",
+			region: { x: 0, y: 0, width: 0, height: 0 },
+			to: "",
+			submit: false,
+			direction: "down",
+			tab: 0,
+		});
+		const result = await createMemonActTool().execute(input, undefined);
+		expect(machine.browserAction).toHaveBeenCalledWith({
+			ref: "b23",
+			action: "click",
+			x: 0,
+			y: 0,
+		});
+		expect(result).toMatchObject({
+			structuredContent: { ok: true },
+			content: expect.stringContaining("Clicked b23"),
+		});
+	});
+
+	it("needs only an action and ref to click, and preserves empty text to clear a field", () => {
+		expect(parse({ action: "click", ref: "b23" })).toEqual({
+			action: "click",
+			ref: "b23",
+		});
+		expect(parse({ action: "type", ref: "b2", text: "", tab: 0 }).text).toBe(
+			"",
+		);
+	});
+
+	it.each(["width", "height"] as const)(
+		"explains how to fix an invalid screenshot region %s",
+		(dimension) => {
+			expect(() =>
+				parse({
+					action: "screenshot",
+					region: { x: 0, y: 0, width: 10, height: 10, [dimension]: 0 },
+				}),
+			).toThrow(
+				`region.${dimension}: screenshot: ${dimension} must be at least 1 CSS pixel; omit region to capture the current view.`,
+			);
+		},
+	);
+
+	it.each(["select_tab", "close_tab"] as const)(
+		"validates tab numbers only for %s",
+		(action) => {
+			for (const tab of [0, -1, 1.5]) {
+				expect(() => parse({ action, tab })).toThrow(
+					`${action}: tab must be a whole number starting at 1, as listed on the screen.`,
+				);
+			}
+			expect(parse({ action, tab: 1 }).tab).toBe(1);
+			expect(
+				parse({ action, tab: 1, region: { x: 0, y: 0, width: 0, height: 0 } })
+					.tab,
+			).toBe(1);
+			// Missing tab numbers still get the runtime's list of open tabs.
+			expect(parse({ action })).toEqual({ action });
+		},
+	);
+
+	it("keeps the advertised parameters as an object with only action required", () => {
+		const parameters = convertToolToOpenAI({
+			...createMemonActTool(),
+			execute: async () => "",
+		}).function.parameters;
+		expect(parameters).toMatchObject({
+			type: "object",
+			required: ["action"],
+			properties: {
+				region: { type: "object" },
+				tab: { type: "number" },
+			},
+		});
+	});
+});
+
 describe("memon_act describe", () => {
+	it("uses the image path in text when the optional path is blank", async () => {
+		const machine = fakeMachine({ looks: true });
+		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);
+		await createMemonActTool().execute(
+			{ action: "describe", path: "", text: "~/assets/hero.webp" },
+			undefined,
+		);
+		expect(machine.pictureOfFile).toHaveBeenCalledWith(
+			"/agents/Bot/assets/hero.webp",
+		);
+	});
+
 	it("inspects the exact image path returned by search without guessing a screen ref", async () => {
 		const machine = fakeMachine({ looks: true });
 		vi.mocked(getMemonMachine).mockResolvedValue(machine as never);

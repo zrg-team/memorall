@@ -163,7 +163,8 @@ export class BrowserOsBackend implements BrowserBackend {
 		const client = await this.ensureClient(signal);
 		const created = await client.callTool(
 			"tabs",
-			{ action: "new", background: !this.settings().visible },
+			// Visibility controls the browser window, not whether a new tab is selected.
+			{ action: "new", background: true },
 			signal,
 		);
 		const handle = pageOf(created);

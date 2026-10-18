@@ -248,7 +248,7 @@ const WEB_CONTENT_ERROR_TYPE: Record<
 	"web-tool:outline": "web-tool:outline-result",
 	"web-tool:outline-action": "web-tool:outline-action-result",
 	"web-tool:fetch-image": "web-tool:fetch-image-result",
-	"web-tool:open-image-tab": "web-tool:open-image-tab-result",
+	"web-tool:navigate-to-image": "web-tool:navigate-to-image-result",
 	"web-tool:read-rendered-image": "web-tool:read-rendered-image-result",
 	"web-tool:watch-user-actions": "web-tool:watch-user-actions-result",
 };
@@ -372,20 +372,13 @@ export const handleWebContentCommand = async (
 				};
 			}
 
-			case "web-tool:open-image-tab": {
-				// Must happen here rather than through the extension tabs API: a tab the
-				// extension opens carries no Referer, so a host with hotlink
-				// protection refuses the navigation. Opened by the page, the request
-				// carries that page's Referer and is served.
-				const opened = window.open(request.url, "_blank");
-				if (!opened) {
-					throw new Error(
-						"The page refused to open the image in a tab (popup blocked).",
-					);
-				}
+			case "web-tool:navigate-to-image": {
+				// This is the temporary background tab, never the user's source page.
+				// A page navigation sends its Referer without opening a focused popup.
+				window.setTimeout(() => window.location.assign(request.url), 0);
 				return {
 					source: WEB_CONTENT_COMMAND_SOURCE,
-					type: "web-tool:open-image-tab-result",
+					type: "web-tool:navigate-to-image-result",
 					success: true,
 				};
 			}

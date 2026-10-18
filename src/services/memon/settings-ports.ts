@@ -1,5 +1,4 @@
 import type { UnifiedFlowConfig } from "@memorall/agent-harness-flows/interfaces/config/flow-config";
-import { ADD_SKILL_CONTEXT_STEP_NAME } from "@memorall/agent-harness-flows/steps/common/add-skill-context";
 import { MCP_FEATURE_NAME } from "@memorall/agent-harness-flows/steps/features/mcp-feature/index";
 import type {
 	SkillSummary,
@@ -20,6 +19,12 @@ import type {
 } from "@/services/mcp-connections/types";
 import type { MemonConnectionsPort, MemonSkillsPort } from "./memon-machine";
 import type { MemonConnectionItem } from "./types";
+import {
+	enabledSkillNamesOf,
+	updateSkillAssignment,
+} from "@/services/skill-assignment";
+import { subscribeSkillChanges } from "@/services/skill-events";
+import { logError } from "@/utils/logger";
 
 /**
  * The agent's Skills and Connections, on the services the agent settings page
@@ -134,30 +139,27 @@ const updateAgentStep = async (
 	});
 };
 
-const enabledSkillNamesOf = (
-	step: UnifiedFlowConfig["steps"][number] | undefined,
-): string[] => {
-	const names = step?.config?.enabledSkillNames;
-	return Array.isArray(names)
-		? names.filter((name): name is string => typeof name === "string")
-		: [];
-};
-
 export const createMemonSkillsPort = (
 	settings: MemonAgentSettings = agentSettings,
 	library: () => Promise<MemonSkillLibrary> = loadSkillLibrary,
 ): MemonSkillsPort => ({
+	subscribe(listener) {
+		return subscribeSkillChanges((change, remote) => {
+			if (remote && change.type === "library") {
+				void import("@/services/filesystem/fs")
+					.then(({ refreshFsCache }) => refreshFsCache({ immediate: true }))
+					.then(() => listener(change))
+					.catch((error) => logError("Failed to sync computer skills:", error));
+			} else listener(change);
+		});
+	},
 	async list(agentId) {
 		const [skills, config, agentName] = await Promise.all([
 			(await library()).listSkills(),
 			agentId ? settings.readConfig(agentId) : Promise.resolve(null),
 			agentId ? settings.agentName(agentId) : Promise.resolve(undefined),
 		]);
-		const enabled = new Set(
-			enabledSkillNamesOf(
-				config?.steps.find((step) => step.name === ADD_SKILL_CONTEXT_STEP_NAME),
-			),
-		);
+		const enabled = new Set(config ? enabledSkillNamesOf(config) : []);
 		const items = skills.map((skill) => ({
 			name: skill.name,
 			description: skill.description,
@@ -183,18 +185,10 @@ export const createMemonSkillsPort = (
 		};
 	},
 	async setEnabled(agentId, name, enabled) {
-		await updateAgentStep(
-			settings,
-			agentId,
-			ADD_SKILL_CONTEXT_STEP_NAME,
-			(step) => {
-				const current = enabledSkillNamesOf(step);
-				const next = enabled
-					? [...new Set([...current, name])]
-					: current.filter((value) => value !== name);
-				return { ...step, config: { ...step.config, enabledSkillNames: next } };
-			},
-		);
+		await updateSkillAssignment(agentId, name, enabled, {
+			read: () => settings.readConfig(agentId),
+			save: (config) => settings.saveConfig(agentId, config),
+		});
 	},
 	async save({ name, description, body }) {
 		const skills = await library();

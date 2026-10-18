@@ -12,6 +12,11 @@ import type { ChatCompletionContentPart } from "@/types/openai";
 import { normalizeDocumentPath } from "../files/util";
 import { fetchImageBytesFromBrowserSession } from "./web-fetch-image";
 import { createDefaultWebErrorResult } from "./web-tool-registry";
+import {
+	optionalWebString,
+	optionalToolChoice,
+	webUrl,
+} from "@memorall/agent-harness-flows/tools/web/web-input";
 
 const TOOL_NAME = "web_read_images" as const;
 
@@ -41,28 +46,31 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 const schema = z.object({
 	urls: z
-		.array(z.string().url())
-		.min(1)
-		.max(MAX_IMAGES)
+		.preprocess((input) => {
+			const values = typeof input === "string" ? [input] : input;
+			if (!Array.isArray(values)) return values;
+			return [
+				...new Set(
+					values
+						.map((value) => (typeof value === "string" ? value.trim() : value))
+						.filter(
+							(value) => value !== null && value !== undefined && value !== "",
+						),
+				),
+			].slice(0, MAX_IMAGES);
+		}, z.array(webUrl()).min(1))
 		.describe(
 			`Image URLs to look at, up to ${MAX_IMAGES}. Collect them from web_dom_action (query "img" and read each src).`,
 		),
-	sessionId: z
-		.string()
-		.optional()
-		.describe(
-			"Web session whose tab fetches the images. Falls back to a direct download.",
-		),
-	detail: z
-		.enum(["auto", "low", "high"])
-		.optional()
-		.describe("Vision detail hint. Use 'low' when skimming many images."),
-	save_dir: z
-		.string()
-		.optional()
-		.describe(
-			"Also save each image under this directory in the root filesystem, e.g. /resources/images.",
-		),
+	sessionId: optionalWebString().describe(
+		"Web session whose tab fetches the images. Falls back to a direct download.",
+	),
+	detail: optionalToolChoice(["auto", "low", "high"]).describe(
+		"Vision detail hint. Use 'low' when skimming many images.",
+	),
+	save_dir: optionalWebString().describe(
+		"Also save each image under this directory in the root filesystem, e.g. /resources/images.",
+	),
 });
 
 type Input = z.infer<typeof schema>;

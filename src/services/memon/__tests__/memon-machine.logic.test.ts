@@ -28,6 +28,7 @@ import {
 import type { MemonStudioRequest } from "../studio-app";
 import { runTerminalAction } from "../terminal/terminal-actions";
 import type { MemonPiCodeFolder, MemonSchedule } from "../types";
+import type { SkillChange } from "@/services/skill-events";
 
 const outline = (url: string, title: string): WebPageOutline => ({
 	url,
@@ -2084,6 +2085,53 @@ describe("MemonMachine", () => {
 		await expect(machine.openSkill("nope")).rejects.toThrow(
 			'There is no skill "nope".',
 		);
+	});
+
+	it("refreshes the open Skills window after outside changes and unsubscribes on disposal", async () => {
+		const { ports } = createPorts();
+		let notify!: (change: SkillChange) => void;
+		const unsubscribe = vi.fn();
+		ports.skills.subscribe = (listener) => {
+			notify = listener;
+			return unsubscribe;
+		};
+		const machine = new MemonMachine("skill-sync", ports);
+		machine.setAgent("agent-1");
+		await machine.openSkills();
+		await machine.openSkill("research-writer");
+		await ports.skills.setEnabled("agent-1", "pdf-tools", true);
+		notify({
+			type: "assignment",
+			flowId: "agent-1",
+			config: { graphType: "foundation", steps: [] },
+		});
+		await vi.waitFor(() =>
+			expect(
+				machine
+					.snapshot()
+					.skills.items.find((item) => item.name === "pdf-tools")?.enabled,
+			).toBe(true),
+		);
+		await ports.skills.save({
+			name: "research-writer",
+			description: "Edited",
+			body: "Updated outside",
+		});
+		notify({ type: "library", name: "research-writer" });
+		await vi.waitFor(() =>
+			expect(machine.snapshot().skills.open?.body).toBe("Updated outside"),
+		);
+		const reads = vi.mocked(ports.skills.list).mock.calls.length;
+		notify({
+			type: "assignment",
+			flowId: "other-agent",
+			config: { graphType: "foundation", steps: [] },
+		});
+		expect(ports.skills.list).toHaveBeenCalledTimes(reads);
+		await machine.dispose();
+		expect(unsubscribe).toHaveBeenCalledOnce();
+		notify({ type: "library", name: "writer" });
+		expect(ports.skills.list).toHaveBeenCalledTimes(reads);
 	});
 
 	it("shows the user's connections and grants one to the agent", async () => {

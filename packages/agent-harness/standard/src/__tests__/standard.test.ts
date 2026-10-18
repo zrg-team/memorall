@@ -99,18 +99,20 @@ describe("standard capability packs", () => {
       search: async () => [{ text: "Go", index: 0 }],
       query: async () => [{ tagName: "button", text: "Go" }],
       action: async () => ({ clicked: true }),
-      wait: async () => ({ ready: true }),
+      wait: async (input) => ({ ready: true, kind: input.kind }),
     };
     const processor = { extract: () => ({ content: "processed", matchCount: 1 }) };
     const execution = context({ [WEB_BROWSER_SERVICE.id]: browser, [HTML_CONTENT_PROCESSOR.id]: processor });
     const tools = createWebTools();
     expect((await executeTool(byName(tools, "web_open"), { url: session.currentUrl }, execution)).structuredContent).toMatchObject({ actionType: "web_open" });
     expect((await executeTool(byName(tools, "web_read"), { url: session.currentUrl, selector: "main" }, execution)).structuredContent).toMatchObject({ content: "processed", matchCount: 1 });
+    expect((await executeTool(byName(tools, "web_read"), { sessionId: session.id, url: "", contentMode: null, selector: "", maxChars: "" }, execution)).structuredContent).toMatchObject({ content: "processed", contentMode: "text" });
     expect(calls).toContain("close");
     expect((await executeTool(byName(tools, "web_search"), { sessionId: session.id, pattern: "Go" }, execution)).structuredContent).toMatchObject({ matches: [{ text: "Go" }] });
     expect((await executeTool(byName(tools, "web_dom"), { operation: "query", sessionId: session.id, selector: "button" }, execution)).structuredContent).toHaveProperty("output");
     expect((await executeTool(byName(tools, "web_dom"), { operation: "action", sessionId: session.id, selector: "button", action: "click" }, execution)).structuredContent).toMatchObject({ output: { clicked: true } });
     expect((await executeTool(byName(tools, "web_wait"), { sessionId: session.id, kind: "render" }, execution)).structuredContent).toMatchObject({ output: { ready: true } });
+    expect((await executeTool(byName(tools, "web_wait"), { sessionId: session.id, kind: "", state: null, timeoutMs: "" }, execution)).structuredContent).toMatchObject({ output: { ready: true, kind: "render" } });
   });
 
   it("keeps planner state run-local and exercises skills and delegation ports", async () => {

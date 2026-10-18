@@ -58,6 +58,13 @@ const isOptionalSchema = (schema: z.ZodTypeAny): boolean => {
 };
 
 const unwrapSchema = (schema: z.ZodTypeAny): z.ZodTypeAny => {
+	if (schema instanceof z.ZodPipe) {
+		return unwrapSchema(
+			(schema.in instanceof z.ZodTransform
+				? schema.out
+				: schema.in) as z.ZodTypeAny,
+		);
+	}
 	const def = (
 		schema as {
 			_def?: {

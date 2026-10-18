@@ -106,6 +106,8 @@ export interface BrowserBackend {
 		maxHtmlChars: number,
 		signal?: AbortSignal,
 	): Promise<BrowserSnapshot>;
+	/** Only called for an explicit user request to view or control the page. */
+	show?(session: BackendSession, signal?: AbortSignal): Promise<boolean>;
 	/**
 	 * Inject the co-agent into the page and keep it there across navigation.
 	 *

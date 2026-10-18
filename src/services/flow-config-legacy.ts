@@ -204,6 +204,7 @@ export const applyLegacyDraftToUnified = (
 			}
 
 			if (step.name === ADD_SKILL_CONTEXT_STEP_NAME) {
+				nextStep.enabled = draftEnabledSkillNames.length > 0;
 				nextStep.config = {
 					...(nextStep.config ?? {}),
 					enabledSkillNames: [...draftEnabledSkillNames],

@@ -120,7 +120,7 @@ export type WebContentCommandRequest =
 			url: string;
 	  }
 	/**
-	 * Ask the page to open an image in its own tab.
+	 * Navigate a temporary background copy of the source page to an image.
 	 *
 	 * Must run in the page, not the background: a tab the extension creates sends
 	 * no Referer, so a host with hotlink protection refuses the navigation. Opened
@@ -128,7 +128,7 @@ export type WebContentCommandRequest =
 	 */
 	| {
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
-			type: "web-tool:open-image-tab";
+			type: "web-tool:navigate-to-image";
 			url: string;
 	  }
 	/**
@@ -203,7 +203,7 @@ export type WebContentCommandResponse =
 	  }
 	| {
 			source: typeof WEB_CONTENT_COMMAND_SOURCE;
-			type: "web-tool:open-image-tab-result";
+			type: "web-tool:navigate-to-image-result";
 			success: true;
 	  }
 	| {
@@ -230,7 +230,7 @@ export type WebContentCommandResponse =
 				| "web-tool:outline-result"
 				| "web-tool:outline-action-result"
 				| "web-tool:fetch-image-result"
-				| "web-tool:open-image-tab-result"
+				| "web-tool:navigate-to-image-result"
 				| "web-tool:read-rendered-image-result"
 				| "web-tool:watch-user-actions-result";
 			success: false;
@@ -577,7 +577,7 @@ export const isWebContentCommandRequest = (
 				typeof value.maxChars === "number"
 			);
 		case "web-tool:fetch-image":
-		case "web-tool:open-image-tab":
+		case "web-tool:navigate-to-image":
 			return typeof value.url === "string";
 		case "web-tool:read-rendered-image":
 		case "web-tool:watch-user-actions":
@@ -617,7 +617,7 @@ export const isWebContentCommandResponse = (
 			return (
 				typeof value.base64 === "string" && typeof value.mimeType === "string"
 			);
-		case "web-tool:open-image-tab-result":
+		case "web-tool:navigate-to-image-result":
 		case "web-tool:watch-user-actions-result":
 			return true;
 		case "web-tool:outline-result":

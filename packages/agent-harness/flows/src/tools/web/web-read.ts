@@ -4,6 +4,13 @@ import type { WebSession } from "../../interfaces/services/web-browser.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import { parseHtmlDocument } from "../../utils/html-parser.js";
 import {
+	optionalWebString,
+	optionalWebUrl,
+	optionalToolChoice,
+	optionalToolInteger,
+	withWebSessionTarget,
+} from "./web-input.js";
+import {
 	MAX_WEB_MAX_HTML_CHARS,
 	MIN_WEB_MAX_HTML_CHARS,
 	normalizeWebMaxHtmlChars,
@@ -57,42 +64,29 @@ interface SmartRetryMetadata {
 	smartRetryExhausted?: boolean;
 }
 
-const schema = z.object({
-	sessionId: z.string().optional().describe("Active web session to read."),
-	url: z
-		.string()
-		.url()
-		.optional()
-		.describe("Open first, then read. Use with no sessionId."),
-	browserMode: z
-		.enum(["iframe", "tab", "window"])
-		.optional()
-		.describe(
+const schema = withWebSessionTarget(
+	z.object({
+		sessionId: optionalWebString().describe("Active web session to read."),
+		url: optionalWebUrl().describe(
+			"Open first, then read. Use with no sessionId.",
+		),
+		browserMode: optionalToolChoice(["iframe", "tab", "window"]).describe(
 			"Open mode when no sessionId is provided. Leave it out for a window; `iframe` only for a local server.",
 		),
-	maxHtmlChars: z
-		.number()
-		.int()
-		.optional()
-		.describe(
+		maxHtmlChars: optionalToolInteger().describe(
 			`Limit HTML length returned to the agent. Values are clamped to ${MIN_WEB_MAX_HTML_CHARS}-${MAX_WEB_MAX_HTML_CHARS}.`,
 		),
-	timeoutMs: z
-		.number()
-		.int()
-		.optional()
-		.describe("Navigation/load timeout used when opening by URL."),
-	selector: z
-		.string()
-		.optional()
-		.describe("Optional selector for a focused read."),
-	contentMode: z
-		.enum(CONTENT_MODE_VALUES)
-		.optional()
-		.describe(
+		timeoutMs: optionalToolInteger().describe(
+			"Navigation/load timeout used when opening by URL.",
+		),
+		selector: optionalWebString().describe(
+			"Optional selector for a focused read.",
+		),
+		contentMode: optionalToolChoice(CONTENT_MODE_VALUES).describe(
 			"Content format. Default is `text`. `text` returns readable page text, `html` returns rendered HTML, `clean_html` returns HTML with tags only and no attributes/scripts/styles.",
 		),
-});
+	}),
+);
 
 type Input = z.infer<typeof schema>;
 

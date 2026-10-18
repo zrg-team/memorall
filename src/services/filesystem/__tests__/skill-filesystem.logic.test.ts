@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const notifications = vi.hoisted(() => ({ publish: vi.fn() }));
+vi.mock("@/services/skill-events", () => ({
+	publishSkillChange: notifications.publish,
+}));
+
 // ---------------------------------------------------------------------------
 // In-memory filesystem standing in for ZenFS
 // ---------------------------------------------------------------------------
@@ -134,6 +139,7 @@ const readText = (path: string) => {
 };
 
 beforeEach(() => {
+	notifications.publish.mockClear();
 	nodes.clear();
 	store.clear();
 	vi.resetModules();
@@ -484,5 +490,29 @@ describe("planFolderImport", () => {
 
 		expect(readText(`${SKILLS_ROOT}/kit/SKILL.md`)).toContain("body");
 		expect(readText(`${SKILLS_ROOT}/kit/references/api.md`)).toBe("# API");
+		expect(notifications.publish).toHaveBeenCalledExactlyOnceWith({
+			type: "library",
+			name: "kit",
+		});
+		notifications.publish.mockClear();
+		await skillFileSystemService.commitImport(candidates[0]);
+		expect(notifications.publish).toHaveBeenCalledExactlyOnceWith({
+			type: "library",
+			name: "kit",
+		});
 	});
+});
+
+it("publishes saved, edited and deleted skills after their filesystem changes", async () => {
+	const { skillFileSystemService } = await loadService();
+	await skillFileSystemService.writeSkill("writer", "Write", "first");
+	await skillFileSystemService.writeSkill("writer", "Edited", "second");
+	await skillFileSystemService.deleteSkill("writer");
+	await expect(skillFileSystemService.readSkill("writer")).rejects.toThrow();
+	const change = { type: "library", name: "writer" };
+	expect(notifications.publish.mock.calls).toEqual([
+		[change],
+		[change],
+		[change],
+	]);
 });

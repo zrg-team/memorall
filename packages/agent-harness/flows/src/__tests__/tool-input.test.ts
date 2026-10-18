@@ -80,6 +80,35 @@ describe("parseToolInput: empty strings models send", () => {
 
 		expect(() => parseToolInput(schema, { a: "ok", b: "" }, "t")).not.toThrow();
 	});
+
+	it.each(["", "   "])("drops a blank optional URL (%j)", (url) => {
+		const schema = z.object({
+			sessionId: z.string(),
+			url: z.string().url().optional(),
+		});
+		const input = { sessionId: "s1", url };
+
+		expect(parseToolInput(schema, input, "web_read")).toEqual({
+			sessionId: "s1",
+		});
+		expect(input.url).toBe(url);
+	});
+
+	it("still requires a URL for a tool that opens a new page", () => {
+		const schema = z.object({ url: z.string().url() });
+
+		expect(() => parseToolInput(schema, { url: "" }, "web_open")).toThrow(
+			"- url: required, but missing",
+		);
+	});
+
+	it("does not drop a nonempty invalid URL", () => {
+		const schema = z.object({ url: z.string().url().optional() });
+
+		expect(() => parseToolInput(schema, { url: "not-a-url" }, "t")).toThrow(
+			"- url: Invalid URL",
+		);
+	});
 });
 
 describe("describeSchemaIssues", () => {

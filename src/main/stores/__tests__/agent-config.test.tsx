@@ -132,6 +132,12 @@ vi.mock("@memorall/agent-harness-flows/utils/flow-config", () => {
 });
 
 import { useAgentConfigStore } from "../agent-config";
+import { publishSkillChange } from "@/services/skill-events";
+import {
+	enabledSkillNamesOf,
+	withEnabledSkills,
+} from "@/services/skill-assignment";
+import { createMemonSkillsPort } from "@/services/memon/settings-ports";
 
 const catalog = {
 	steps: [
@@ -391,7 +397,7 @@ describe("useAgentConfigStore", () => {
 		store.toggleAccessibleAgent("agent-2");
 		store.setAccessibleAgents(["agent-2", "agent-2", "agent-3"]);
 		store.setAgentConnections([{ connectionId: "conn-remote" }]);
-		store.toggleSkill("docs");
+		await store.toggleSkill("docs");
 		store.setEnabledSkills(["skill-a", "skill-a", "skill-b"]);
 		store.patchStepConfig("custom-feature", { level: "advanced" });
 
@@ -501,6 +507,134 @@ describe("useAgentConfigStore", () => {
 		});
 		expect(useAgentConfigStore.getState().isDirty).toBe(false);
 		expect(useAgentConfigStore.getState().savedUnifiedConfig).toBe(savedConfig);
+	});
+
+	it("syncs switches in both directions with the computer without saving other agent edits", async () => {
+		await initializeUnifiedStore();
+		let persisted = unifiedConfig();
+		mocks.flowBuilderService.getUnifiedFlowConfig.mockImplementation(
+			async () => persisted,
+		);
+		mocks.flowBuilderService.saveUnifiedFlowConfig.mockImplementation(
+			async (_ref, config) => {
+				persisted = config;
+				publishSkillChange({ type: "assignment", flowId: "flow-1", config });
+			},
+		);
+		const computer = createMemonSkillsPort(
+			{
+				readConfig: () => mocks.flowBuilderService.getUnifiedFlowConfig(),
+				saveConfig: (flowId, config) =>
+					mocks.flowBuilderService.saveUnifiedFlowConfig({ flowId }, config),
+				agentName: async () => "Researcher",
+			},
+			async () => ({
+				listSkills: async () =>
+					["docs", "writer"].map((name) => ({
+						name,
+						description: name,
+						path: `/${name}.md`,
+					})),
+				readSkill: vi.fn(),
+				writeSkill: vi.fn(),
+				deleteSkill: vi.fn(),
+				validateSkillName: () => ({ valid: true }),
+			}),
+		);
+		const store = useAgentConfigStore.getState();
+		store.updateField("systemPrompt", "Unsaved prompt");
+		store.patchStepConfig("custom-feature", { unsaved: true });
+		await store.toggleSkill("writer");
+		expect(
+			(await computer.list("flow-1")).items.every((item) => item.enabled),
+		).toBe(true);
+		expect(
+			persisted.steps.find((step) => step.name === "add-system")?.config
+				?.content,
+		).toBe("Custom system prompt");
+		expect(
+			persisted.steps.find((step) => step.name === "custom-feature")?.config,
+		).not.toHaveProperty("unsaved");
+
+		await computer.setEnabled("flow-1", "docs", false);
+		expect(useAgentConfigStore.getState().draftEnabledSkillNames).toEqual([
+			"writer",
+		]);
+		expect(useAgentConfigStore.getState().draftConfig.systemPrompt).toBe(
+			"Unsaved prompt",
+		);
+		expect(
+			useAgentConfigStore
+				.getState()
+				.savedUnifiedConfig?.steps.find(
+					(step) => step.name === "custom-feature",
+				)?.config,
+		).toMatchObject({ unsaved: true });
+		expect(useAgentConfigStore.getState().isDirty).toBe(true);
+		await useAgentConfigStore.getState().save();
+		expect(enabledSkillNamesOf(persisted)).toEqual(["writer"]);
+	});
+
+	it("keeps rapid switches, rolls back a failed save, and ignores another agent's changes", async () => {
+		await initializeUnifiedStore();
+		let persisted = unifiedConfig();
+		mocks.flowBuilderService.getUnifiedFlowConfig.mockImplementation(
+			async () => persisted,
+		);
+		mocks.flowBuilderService.saveUnifiedFlowConfig.mockImplementation(
+			async (_ref, config) => {
+				persisted = config;
+			},
+		);
+		const store = useAgentConfigStore.getState();
+		await Promise.all([
+			store.toggleSkill("writer"),
+			store.toggleSkill("docs"),
+			store.toggleSkill("writer"),
+		]);
+		expect(enabledSkillNamesOf(persisted)).toEqual([]);
+		expect(useAgentConfigStore.getState()).toMatchObject({
+			savedEnabledSkillNames: [],
+			draftEnabledSkillNames: [],
+			isDirty: false,
+		});
+		mocks.flowBuilderService.saveUnifiedFlowConfig.mockRejectedValueOnce(
+			new Error("Storage unavailable"),
+		);
+		await store.toggleSkill("writer");
+		expect(useAgentConfigStore.getState()).toMatchObject({
+			draftEnabledSkillNames: [],
+			error: "Error: Storage unavailable",
+		});
+		publishSkillChange({
+			type: "assignment",
+			flowId: "another-agent",
+			config: withEnabledSkills(persisted, ["other"]),
+		});
+		expect(useAgentConfigStore.getState().draftEnabledSkillNames).toEqual([]);
+	});
+
+	it("does not apply an earlier agent's pending switch after changing agents", async () => {
+		await initializeUnifiedStore();
+		let finish!: () => void;
+		mocks.flowBuilderService.saveUnifiedFlowConfig.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const toggle = useAgentConfigStore.getState().toggleSkill("writer");
+		await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+		useAgentConfigStore.setState({
+			currentFlowId: "flow-2",
+			savedEnabledSkillNames: ["other"],
+			draftEnabledSkillNames: ["other"],
+		});
+		finish();
+		await toggle;
+		expect(useAgentConfigStore.getState().draftEnabledSkillNames).toEqual([
+			"other",
+		]);
 	});
 
 	it("blocks legacy save until conversion but can convert through the unified path", async () => {

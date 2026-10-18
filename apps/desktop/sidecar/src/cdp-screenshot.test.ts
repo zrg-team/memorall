@@ -94,12 +94,13 @@ describe("the part of the page a desktop screenshot keeps", () => {
 
 		// From the top, so a sticky header is drawn where it starts; then back.
 		expect(send.mock.calls.map(([method]) => method)).toEqual([
+			"Browser.getWindowForTarget",
 			"Runtime.evaluate",
 			"Page.getLayoutMetrics",
 			"Page.captureScreenshot",
 			"Runtime.evaluate",
 		]);
-		expect(send.mock.calls[0]?.[1]?.expression).toContain(
+		expect(send.mock.calls[1]?.[1]?.expression).toContain(
 			"scrollTo({ left: 0, top: 0",
 		);
 		expect(send).toHaveBeenCalledWith(
@@ -113,18 +114,50 @@ describe("the part of the page a desktop screenshot keeps", () => {
 			undefined,
 			90_000,
 		);
-		expect(send.mock.calls[3]?.[1]?.expression).toContain("top: 400");
+		expect(send.mock.calls[4]?.[1]?.expression).toContain("top: 400");
 		expect(picture).toMatchObject({ width: 1280, height: 3000 });
 		expect(picture.cut).toBeUndefined();
 
 		// The plain viewport needs no metrics.
 		send.mockClear();
 		await captureCdpPage({ send } as never, {});
-		expect(send).toHaveBeenCalledTimes(1);
-		expect(send.mock.calls[0]?.[1]).toEqual({
+		expect(send).toHaveBeenCalledTimes(2);
+		expect(send.mock.calls[1]?.[1]).toEqual({
 			format: "png",
 			fromSurface: true,
 			captureBeyondViewport: false,
 		});
 	});
+
+	it.each([false, true])(
+		"captures minimized pages without restoring or focusing them (capture fails=%j)",
+		async (fails) => {
+			const send = vi.fn(async (method: string) => {
+				if (method === "Browser.getWindowForTarget")
+					return { bounds: { windowState: "minimized" } };
+				if (method === "Page.getLayoutMetrics") return layout;
+				if (method === "Page.captureScreenshot") {
+					if (fails) throw new Error("capture failed");
+					return { data: png(1280, 800) };
+				}
+				return {};
+			});
+			const capture = captureCdpPage({ send } as never, {});
+			if (fails) await expect(capture).rejects.toThrow("capture failed");
+			else
+				await expect(capture).resolves.toMatchObject({
+					width: 1280,
+					height: 800,
+				});
+			expect(send.mock.calls.map(([method]) => method)).not.toContain(
+				"Page.bringToFront",
+			);
+			expect(send.mock.calls.map(([method]) => method)).not.toContain(
+				"Browser.setWindowBounds",
+			);
+			expect(send).toHaveBeenLastCalledWith(
+				"Emulation.clearDeviceMetricsOverride",
+			);
+		},
+	);
 });

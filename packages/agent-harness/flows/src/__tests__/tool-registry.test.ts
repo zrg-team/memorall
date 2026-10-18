@@ -26,6 +26,41 @@ const baseTool = (schema: BaseTool["schema"]): BaseTool => ({
 });
 
 describe("tool schema conversion", () => {
+	it("preserves input types and optional fields through normalization pipelines", () => {
+		const schema = z.preprocess(
+			(input) => input,
+			z.object({
+				url: z
+					.preprocess(
+						(input) => (input === "" ? undefined : input),
+						z.string().optional(),
+					)
+					.optional()
+					.describe("Optional URL"),
+				count: z.preprocess(Number, z.number()).optional(),
+				action: z.preprocess((input) => input, z.enum(["read", "click"])),
+			}),
+		);
+		const [tool] = convertToolsToOpenAI([baseTool(schema)]);
+		expect(tool.function.parameters).toEqual({
+			type: "object",
+			properties: {
+				url: { type: "string", description: "Optional URL" },
+				count: { type: "number" },
+				action: { type: "string", enum: ["read", "click"] },
+			},
+			required: ["action"],
+		});
+		const [transformed] = convertToolsToOpenAI([
+			baseTool(
+				z.object({ input: z.string() }).transform((value) => value.input),
+			),
+		]);
+		expect(transformed.function.parameters).toMatchObject({
+			type: "object",
+			required: ["input"],
+		});
+	});
 	it("converts common Zod schemas into OpenAI tool parameters", () => {
 		const [tool] = convertToolsToOpenAI([
 			baseTool(

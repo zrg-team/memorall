@@ -7,6 +7,12 @@ import {
 	type SkillSummary,
 } from "@/services/filesystem/skill-filesystem";
 import { logError } from "@/utils/logger";
+import { refreshFsCache } from "@/services/filesystem/fs";
+import { subscribeSkillChanges } from "@/services/skill-events";
+
+let watching = false;
+let refreshVersion = 0;
+let selectionVersion = 0;
 
 /** Which lane of the "add skill" chooser is open, if any. */
 export type SkillLane = "manual" | "github" | "upload" | "folder";
@@ -58,26 +64,45 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 	error: null,
 
 	initialize: async () => {
+		if (!watching) {
+			watching = true;
+			subscribeSkillChanges((change, remote) => {
+				if (change.type !== "library") return;
+				void (async () => {
+					if (remote) await refreshFsCache({ immediate: true });
+					await get().refresh();
+					const selected = get().selected;
+					if (selected?.name !== change.name) return;
+					await get().select(get().findSkill(change.name) ? selected : null);
+				})().catch((error) => {
+					logError("Failed to sync skill library:", error);
+					set({ error: String(error) });
+				});
+			});
+		}
 		if (get().skills.length > 0) return;
 		await get().refresh();
 	},
 
 	refresh: async () => {
+		const version = ++refreshVersion;
 		set({ isLoading: true });
 		try {
-			set({ skills: await skillFileSystemService.listSkills(), error: null });
+			const skills = await skillFileSystemService.listSkills();
+			if (version === refreshVersion) set({ skills, error: null });
 		} catch (error) {
 			logError("Failed to list skills:", error);
-			set({ skills: [], error: String(error) });
+			if (version === refreshVersion) set({ error: String(error) });
 		} finally {
-			set({ isLoading: false });
+			if (version === refreshVersion) set({ isLoading: false });
 		}
 	},
 
 	select: async (selection) => {
+		const version = ++selectionVersion;
 		set({ selected: selection, lane: null, pendingImport: null });
 		if (!selection) {
-			set({ openSkill: null, resources: [] });
+			set({ openSkill: null, resources: [], isOpening: false });
 			return;
 		}
 
@@ -90,19 +115,27 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 					.catch(() => [] as SkillResource[]),
 			]);
 			// A slower earlier request must not overwrite a newer selection.
-			if (get().selected?.name !== selection.name) return;
+			if (version !== selectionVersion) return;
 			set({ openSkill: skill, resources, error: null });
 		} catch (error) {
 			logError(`Failed to open skill "${selection.name}":`, error);
-			if (get().selected?.name !== selection.name) return;
+			if (version !== selectionVersion) return;
 			set({ openSkill: null, resources: [], error: String(error) });
 		} finally {
-			set({ isOpening: false });
+			if (version === selectionVersion) set({ isOpening: false });
 		}
 	},
 
-	openLane: (lane) =>
-		set({ lane, selected: null, openSkill: null, resources: [] }),
+	openLane: (lane) => {
+		selectionVersion++;
+		set({
+			lane,
+			selected: null,
+			openSkill: null,
+			resources: [],
+			isOpening: false,
+		});
+	},
 
 	setPendingImport: (candidates) => set({ pendingImport: candidates }),
 

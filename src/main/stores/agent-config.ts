@@ -32,6 +32,13 @@ import { logError } from "@/utils/logger";
 import { applySettingsToRunningComputer } from "@/services/memon/agent-settings-sync";
 import { startDesktopSandboxForAgent } from "@/services/sandbox-container/agent-sandbox-startup";
 import { deepEqual } from "@/utils/deep-equal";
+import {
+	enabledSkillNamesOf,
+	flushSkillAssignments,
+	updateSkillAssignment,
+	withEnabledSkills,
+} from "@/services/skill-assignment";
+import { subscribeSkillChanges } from "@/services/skill-events";
 import type {
 	FeatureCatalogMetadata,
 	FeatureDetailViewSlot,
@@ -223,14 +230,7 @@ const getAgentConnections = (
 };
 
 const getEnabledSkillNames = (unifiedConfig: UnifiedFlowConfig): string[] => {
-	const step = unifiedConfig.steps.find(
-		(candidate) => candidate.name === ADD_SKILL_CONTEXT_STEP_NAME,
-	);
-	return Array.isArray(step?.config?.enabledSkillNames)
-		? step.config.enabledSkillNames.filter(
-				(value): value is string => typeof value === "string",
-			)
-		: [];
+	return enabledSkillNamesOf(unifiedConfig);
 };
 
 const deriveLegacyStateFromUnified = (unifiedConfig: UnifiedFlowConfig) => {
@@ -354,7 +354,7 @@ interface AgentConfigState {
 	toggleAccessibleAgent: (agentId: string) => void;
 	setAccessibleAgents: (agentIds: string[]) => void;
 	setAgentConnections: (servers: MCPConnectionSelection[]) => void;
-	toggleSkill: (skillName: string) => void;
+	toggleSkill: (skillName: string) => Promise<void>;
 	setEnabledSkills: (skillNames: string[]) => void;
 	patchStepConfig: (stepName: string, patch: Record<string, unknown>) => void;
 	save: () => Promise<void>;
@@ -388,8 +388,17 @@ const computeDirty = (
 	!deepEqual(savedConnections, draftConnections) ||
 	!deepEqual(savedEnabledSkillNames, draftEnabledSkillNames);
 
+const pendingSkillChanges: Array<{
+	flowId: string | null;
+	name: string;
+	enabled: boolean;
+}> = [];
+
 export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 	const persistUnifiedConfig = async () => {
+		const targetFlowId = get().currentFlowId;
+		await flushSkillAssignments(targetFlowId);
+		if (get().currentFlowId !== targetFlowId) return;
 		set({ isSaving: true, error: null });
 		try {
 			const {
@@ -400,7 +409,6 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				draftEnabledSkillNames,
 				savedUnifiedConfig,
 			} = get();
-			const targetFlowId = get().currentFlowId;
 			const baseConfig =
 				savedUnifiedConfig &&
 				(savedUnifiedConfig.graphType === draftConfig.graphType ||
@@ -824,26 +832,39 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 			});
 		},
 
-		toggleSkill: (skillName) => {
+		toggleSkill: async (skillName) => {
+			if (get().isLoading) return;
+			if (get().isLegacyConfig) {
+				set({ error: "Legacy config must be converted before saving skills." });
+				return;
+			}
+			const flowId = get().currentFlowId;
 			const current = get().draftEnabledSkillNames;
-			const next = current.includes(skillName)
-				? current.filter((value) => value !== skillName)
-				: [...current, skillName];
-			set({
-				draftEnabledSkillNames: next,
-				isDirty: computeDirty(
-					get().savedConfig,
-					get().draftConfig,
-					get().savedFeatures,
-					get().draftFeatures,
-					get().savedMultiAgentAccessibleAgentIds,
-					get().draftMultiAgentAccessibleAgentIds,
-					get().savedConnections,
-					get().draftConnections,
-					get().savedEnabledSkillNames,
-					next,
-				),
-			});
+			const change = {
+				flowId,
+				name: skillName,
+				enabled: !current.includes(skillName),
+			};
+			pendingSkillChanges.push(change);
+			get().setEnabledSkills(
+				change.enabled
+					? [...current, skillName]
+					: current.filter((value) => value !== skillName),
+			);
+			set({ error: null });
+			let config: UnifiedFlowConfig | undefined;
+			let failure: unknown;
+			try {
+				config = await updateSkillAssignment(flowId, skillName, change.enabled);
+			} catch (error) {
+				failure = error;
+				logError("Failed to save skill selection:", error);
+			} finally {
+				pendingSkillChanges.splice(pendingSkillChanges.indexOf(change), 1);
+			}
+			if (get().currentFlowId !== flowId) return;
+			syncSavedSkills(flowId, config ?? get().stepConfigBaseline);
+			if (failure) set({ error: String(failure) });
 		},
 
 		setEnabledSkills: (skillNames) => {
@@ -966,6 +987,82 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 			});
 		},
 	};
+});
+
+/** Rebase just skills so a computer switch cannot reset other unsaved fields. */
+const syncSavedSkills = (
+	flowId: string | null,
+	config: UnifiedFlowConfig | null,
+) => {
+	const state = useAgentConfigStore.getState();
+	if (state.currentFlowId !== flowId || !config) return;
+	const savedEnabledSkillNames = enabledSkillNamesOf(config);
+	let draftEnabledSkillNames = [...savedEnabledSkillNames];
+	for (const change of pendingSkillChanges) {
+		if (change.flowId !== flowId) continue;
+		draftEnabledSkillNames = change.enabled
+			? [...new Set([...draftEnabledSkillNames, change.name])]
+			: draftEnabledSkillNames.filter((name) => name !== change.name);
+	}
+	const savedFeatures = { ...state.savedFeatures };
+	const draftFeatures = { ...state.draftFeatures };
+	if (ADD_SKILL_CONTEXT_STEP_NAME in savedFeatures) {
+		savedFeatures[ADD_SKILL_CONTEXT_STEP_NAME] =
+			savedEnabledSkillNames.length > 0;
+		draftFeatures[ADD_SKILL_CONTEXT_STEP_NAME] =
+			draftEnabledSkillNames.length > 0;
+	}
+	useAgentConfigStore.setState({
+		savedEnabledSkillNames,
+		draftEnabledSkillNames,
+		savedFeatures,
+		draftFeatures,
+		savedUnifiedConfig: state.savedUnifiedConfig
+			? withEnabledSkills(state.savedUnifiedConfig, savedEnabledSkillNames)
+			: null,
+		stepConfigBaseline: state.stepConfigBaseline
+			? withEnabledSkills(state.stepConfigBaseline, savedEnabledSkillNames)
+			: null,
+		isDirty: computeDirty(
+			state.savedConfig,
+			state.draftConfig,
+			savedFeatures,
+			draftFeatures,
+			state.savedMultiAgentAccessibleAgentIds,
+			state.draftMultiAgentAccessibleAgentIds,
+			state.savedConnections,
+			state.draftConnections,
+			savedEnabledSkillNames,
+			draftEnabledSkillNames,
+		),
+	});
+};
+
+let assignmentReadVersion = 0;
+subscribeSkillChanges((change, remote) => {
+	if (
+		change.type !== "assignment" ||
+		change.flowId !== useAgentConfigStore.getState().currentFlowId
+	)
+		return;
+	const version = ++assignmentReadVersion;
+	if (!remote) {
+		syncSavedSkills(change.flowId, change.config);
+		return;
+	}
+	// Messages from different contexts can arrive out of order. Read the saved
+	// config rather than replacing a newer local switch with an older message.
+	void serviceManager.flowBuilderService
+		.getUnifiedFlowConfig(
+			change.flowId
+				? { flowId: change.flowId }
+				: { predefinedFlow: "foundation" },
+		)
+		.then((config) => {
+			if (version === assignmentReadVersion)
+				syncSavedSkills(change.flowId, config);
+		})
+		.catch((error) => logError("Failed to sync saved skill selection:", error));
 });
 
 const stepConfigsChanged = (state: AgentConfigState): boolean =>

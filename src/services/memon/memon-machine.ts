@@ -1,4 +1,5 @@
 import { validateCronExpression } from "@/services/cron-jobs/cron-expression";
+import type { SkillChange } from "@/services/skill-events";
 import type {
 	FolderZip,
 	ZipExtraction,
@@ -253,6 +254,7 @@ export interface MemonSchedulerPort {
 
 /** The skill library and which skills the agent uses. */
 export interface MemonSkillsPort {
+	subscribe?(listener: (change: SkillChange) => void): () => void;
 	list(agentId: string | null): Promise<{
 		agentName?: string;
 		items: MemonSkillItem[];
@@ -565,6 +567,8 @@ export class MemonMachine {
 	private skillItems: MemonSkillItem[] = [];
 	private openedSkill: MemonOpenSkill | null = null;
 	private skillsLoading = false;
+	private skillsReadVersion = 0;
+	private unsubscribeSkills: (() => void) | undefined;
 	private skillsError: string | undefined;
 	private connectionItems: MemonConnectionItem[] = [];
 	private connectionsUnlocked = false;
@@ -721,6 +725,12 @@ export class MemonMachine {
 		);
 		// Which apps this build has, for the dock (asked once, in the background).
 		void this.hosted.availableApps();
+		this.unsubscribeSkills = ports.skills?.subscribe?.((change) => {
+			if (this.disposed || !this.windowFor("skills")) return;
+			if (change.type === "assignment" && change.flowId !== this.agentId)
+				return;
+			void this.refreshSkills();
+		});
 	}
 
 	// ── Lifecycle ───────────────────────────────────────────────────────────
@@ -763,6 +773,8 @@ export class MemonMachine {
 
 	async dispose(): Promise<void> {
 		this.disposed = true;
+		this.unsubscribeSkills?.();
+		this.skillsReadVersion++;
 		await this.flushWrites();
 		this.terminal.dispose();
 		await this.piCode.stop();
@@ -3246,18 +3258,38 @@ export class MemonMachine {
 
 	/** Re-reads the skill library and which skills the agent uses. */
 	async refreshSkills(): Promise<void> {
+		const version = ++this.skillsReadVersion;
+		const agentId = this.agentId;
+		const openedName = this.openedSkill?.name;
 		this.skillsLoading = true;
 		this.changed();
 		try {
-			const { agentName, items } = await this.ports.skills.list(this.agentId);
+			const [{ agentName, items }, opened] = await Promise.all([
+				this.ports.skills.list(agentId),
+				openedName
+					? this.ports.skills.read(openedName).catch(() => null)
+					: null,
+			]);
+			if (
+				version !== this.skillsReadVersion ||
+				agentId !== this.agentId ||
+				this.disposed
+			)
+				return;
 			this.agentName = agentName ?? this.agentName;
 			this.skillItems = items;
+			if (openedName && this.openedSkill?.name === openedName)
+				this.openedSkill = opened;
 			this.skillsError = undefined;
 		} catch (error) {
-			this.skillsError = error instanceof Error ? error.message : String(error);
+			if (version === this.skillsReadVersion)
+				this.skillsError =
+					error instanceof Error ? error.message : String(error);
 		} finally {
-			this.skillsLoading = false;
-			this.changed();
+			if (version === this.skillsReadVersion) {
+				this.skillsLoading = false;
+				this.changed();
+			}
 		}
 	}
 

@@ -1914,7 +1914,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
           "type": "number",
         },
         "selector": {
-          "description": "CSS selector for DOM target.",
+          "description": "CSS selector for DOM target. Required for click/input/focus; defaults to body for query/read/scroll.",
           "type": "string",
         },
         "sessionId": {
@@ -1928,7 +1928,6 @@ exports[`Memorall flow registered contracts > registers every core tool contract
       },
       "required": [
         "sessionId",
-        "selector",
         "action",
       ],
       "type": "object",

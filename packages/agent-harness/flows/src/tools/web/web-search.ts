@@ -3,6 +3,15 @@ import type { Tool, ToolFactory } from "../../interfaces/engine/tool.js";
 import type { WebSearchMatch } from "../../interfaces/services/web-browser.js";
 import { toolRegistry } from "../../registries/tool-registry.js";
 import {
+	optionalWebString,
+	optionalWebUrl,
+	optionalToolField,
+	optionalToolChoice,
+	optionalToolInteger,
+	optionalToolBoolean,
+	withWebSessionTarget,
+} from "./web-input.js";
+import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	requireWebBrowserService,
@@ -13,66 +22,53 @@ import {
 
 const TOOL_NAME = "web_find_in_page" as const;
 
-const schema = z
-	.object({
-		sessionId: z.string().optional().describe("Active web session to search."),
-		url: z
-			.string()
-			.url()
-			.optional()
-			.describe(
+const findInPageSchema = withWebSessionTarget(
+	z
+		.object({
+			sessionId: optionalWebString().describe("Active web session to search."),
+			url: optionalWebUrl().describe(
 				"Open first, then search current page content. Use with no sessionId.",
 			),
-		browserMode: z
-			.enum(["iframe", "tab", "window"])
-			.optional()
-			.describe(
+			browserMode: optionalToolChoice(["iframe", "tab", "window"]).describe(
 				"Open mode when no sessionId is provided. Leave it out for a window; `iframe` only for a local server.",
 			),
-		pattern: z
-			.string()
-			.min(1)
-			.optional()
-			.describe(
+			pattern: optionalToolField(z.string().min(1)).describe(
 				"Text or regex pattern to find within the current rendered page.",
 			),
-		query: z
-			.string()
-			.min(1)
-			.optional()
-			.describe("Deprecated alias for `pattern`."),
-		selector: z
-			.string()
-			.optional()
-			.describe("Optional selector to limit find-in-page scope."),
-		isRegex: z
-			.boolean()
-			.optional()
-			.describe("Treat pattern as regular expression."),
-		caseSensitive: z
-			.boolean()
-			.optional()
-			.describe("Case-sensitive text matching (default false)."),
-		maxMatches: z
-			.number()
-			.int()
-			.optional()
-			.describe("Maximum matches to return."),
-		maxSnippetChars: z
-			.number()
-			.int()
-			.optional()
-			.describe("Max characters returned per match snippet."),
-		timeoutMs: z
-			.number()
-			.int()
-			.optional()
-			.describe("Navigation/load timeout used when opening by URL."),
-	})
-	.refine((value) => Boolean(value.pattern || value.query), {
-		message: "`pattern` is required.",
-		path: ["pattern"],
-	});
+			query: optionalToolField(z.string().min(1)).describe(
+				"Deprecated alias for `pattern`.",
+			),
+			selector: optionalWebString().describe(
+				"Optional selector to limit find-in-page scope.",
+			),
+			isRegex: optionalToolBoolean().describe(
+				"Treat pattern as regular expression.",
+			),
+			caseSensitive: optionalToolBoolean().describe(
+				"Case-sensitive text matching (default false).",
+			),
+			maxMatches: optionalToolInteger().describe("Maximum matches to return."),
+			maxSnippetChars: optionalToolInteger().describe(
+				"Max characters returned per match snippet.",
+			),
+			timeoutMs: optionalToolInteger().describe(
+				"Navigation/load timeout used when opening by URL.",
+			),
+		})
+		.refine((value) => Boolean(value.pattern || value.query), {
+			message: "`pattern` is required.",
+			path: ["pattern"],
+		}),
+);
+
+const schema = z.preprocess((input) => {
+	if (typeof input !== "object" || input === null || Array.isArray(input))
+		return input;
+	const value = input as Record<string, unknown>;
+	if (typeof value.pattern !== "string" || !value.pattern.trim()) return input;
+	const { query: _query, ...canonicalInput } = value;
+	return canonicalInput;
+}, findInPageSchema);
 
 type Input = z.infer<typeof schema>;
 type SearchResult = WebSearchMatch[];

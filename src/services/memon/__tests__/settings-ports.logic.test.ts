@@ -179,6 +179,32 @@ describe("MemonOS settings ports", () => {
 		);
 	});
 
+	it("enables the runtime skill step and preserves concurrent switches", async () => {
+		const { settings, stepConfig } = createSettings();
+		const config = await settings.readConfig("agent-1");
+		config.steps[0].enabled = false;
+		const port = createMemonSkillsPort(settings, async () => library);
+		expect(
+			(await port.list("agent-1")).items.every((item) => !item.enabled),
+		).toBe(true);
+		await Promise.all([
+			port.setEnabled("agent-1", "writer", true),
+			port.setEnabled("agent-1", "pdf-tools", true),
+		]);
+		expect(stepConfig("add-skill-context")).toMatchObject({
+			enabled: true,
+			config: { enabledSkillNames: ["writer", "pdf-tools"] },
+		});
+		await Promise.all([
+			port.setEnabled("agent-1", "writer", false),
+			port.setEnabled("agent-1", "pdf-tools", false),
+		]);
+		expect(stepConfig("add-skill-context")).toMatchObject({
+			enabled: false,
+			config: { enabledSkillNames: [] },
+		});
+	});
+
 	it("keeps the known tools when a refresh fails, with the error", async () => {
 		const { settings } = createSettings();
 		const port = createMemonConnectionsPort(settings, async () => registry);

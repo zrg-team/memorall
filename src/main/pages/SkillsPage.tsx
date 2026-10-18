@@ -42,6 +42,7 @@ export const SkillsPage: React.FC = () => {
 		(state) => state.draftEnabledSkillNames,
 	);
 	const toggleSkill = useAgentConfigStore((state) => state.toggleSkill);
+	const assignmentError = useAgentConfigStore((state) => state.error);
 	const availableAgents = useAgentConfigStore((state) => state.availableAgents);
 	const selectedAgentFlowId = useChatStore(
 		(state) => state.selectedAgentFlowId,
@@ -56,9 +57,24 @@ export const SkillsPage: React.FC = () => {
 		void initialize();
 	}, [initialize]);
 
+	React.useEffect(() => {
+		const state = useAgentConfigStore.getState();
+		if (
+			state.currentFlowId !== selectedAgentFlowId ||
+			!state.savedUnifiedConfig
+		) {
+			void state.initialize(selectedAgentFlowId);
+		}
+	}, [selectedAgentFlowId]);
+
 	const enabledSet = React.useMemo(
-		() => new Set(enabledSkillNames),
-		[enabledSkillNames],
+		() =>
+			new Set(
+				skills
+					.filter((skill) => enabledSkillNames.includes(skill.name))
+					.map((skill) => skill.name),
+			),
+		[enabledSkillNames, skills],
 	);
 	const existingNames = React.useMemo(
 		() => new Set(skills.map((skill) => skill.name)),
@@ -170,6 +186,11 @@ export const SkillsPage: React.FC = () => {
 						}
 					/>
 					<div className="space-y-2 px-2 pt-2">
+						{assignmentError ? (
+							<p role="alert" className="text-sm text-destructive">
+								{assignmentError}
+							</p>
+						) : null}
 						<AddSkillButton onClick={() => openLane(null)} />
 						<div className="relative">
 							<Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
