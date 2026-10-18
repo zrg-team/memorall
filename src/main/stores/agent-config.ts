@@ -448,7 +448,7 @@ export const useAgentConfigStore = create<AgentConfigState>((set, get) => {
 				isLegacyConfig: false,
 			});
 			// A running computer of the agent follows the saved settings at once.
-			startDesktopSandboxForAgent(unifiedConfig);
+			startDesktopSandboxForAgent(unifiedConfig, { automatic: true });
 			if (targetFlowId) {
 				void applySettingsToRunningComputer(targetFlowId, unifiedConfig).catch(
 					(error) =>

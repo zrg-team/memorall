@@ -158,6 +158,7 @@ const LOCAL_SAVE_DELAY_MS = 1_500;
 /** Projects this deep under a command's folder get their trees back too. */
 const RESTORE_DEPTH = 3;
 const READ_CONCURRENCY = 8;
+const BACKGROUND_YIELDED = Symbol("background sync yielded to terminal");
 
 interface SyncedEntry {
 	type: "file" | "dir";
@@ -193,7 +194,14 @@ type PendingFile = {
 };
 
 export class WorkspaceSync {
-	private chain: Promise<unknown> = Promise.resolve();
+	private readonly queue: Array<{ run(): Promise<void>; background: boolean }> =
+		[];
+	private readonly interactiveQueue: Array<{
+		run(): Promise<void>;
+		background: boolean;
+	}> = [];
+	private processing = false;
+	private activeBackground = false;
 	/** At most one pull may wait behind other sync work. */
 	private queuedPull: Promise<void> | null = null;
 	private queuedHostPush: Promise<void> | null = null;
@@ -277,6 +285,31 @@ export class WorkspaceSync {
 		});
 	}
 
+	/** Human input synchronizes its working directory ahead of unrelated work. */
+	readyInteractive(roots: readonly string[]): Promise<void> {
+		return this.enqueue(
+			async () => {
+				if (!this.vfsId) await this.fill(roots);
+				const vfsId = this.vfsId;
+				if (!vfsId) return;
+				if (!roots.length || roots.some((root) => normalize(root) === "/")) {
+					await this.pushHostChanges();
+				} else {
+					const ops: SandboxSyncInboundOp[] = [];
+					const files: PendingFile[] = [];
+					for (const root of this.outermost(new Set(roots.map(normalize)))) {
+						await this.diffPath(root, ops, files);
+					}
+					if (ops.length || files.length)
+						await this.send(vfsId, [], files, ops);
+				}
+				await this.fillStubs(roots);
+				await this.restoreLocalTrees(roots);
+			},
+			{ interactive: true },
+		);
+	}
+
 	/** After the sandbox ran something: what it changed is saved on the host. */
 	flush(): Promise<void> {
 		if (this.pullTimer) {
@@ -348,10 +381,42 @@ export class WorkspaceSync {
 
 	// ── Chain ─────────────────────────────────────────────────────────────
 
-	private enqueue<T>(task: () => Promise<T>): Promise<T> {
-		const run = this.chain.then(task);
-		this.chain = run.catch(() => undefined);
-		return run;
+	private enqueue<T>(
+		task: () => Promise<T>,
+		options: { interactive?: boolean; background?: boolean } = {},
+	): Promise<T> {
+		const result = new Promise<T>((resolve, reject) => {
+			const job = {
+				background: !!options.background,
+				run: async () => {
+					try {
+						resolve(await task());
+					} catch (error) {
+						reject(error);
+					}
+				},
+			};
+			(options.interactive ? this.interactiveQueue : this.queue).push(job);
+		});
+		if (!this.processing) {
+			this.processing = true;
+			void Promise.resolve().then(() => this.runQueued());
+		}
+		return result;
+	}
+
+	private async runQueued(): Promise<void> {
+		try {
+			let job = this.interactiveQueue.shift() ?? this.queue.shift();
+			while (job) {
+				this.activeBackground = job.background;
+				await job.run();
+				job = this.interactiveQueue.shift() ?? this.queue.shift();
+			}
+		} finally {
+			this.activeBackground = false;
+			this.processing = false;
+		}
 	}
 
 	private enqueuePull(): Promise<void> {
@@ -379,14 +444,18 @@ export class WorkspaceSync {
 		if (this.hostTimer) clearTimeout(this.hostTimer);
 		this.hostTimer = setTimeout(() => {
 			this.hostTimer = null;
-			const run = this.enqueue(async () => {
-				this.queuedHostPush = null;
-				await this.pushHostChanges();
-			});
-			this.queuedHostPush = run;
-			void run.catch((error) =>
-				logWarn("[workspace-sync] Could not send host changes", error),
+			const run = this.enqueue(
+				async () => {
+					this.queuedHostPush = null;
+					await this.pushHostChanges();
+				},
+				{ background: true },
 			);
+			this.queuedHostPush = run;
+			void run.catch((error) => {
+				if (error !== BACKGROUND_YIELDED)
+					logWarn("[workspace-sync] Could not send host changes", error);
+			});
 		}, HOST_CHANGE_DELAY_MS);
 	}
 
@@ -687,6 +756,13 @@ export class WorkspaceSync {
 					this.pendingPaths.add(missing);
 				}
 				this.scheduleHostPush();
+			}
+			if (this.activeBackground && this.interactiveQueue.length) {
+				// This batch is committed. Reconcile the remainder after input has
+				// its turn, rather than holding the terminal behind a whole project.
+				this.pendingPaths.add("/");
+				this.scheduleHostPush();
+				throw BACKGROUND_YIELDED;
 			}
 		};
 

@@ -456,10 +456,22 @@ async function assertWindowsMemonTerminal(browser) {
 			(candidate) => new URL(candidate.url()).hostname === "tauri.localhost",
 		);
 	if (!page) throw new Error("The main WebView is missing");
+	const mappedRoots = await page.evaluate(() =>
+		window.__TAURI_INTERNALS__.invoke("fs_map_list_roots"),
+	);
+	if (mappedRoots.length)
+		throw new Error(
+			"Sandbox acceptance requires an isolated folder mapping registry",
+		);
 	const file = readdirSync(resolve("publish/desktop/frontend/assets")).find(
 		(name) => /^memon-client-.*\.js$/.test(name),
 	);
 	if (!file) throw new Error("The production memon client module is missing");
+	const containerFile = readdirSync(
+		resolve("publish/desktop/frontend/assets"),
+	).find((name) => /^sandbox-container-service-main-.*\.js$/.test(name));
+	if (!containerFile)
+		throw new Error("The production sandbox service module is missing");
 	if (process.env.MEMORALL_SANDBOX_TRACE === "1") {
 		page.on("console", (message) => {
 			if (message.text().startsWith("SANDBOX_TRACE "))
@@ -478,12 +490,20 @@ async function assertWindowsMemonTerminal(browser) {
 				)
 				.getInstance();
 			for (const [target, names] of [
-				[service, ["request"]],
+				[service, ["request", "prepareWorkspace"]],
 				[
 					service.workspaceSync,
-					["fill", "pull", "pushHostChanges", "ready", "flush"],
+					[
+						"fill",
+						"pull",
+						"pushHostChanges",
+						"ready",
+						"readyInteractive",
+						"flush",
+						"drain",
+					],
 				],
-				[service.workspaceSync.files, ["list", "stat", "apply", "catchUp"]],
+				[service.workspaceSync.files, ["list", "apply", "catchUp"]],
 			]) {
 				for (const name of names) {
 					const original = target[name].bind(target);
@@ -505,6 +525,8 @@ async function assertWindowsMemonTerminal(browser) {
 										ops: result?.ops?.length,
 										paths: result?.ops?.slice(0, 3),
 										buffer: result?.buffer?.byteLength,
+										status: result?.status,
+										exitCode: result?.exitCode,
 									}),
 							);
 							return result;
@@ -525,7 +547,7 @@ async function assertWindowsMemonTerminal(browser) {
 			}
 			const sync = service.workspaceSync;
 			const enqueue = sync.enqueue.bind(sync);
-			sync.enqueue = (task) => {
+			sync.enqueue = (task, options) => {
 				const queued = Date.now();
 				const label = task.toString().slice(0, 120);
 				return enqueue(async () => {
@@ -538,7 +560,7 @@ async function assertWindowsMemonTerminal(browser) {
 							}),
 					);
 					return task();
-				});
+				}, options);
 			};
 		}, serviceFile);
 	}
@@ -573,6 +595,41 @@ async function assertWindowsMemonTerminal(browser) {
 			{ file: chatStoreFile, agentId },
 		);
 	const key = `native-sandbox-smoke-${Date.now().toString(36)}`;
+	const stressRoot = `/agents/${key}-sync-load`;
+	const changeStressFiles = (remove = false) =>
+		page.evaluate(
+			async ({ file, root, remove }) => {
+				const module = await import(`./assets/${file}`);
+				const service = Object.values(module)
+					.find(
+						(value) =>
+							typeof value?.getInstance === "function" &&
+							typeof value?.prototype?.listenCommand === "function",
+					)
+					.getInstance();
+				const buffer = remove
+					? undefined
+					: new TextEncoder().encode("x".repeat(768 * 1024)).buffer;
+				const ops = remove
+					? [{ op: "delete", path: root, dir: true }]
+					: Array.from({ length: 28 }, (_, index) => ({
+							op: "write",
+							path: `${root}/payload-${index}.txt`,
+							offset: 0,
+							length: buffer.byteLength,
+						}));
+				const failures = await service.workspaceSync.files.apply(
+					ops,
+					buffer,
+					"native-sandbox-smoke",
+				);
+				if (failures.length)
+					throw new Error(
+						`Cannot prepare isolated sync stress fixture: ${JSON.stringify(failures)}`,
+					);
+			},
+			{ file: containerFile, root: stressRoot, remove },
+		);
 	const request = (operation, payload, timeout = 360000) =>
 		page.evaluate(
 			async ({ file, operation, payload, timeout }) => {
@@ -637,8 +694,16 @@ async function assertWindowsMemonTerminal(browser) {
 		await footer.waitFor({ timeout: 20000 });
 		const barBounds = await page.getByTestId("memon-taskbar").boundingBox();
 		const trayBounds = await footer.boundingBox();
-		if (!barBounds || !trayBounds || barBounds.height > 56 || trayBounds.y < barBounds.y || trayBounds.y + trayBounds.height > barBounds.y + barBounds.height)
-			throw new Error("Computer settings must fit within the single apps taskbar");
+		if (
+			!barBounds ||
+			!trayBounds ||
+			barBounds.height > 56 ||
+			trayBounds.y < barBounds.y ||
+			trayBounds.y + trayBounds.height > barBounds.y + barBounds.height
+		)
+			throw new Error(
+				"Computer settings must fit within the single apps taskbar",
+			);
 		const openSettings = async () => {
 			if (!(await page.getByTestId("memon-config-panel").isVisible()))
 				await footer
@@ -673,12 +738,12 @@ async function assertWindowsMemonTerminal(browser) {
 		);
 		await request("window.open", { key, app: "terminal" });
 		await page.keyboard.press("Escape");
-		for (let attempt = 0; attempt < 8; attempt++) {
+		const checkLs = async (label) => {
 			const previousLines = snapshot.terminal.lines.length;
-			const commandStart = Date.now();
+			const commandStart = performance.now();
 			snapshot = await request("terminal.exec", { key, command: "ls" }, 10000);
 			const deadline = commandStart + 3000;
-			while (snapshot.terminal.runningCommand && Date.now() < deadline) {
+			while (snapshot.terminal.runningCommand && performance.now() < deadline) {
 				await new Promise((resolve) => setTimeout(resolve, 100));
 				snapshot = await request("snapshot.get", { key });
 			}
@@ -689,12 +754,10 @@ async function assertWindowsMemonTerminal(browser) {
 				throw new Error(
 					`ls did not finish: ${JSON.stringify(snapshot.terminal)}`,
 				);
-			const elapsed = Date.now() - commandStart;
-			console.log(`Production ls ${attempt + 1}: ${elapsed} ms`);
+			const elapsed = Math.round(performance.now() - commandStart);
+			console.log(`Production ls ${label}: ${elapsed} ms`);
 			if (elapsed > 3000)
-				throw new Error(
-					`ls ${attempt + 1} took too long after Ready: ${elapsed} ms`,
-				);
+				throw new Error(`ls ${label} took too long after Ready: ${elapsed} ms`);
 			const latestOutput = snapshot.terminal.lines
 				.slice(previousLines)
 				.filter((line) => line.kind === "stdout")
@@ -704,9 +767,30 @@ async function assertWindowsMemonTerminal(browser) {
 				!latestOutput.includes("Bot.md") ||
 				!latestOutput.includes("Memory.md")
 			)
-				throw new Error(
-					`ls attempt ${attempt + 1} lost its output: ${latestOutput}`,
-				);
+				throw new Error(`ls ${label} lost its output: ${latestOutput}`);
+		};
+		for (let attempt = 0; attempt < 8; attempt++)
+			await checkLs(String(attempt + 1));
+		await changeStressFiles();
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		for (let attempt = 0; attempt < 5; attempt++)
+			await checkLs(`during background sync ${attempt + 1}`);
+		await changeStressFiles(true);
+		const cleanupDeadline = performance.now() + 15000;
+		while (true) {
+			const exists = await page.evaluate(
+				(path) =>
+					window.__TAURI_INTERNALS__.invoke("desktop_sandbox_request", {
+						operation: "fs.exists",
+						payload: { path },
+						timeoutMs: 10000,
+					}),
+				stressRoot,
+			);
+			if (!exists.exists) break;
+			if (performance.now() > cleanupDeadline)
+				throw new Error("The isolated sync fixture did not finish cleaning up");
+			await new Promise((resolve) => setTimeout(resolve, 100));
 		}
 		const output = snapshot.terminal.lines
 			.filter((line) => line.kind === "stdout")
@@ -753,10 +837,13 @@ async function assertWindowsMemonTerminal(browser) {
 		const beforeRestart = (await request("snapshot.get", { key })).terminal
 			.lines.length;
 		await page.keyboard.press("Escape");
-		const restartedCommandStart = Date.now();
+		const restartedCommandStart = performance.now();
 		snapshot = await request("terminal.exec", { key, command: "ls" }, 10000);
 		const restartDeadline = restartedCommandStart + 3000;
-		while (snapshot.terminal.runningCommand && Date.now() < restartDeadline) {
+		while (
+			snapshot.terminal.runningCommand &&
+			performance.now() < restartDeadline
+		) {
 			await new Promise((resolve) => setTimeout(resolve, 100));
 			snapshot = await request("snapshot.get", { key });
 		}
@@ -765,12 +852,14 @@ async function assertWindowsMemonTerminal(browser) {
 			.filter((line) => line.kind === "stdout")
 			.map((line) => line.text)
 			.join("\n");
-		const restartedElapsed = Date.now() - restartedCommandStart;
+		const restartedElapsed = Math.round(
+			performance.now() - restartedCommandStart,
+		);
 		console.log(`Production ls after restart: ${restartedElapsed} ms`);
 		if (
 			snapshot.terminal.runningCommand ||
 			snapshot.terminal.lastExitCode !== 0 ||
-			Date.now() - restartedCommandStart > 3000 ||
+			restartedElapsed > 3000 ||
 			!restartedOutput.includes("Bot.md") ||
 			!restartedOutput.includes("Memory.md")
 		)
@@ -778,7 +867,7 @@ async function assertWindowsMemonTerminal(browser) {
 				`Terminal after restart (${restartedElapsed} ms): ${JSON.stringify(snapshot.terminal)}; output: ${restartedOutput}`,
 			);
 		console.log(
-			`Production memonOS startup, settings popover, Stop/Restart, and readiness gating passed; ls completed eight times and after restart (${Date.now() - restartedCommandStart} ms).`,
+			`Production memonOS startup, settings popover, Stop/Restart, and readiness gating passed; ls completed eight times and after restart (${restartedElapsed} ms).`,
 		);
 		await openSettings();
 		await sandbox.getByRole("button", { name: "Stop sandbox" }).click();
@@ -846,6 +935,7 @@ async function assertWindowsMemonTerminal(browser) {
 		);
 		throw error;
 	} finally {
+		await changeStressFiles(true).catch(() => {});
 		if (snapshot?.home === `/agents/${key}`)
 			await request(
 				"files.delete",
@@ -1130,6 +1220,9 @@ const app = spawn(executable, [], {
 							MEMORALL_VM_DATA_DIR:
 								process.env.MEMORALL_VM_DATA_DIR ??
 								resolve("publish/.cache/native-sandbox-smoke/vm"),
+							MEMORALL_FS_MAP_REGISTRY: resolve(
+								"publish/.cache/native-sandbox-smoke/mapped-roots.json",
+							),
 						}
 					: {}),
 			}

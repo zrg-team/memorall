@@ -393,6 +393,9 @@ class BrowserSandboxSession implements SandboxProviderSession {
 					case "command":
 						return commandResult(
 							await this.service.executeCommand({
+								...(context.priority === "interactive"
+									? { interactive: true }
+									: {}),
 								command: request.command,
 								cwd: request.cwd,
 								env: request.env,
@@ -444,6 +447,9 @@ class BrowserSandboxSession implements SandboxProviderSession {
 					case "read": {
 						const cursor = parseCursor(request.cursor);
 						const result = await this.service.listenCommand({
+							...(context.priority === "interactive"
+								? { interactive: true }
+								: {}),
 							commandId: request.processId,
 							offset: cursor.offset,
 							waitTimeoutMs: request.waitMs,
@@ -472,6 +478,9 @@ class BrowserSandboxSession implements SandboxProviderSession {
 					}
 					case "stop": {
 						const result = await this.service.stopCommand({
+							...(context.priority === "interactive"
+								? { interactive: true }
+								: {}),
 							commandId: request.processId,
 						});
 						return { processId: result.commandId, stopped: true };

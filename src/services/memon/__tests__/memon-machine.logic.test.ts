@@ -719,6 +719,33 @@ describe("MemonMachine", () => {
 		});
 	});
 
+	it("keeps user commands and their output polls on the interactive path", async () => {
+		const { machine, ports } = createMachine();
+		vi.mocked(ports.terminal.run).mockResolvedValue({
+			processId: "user-ls",
+			running: true,
+			exitCode: null,
+			output: [],
+		});
+		vi.mocked(ports.terminal.read).mockResolvedValue({
+			running: false,
+			exitCode: 0,
+			output: [],
+		});
+		await machine.terminal.runCommand("ls", { byUser: true, waitMs: 1000 });
+		expect(ports.terminal.run).toHaveBeenCalledWith(
+			"ls",
+			expect.objectContaining({ interactive: true }),
+		);
+		expect(ports.terminal.read).toHaveBeenCalledWith(
+			"user-ls",
+			undefined,
+			"conversation-1",
+			1000,
+			true,
+		);
+	});
+
 	it("runs a cd chained with another command in the sandbox shell", async () => {
 		const { machine, ports } = createMachine();
 

@@ -15,8 +15,8 @@ import { delimiter, join, resolve } from "node:path";
 import { retryMacosDmgBundling } from "./tauri-dmg-retry.mjs";
 
 const command = process.argv[2];
-if (command !== "dev" && command !== "build") {
-	throw new Error("Usage: node tools/run-tauri.mjs <dev|build>");
+if (!["dev", "build", "bundle"].includes(command)) {
+	throw new Error("Usage: node tools/run-tauri.mjs <dev|build|bundle>");
 }
 
 const platformName =
@@ -339,7 +339,11 @@ if (code !== 0 && command === "build" && !isInformationalCommand) {
 		log: (message) => console.warn(message),
 	});
 }
-if (code === 0 && command === "build" && !isInformationalCommand) {
+if (
+	code === 0 &&
+	(command === "build" || command === "bundle") &&
+	!isInformationalCommand
+) {
 	await stageDesktopArtifacts();
 }
 process.exitCode = code;

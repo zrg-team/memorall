@@ -65,6 +65,7 @@ import type {
 	SandboxStopServerRequest,
 } from "./types";
 import { DEFAULT_WORKSPACE_SYNC_LIMITS, WorkspaceSync } from "./workspace-sync";
+import { desktopSandboxController } from "./desktop-sandbox-controller";
 
 interface PendingRequest {
 	timeoutId: number;
@@ -98,6 +99,15 @@ const SANDBOX_PREVIEW_RELAY_CHANNEL = "memorall-sandbox-preview-relay";
 const WORKSPACE_OPS_PENDING_CHANNEL = "memorall-sandbox-fs-pending";
 /** Filling a VFS sends a whole filesystem: its batches may take a while. */
 const SYNC_REQUEST_TIMEOUT_MS = 120_000;
+const PASSIVE_NATIVE_OPERATIONS = new Set<SandboxOperation>([
+	"sync.collect",
+	"sync.ack",
+	"runtime.listenCommand",
+	"runtime.listCommands",
+	"runtime.stopCommand",
+	"server.list",
+	"server.stop",
+]);
 
 const DIRECT_WORKSPACE_CONTENT_TYPES: Record<string, string> = {
 	".js": "application/javascript; charset=utf-8",
@@ -223,7 +233,13 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 						pack.buffer,
 					]),
 			},
-			DEFAULT_WORKSPACE_SYNC_LIMITS,
+			platform.sandboxRuntime
+				? {
+						...DEFAULT_WORKSPACE_SYNC_LIMITS,
+						batchBytes: 1024 * 1024,
+						batchOps: 64,
+					}
+				: DEFAULT_WORKSPACE_SYNC_LIMITS,
 			// node_modules and ignored caches outlive the sandbox here: in OPFS,
 			// or for this session where it is missing.
 			new LocalTreeCache(
@@ -264,6 +280,13 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 	}
 
 	async initialize(): Promise<void> {
+		if (
+			platform.sandboxRuntime &&
+			desktopSandboxController(platform.sandboxRuntime).isStoppedByUser()
+		)
+			throw new Error(
+				"Sandbox was stopped. Start it from Runtime or computer settings before running commands.",
+			);
 		if (this.initialized) {
 			return;
 		}
@@ -284,11 +307,15 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		if (!platform.sandboxRuntime) return;
 		await this.workspaceSync.ready();
 		await this.workspaceSync.drain();
+		await this.workspaceSync.ready();
+		await this.workspaceSync.flush();
 	}
 
 	private async initializeInternal(): Promise<void> {
 		if (platform.sandboxRuntime) {
 			await platform.sandboxRuntime.request("health", undefined, 180_000);
+			if (desktopSandboxController(platform.sandboxRuntime).isStoppedByUser())
+				throw new Error("Sandbox startup was cancelled.");
 			this.initialized = true;
 			this.initializedAt = Date.now();
 			this.workspaceSync.start();
@@ -720,6 +747,19 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		timeoutMs: number = this.options.requestTimeoutMs,
 		transfer: Transferable[] = [],
 	): Promise<SandboxOperationResultMap[T]> {
+		if (platform.sandboxRuntime && PASSIVE_NATIVE_OPERATIONS.has(operation)) {
+			// A late poll must not call initialize(), whose health request boots
+			// the VM. Shutdown can still flush an already initialized runtime.
+			if (!this.initialized)
+				throw new Error(
+					"Sandbox is stopped. Start it from Runtime or computer settings.",
+				);
+			return platform.sandboxRuntime.request<SandboxOperationResultMap[T]>(
+				operation,
+				payload,
+				timeoutMs,
+			);
+		}
 		await this.initialize();
 		if (platform.sandboxRuntime) {
 			return platform.sandboxRuntime.request<SandboxOperationResultMap[T]>(
@@ -783,7 +823,10 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 					cdTarget.startsWith("/") ? cdTarget : `${cwd ?? "/"}/${cdTarget}`,
 				)
 			: cwd;
-		await this.workspaceSync.ready(workDir && workDir !== "/" ? [workDir] : []);
+		const roots = workDir && workDir !== "/" ? [workDir] : [];
+		if (platform.sandboxRuntime && request.interactive)
+			await this.workspaceSync.readyInteractive(roots);
+		else await this.workspaceSync.ready(roots);
 
 		return { ...request, cwd };
 	}
@@ -978,11 +1021,14 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			preparedRequest,
 			this.resolveCommandRequestTimeout(preparedRequest.waitTimeoutMs),
 		);
-		await this.workspaceSync.flush().catch((error) =>
-			logWarn("Failed to save the sandbox's changes after a command", {
-				error,
-			}),
-		);
+		if (platform.sandboxRuntime && request.interactive)
+			this.workspaceSync.notePending();
+		else
+			await this.workspaceSync.flush().catch((error) =>
+				logWarn("Failed to save the sandbox's changes after a command", {
+					error,
+				}),
+			);
 		return result;
 	}
 
@@ -994,11 +1040,17 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 			request,
 			this.resolveCommandRequestTimeout(request.waitTimeoutMs),
 		);
-		await this.workspaceSync.flush().catch((error) =>
-			logWarn("Failed to save the sandbox's changes after reading a command", {
-				error,
-			}),
-		);
+		if (platform.sandboxRuntime && request.interactive)
+			this.workspaceSync.notePending();
+		else
+			await this.workspaceSync.flush().catch((error) =>
+				logWarn(
+					"Failed to save the sandbox's changes after reading a command",
+					{
+						error,
+					},
+				),
+			);
 		return result;
 	}
 
@@ -1012,11 +1064,17 @@ export class SandboxContainerServiceMain implements ISandboxContainerService {
 		request: SandboxStopCommandRequest,
 	): Promise<{ commandId: string; stopped: true }> {
 		const result = await this.request("runtime.stopCommand", request);
-		await this.workspaceSync.flush().catch((error) =>
-			logWarn("Failed to save the sandbox's changes after stopping a command", {
-				error,
-			}),
-		);
+		if (platform.sandboxRuntime && request.interactive)
+			this.workspaceSync.notePending();
+		else
+			await this.workspaceSync.flush().catch((error) =>
+				logWarn(
+					"Failed to save the sandbox's changes after stopping a command",
+					{
+						error,
+					},
+				),
+			);
 		return result;
 	}
 

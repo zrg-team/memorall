@@ -41,7 +41,12 @@ export interface MemonTerminalPort {
 	availability(): Promise<MemonAvailability>;
 	run(
 		command: string,
-		options: { cwd: string; waitMs: number; sessionKey: string },
+		options: {
+			cwd: string;
+			waitMs: number;
+			sessionKey: string;
+			interactive?: boolean;
+		},
 	): Promise<MemonCommandOutcome>;
 	/** New output of a running command; waits up to waitMs for some. */
 	read(
@@ -49,11 +54,16 @@ export interface MemonTerminalPort {
 		cursor: string | undefined,
 		sessionKey: string,
 		waitMs?: number,
+		interactive?: boolean,
 	): Promise<MemonCommandOutcome>;
 	/** Types a line into a running command. */
 	input(processId: string, text: string, sessionKey: string): Promise<void>;
 	/** Stops a running command (Ctrl+C). */
-	stop(processId: string, sessionKey: string): Promise<void>;
+	stop(
+		processId: string,
+		sessionKey: string,
+		interactive?: boolean,
+	): Promise<void>;
 }
 
 export interface MemonTerminalPorts {
@@ -123,6 +133,7 @@ const newTab = (id: string, cwd: string): TerminalTab => ({
 });
 
 interface RunningCommand {
+	interactive?: boolean;
 	command: string;
 	tabId: string;
 	startedAt: number;
@@ -421,8 +432,16 @@ export class MemonTerminal {
 		if (fx) return this.openFx(tab, fx[1]?.trim() ?? "");
 		// What runs has `~` expanded; the tab shows the line as it was typed.
 		const line = expandHome(trimmed, this.host.home());
-		if (alongside) return this.runAlongside(tab, trimmed, line, cwd);
-		return this.startCommand(tab, trimmed, line, cwd, options.waitMs ?? 10_000);
+		if (alongside)
+			return this.runAlongside(tab, trimmed, line, cwd, options.byUser);
+		return this.startCommand(
+			tab,
+			trimmed,
+			line,
+			cwd,
+			options.waitMs ?? 10_000,
+			options.byUser,
+		);
 	}
 
 	/**
@@ -713,6 +732,7 @@ export class MemonTerminal {
 		line: string,
 		cwd: string,
 		waitMs: number,
+		interactive = false,
 	): Promise<MemonCommandOutcome> {
 		// Without a server list it starts at once: running before any output.
 		const serversBefore = new Set(
@@ -720,6 +740,7 @@ export class MemonTerminal {
 		);
 		const startedAt = Date.now();
 		this.runningCommand = {
+			interactive,
 			command,
 			tabId: tab.id,
 			startedAt,
@@ -732,6 +753,7 @@ export class MemonTerminal {
 		let outcome: MemonCommandOutcome;
 		try {
 			outcome = await this.ports.terminal.run(line, {
+				...(interactive ? { interactive: true } : {}),
 				cwd,
 				waitMs: COMMAND_START_WAIT_MS,
 				sessionKey: this.host.sessionKey,
@@ -771,10 +793,12 @@ export class MemonTerminal {
 		command: string,
 		line: string,
 		cwd: string,
+		interactive = false,
 	): Promise<MemonCommandOutcome> {
 		this.host.changed();
 		const serversBefore = new Set(await this.listServers());
 		const outcome = await this.ports.terminal.run(line, {
+			...(interactive ? { interactive: true } : {}),
 			cwd,
 			waitMs: ALONGSIDE_WAIT_MS,
 			sessionKey: this.host.sessionKey,
@@ -783,7 +807,11 @@ export class MemonTerminal {
 		if (outcome.running && outcome.processId) {
 			// Only one command may keep running; this one had its time.
 			await this.ports.terminal
-				.stop(outcome.processId, this.host.sessionKey)
+				.stop(
+					outcome.processId,
+					this.host.sessionKey,
+					...(interactive ? ([true] as const) : ([] as const)),
+				)
 				.catch(() => undefined);
 			this.append(tab, [
 				{
@@ -823,6 +851,7 @@ export class MemonTerminal {
 						running.cursor,
 						this.host.sessionKey,
 						COMMAND_READ_WAIT_MS,
+						...(running.interactive ? ([true] as const) : ([] as const)),
 					);
 				} catch (error) {
 					if (this.runningCommand !== owner) return;
@@ -938,7 +967,11 @@ export class MemonTerminal {
 		this.host.changed();
 		try {
 			if (running.processId) {
-				await this.ports.terminal.stop(running.processId, this.host.sessionKey);
+				await this.ports.terminal.stop(
+					running.processId,
+					this.host.sessionKey,
+					...(running.interactive ? ([true] as const) : ([] as const)),
+				);
 				void this.readOutput();
 				if (
 					!(await this.waitForCommand(STOP_GRACE_MS)) &&

@@ -31,6 +31,8 @@ ROOT = pathlib.Path(os.environ.get("MEMORALL_GUEST_WORKSPACE", "/workspace"))
 STATE = pathlib.Path(os.environ.get("MEMORALL_GUEST_STATE", "/var/lib/memorall"))
 EXCLUDED = {"node_modules", ".git", ".venv", "__pycache__", ".next", ".cache", "target"}
 MAX_FILE = 16 * 1024 * 1024
+SYNC_BATCH_BYTES = 1024 * 1024
+SYNC_BATCH_OPS = 64
 PROXY = "http://127.0.0.1:3128"
 PROCESSES = {}
 SERVERS = {}
@@ -194,7 +196,7 @@ def collect():
             return IN_FLIGHT[0]
         current, ops, contents, versions, size = scan(), [], [], {}, 0
         for name, version in current.items():
-            if len(ops) >= 1000:
+            if len(ops) >= SYNC_BATCH_OPS:
                 break
             if BASELINE.get(name) == version:
                 continue
@@ -206,7 +208,7 @@ def collect():
                 # Large build/media outputs stay in the guest. One such file
                 # must not prevent every other workspace change from saving.
                 continue
-            if size and size + version[1] > 8 * 1024 * 1024:
+            if size and size + version[1] > SYNC_BATCH_BYTES:
                 break
             with path(name).open("rb") as source:
                 content = source.read(MAX_FILE + 1)
@@ -217,7 +219,7 @@ def collect():
             size += len(content)
             versions[name] = version
         for name in sorted(BASELINE.keys() - current.keys(), key=lambda item: -item.count("/")):
-            if len(ops) >= 1000:
+            if len(ops) >= SYNC_BATCH_OPS:
                 break
             if name not in STUBS:
                 ops.append({"op": "delete", "path": name, "dir": BASELINE[name][1] == -1})

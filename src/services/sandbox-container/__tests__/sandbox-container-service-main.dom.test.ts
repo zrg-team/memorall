@@ -16,6 +16,8 @@ import type {
 } from "../types";
 import { documentFileSystemService } from "@/services/filesystem/document-filesystem";
 import { logError } from "@/utils/logger";
+import { platform } from "@/platform/current";
+import { desktopSandboxController } from "../desktop-sandbox-controller";
 import { runHostCommandLine } from "../host-commands";
 
 vi.mock("@/utils/logger", () => ({
@@ -91,6 +93,8 @@ const installReadyIframe = (service: ServiceUnderTest) => {
 const stubSync = (service: ServiceUnderTest) => {
 	const sync = {
 		ready: vi.fn(async (_roots?: string[]) => undefined),
+		readyInteractive: vi.fn(async (_roots?: string[]) => undefined),
+		drain: vi.fn(async () => undefined),
 		flush: vi.fn(async () => undefined),
 		materialize: vi.fn(async (_paths: string[]) => true),
 		notePending: vi.fn(),
@@ -188,6 +192,66 @@ describe("SandboxContainerServiceMain", () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
+	});
+
+	it("does not initialize a stopped native VM for late polls or after an explicit stop", async () => {
+		const nativeHost = platform as unknown as { sandboxRuntime?: unknown };
+		const runtime = { request: vi.fn(), status: vi.fn(), stop: vi.fn() };
+		nativeHost.sandboxRuntime = runtime;
+		const stopped = vi
+			.spyOn(desktopSandboxController(runtime), "isStoppedByUser")
+			.mockReturnValue(true);
+		try {
+			const service = createService();
+			const initialize = vi.spyOn(service, "initialize");
+			await expect(
+				service.request("runtime.listenCommand", { commandId: "old" }),
+			).rejects.toThrow("stopped");
+			expect(initialize).not.toHaveBeenCalled();
+			await expect(service.initialize()).rejects.toThrow("Sandbox was stopped");
+			expect(runtime.request).not.toHaveBeenCalled();
+		} finally {
+			stopped.mockRestore();
+			delete nativeHost.sandboxRuntime;
+		}
+	});
+
+	it("streams human command results without waiting for unrelated file sync, while agent commands still flush", async () => {
+		const nativeHost = platform as unknown as { sandboxRuntime?: unknown };
+		nativeHost.sandboxRuntime = {};
+		try {
+			const service = createService();
+			const sync = stubSync(service);
+			vi.spyOn(service, "request").mockResolvedValue(commandResult() as never);
+			let release!: () => void;
+			sync.flush.mockImplementation(
+				() =>
+					new Promise<undefined>((resolve) => {
+						release = () => resolve(undefined);
+					}),
+			);
+			await expect(
+				service.executeCommand({
+					command: "ls",
+					cwd: "/agents/bot",
+					interactive: true,
+				}),
+			).resolves.toMatchObject({ commandId: "cmd-1" });
+			await service.listenCommand({ commandId: "cmd-1", interactive: true });
+			expect(sync.readyInteractive).toHaveBeenCalledWith(["/agents/bot"]);
+			expect(sync.flush).not.toHaveBeenCalled();
+			expect(sync.notePending).toHaveBeenCalledTimes(2);
+			const agent = service.executeCommand({
+				command: "ls",
+				cwd: "/agents/bot",
+			});
+			await vi.waitFor(() => expect(sync.flush).toHaveBeenCalledOnce());
+			release();
+			await agent;
+			expect(sync.ready).toHaveBeenCalledWith(["/agents/bot"]);
+		} finally {
+			delete nativeHost.sandboxRuntime;
+		}
 	});
 
 	it("posts sandbox requests, resolves matching responses, and rejects error envelopes", async () => {

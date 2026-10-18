@@ -1,4 +1,7 @@
-import { createServiceToken, type JsonValue } from "@memorall/agent-harness-core";
+import {
+	createServiceToken,
+	type JsonValue,
+} from "@memorall/agent-harness-core";
 
 export type CoreSandboxCapability =
 	| "runtime.code"
@@ -35,6 +38,8 @@ export interface SandboxCallContext {
 	sessionKey?: string;
 	signal?: AbortSignal;
 	deadlineMs?: number;
+	/** Scheduling hint for direct user interaction; providers may ignore it. */
+	priority?: "interactive";
 }
 
 export type SandboxErrorCode =
@@ -502,6 +507,9 @@ export interface IAgentSandboxService {
 	): Promise<SandboxSnapshotResult>;
 }
 
-export const SANDBOX_SERVICE = createServiceToken<IAgentSandboxService>("sandboxRuntime", {
-	description: "Provider-neutral sandbox sessions and runtime operations",
-});
+export const SANDBOX_SERVICE = createServiceToken<IAgentSandboxService>(
+	"sandboxRuntime",
+	{
+		description: "Provider-neutral sandbox sessions and runtime operations",
+	},
+);

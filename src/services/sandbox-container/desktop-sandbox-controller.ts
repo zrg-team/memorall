@@ -25,6 +25,7 @@ export class DesktopSandboxController {
 	private starting: Promise<void> | null = null;
 	private stopping: Promise<void> | null = null;
 	private stoppedByUser = false;
+	isStoppedByUser = (): boolean => this.stoppedByUser;
 	constructor(private readonly runtime: SandboxRuntimePort) {}
 	getSnapshot = (): DesktopSandboxState => this.state;
 	private update(patch: Partial<DesktopSandboxState>) {

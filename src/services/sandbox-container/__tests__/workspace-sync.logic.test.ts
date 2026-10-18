@@ -296,6 +296,45 @@ describe("WorkspaceSync", () => {
 		expect(decoder.decode(host.files.get("/second.txt")?.bytes)).toBe("two");
 	});
 
+	it("yields a large background upload between committed batches so the terminal can sync its own folder", async () => {
+		const host = createHost();
+		host.write("/agents/bot/Bot.md", "old", false);
+		for (let i = 0; i < 24; i++)
+			host.write(`/project/file-${i}.txt`, "aaaaaaaaaa", false);
+		const sandbox = createSandbox();
+		const sync = new WorkspaceSync(host.port, sandbox.runtime, {
+			...DEFAULT_WORKSPACE_SYNC_LIMITS,
+			batchBytes: 20,
+		});
+		sync.start();
+		await sync.ready();
+		const apply = vi.mocked(sandbox.runtime.apply).getMockImplementation();
+		if (!apply) throw new Error("Missing runtime apply fixture");
+		let release!: () => void;
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		vi.mocked(sandbox.runtime.apply)
+			.mockClear()
+			.mockImplementationOnce(async (batch) => {
+				await blocked;
+				return apply(batch);
+			});
+		for (let i = 0; i < 24; i++)
+			host.write(`/project/file-${i}.txt`, "bbbbbbbbbb");
+		await vi.advanceTimersByTimeAsync(20);
+		expect(sandbox.runtime.apply).toHaveBeenCalledOnce();
+		host.write("/agents/bot/Bot.md", "new");
+		const terminal = sync.readyInteractive(["/agents/bot"]);
+		release();
+		await terminal;
+		expect(read(sandbox, "/agents/bot/Bot.md")).toBe("new");
+		expect(read(sandbox, "/project/file-23.txt")).toBe("aaaaaaaaaa");
+		await vi.advanceTimersByTimeAsync(100);
+		await sync.flush();
+		expect(read(sandbox, "/project/file-23.txt")).toBe("bbbbbbbbbb");
+	});
+
 	it("fills a new VFS once: content within budget, the rest as stubs", async () => {
 		const host = createHost();
 		host.write("/agents/bot/Bot.md", "# Bot", false);

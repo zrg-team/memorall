@@ -418,7 +418,7 @@ const requireReadyDesktopSandbox = async (): Promise<void> => {
 	const state = desktopSandboxController(platform.sandboxRuntime).getSnapshot();
 	if (!status.ready || status.state !== "ready" || state.action || state.error)
 		throw new Error(
-			"Terminal is unavailable until the sandbox is ready. Open Sandbox to check its status or start it.",
+			"Terminal is unavailable until the sandbox is ready. Open computer settings to check its status or start it.",
 		);
 };
 
@@ -438,12 +438,18 @@ export const createMemonTerminalPort = (
 			? { available: true }
 			: { available: false, reason: "this sandbox cannot run shell commands" };
 	},
-	async run(command, { cwd, waitMs, sessionKey }) {
+	async run(command, { cwd, waitMs, sessionKey, interactive }) {
 		await requireReadyDesktopSandbox();
 		const sandbox = await getSandbox();
 		const result = await sandbox.run(
 			{ operation: "command", command, cwd, waitTimeoutMs: waitMs },
-			{ operationId: operationId("run"), sessionKey },
+			{
+				operationId: operationId("run"),
+				sessionKey,
+				...(platform.sandboxRuntime && interactive
+					? { priority: "interactive" as const }
+					: {}),
+			},
 		);
 		if (result.kind !== "command") {
 			throw new Error("The sandbox returned a non-command result.");
@@ -456,12 +462,18 @@ export const createMemonTerminalPort = (
 			cursor: result.nextCursor,
 		} satisfies MemonCommandOutcome;
 	},
-	async read(processId, cursor, sessionKey, waitMs) {
+	async read(processId, cursor, sessionKey, waitMs, interactive) {
 		await requireReadyDesktopSandbox();
 		const sandbox = await getSandbox();
 		const result = await sandbox.process(
 			{ operation: "read", processId, cursor, waitMs },
-			{ operationId: operationId("read"), sessionKey },
+			{
+				operationId: operationId("read"),
+				sessionKey,
+				...(platform.sandboxRuntime && interactive
+					? { priority: "interactive" as const }
+					: {}),
+			},
 		);
 		if (!("events" in result)) {
 			throw new Error("The sandbox returned no process output.");
@@ -482,12 +494,18 @@ export const createMemonTerminalPort = (
 			{ operationId: operationId("stdin"), sessionKey },
 		);
 	},
-	async stop(processId, sessionKey) {
+	async stop(processId, sessionKey, interactive) {
 		await requireReadyDesktopSandbox();
 		const sandbox = await getSandbox();
 		await sandbox.process(
 			{ operation: "stop", processId },
-			{ operationId: operationId("stop"), sessionKey },
+			{
+				operationId: operationId("stop"),
+				sessionKey,
+				...(platform.sandboxRuntime && interactive
+					? { priority: "interactive" as const }
+					: {}),
+			},
 		);
 	},
 });

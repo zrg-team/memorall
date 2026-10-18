@@ -43,6 +43,11 @@ Slow file-sync polls and host-change notifications share one queued follow-up
 each, so command completion cannot accumulate an unbounded backlog of background
 synchronization work. A command is complete only after its PTY output has drained,
 including when its shell exits before its output reader finishes.
+Human terminal commands synchronize their working folder on a priority queue.
+Background uploads yield after a committed batch and resume afterward, while
+terminal output does not wait for unrelated workspace transfers. Agent commands
+retain their normal file-flush guarantee. Native sync uses 1 MiB / 64-operation
+batches (a single file may exceed that byte target, up to the existing file limit).
 Local memonOS requests wait for the job processor to subscribe before being
 sent, preventing startup requests from being silently dropped.
 
@@ -87,7 +92,7 @@ frontend, Node sidecar, and native shell add their own size. First use creates a
 private copy of the base image plus a writable disk in app data. Downloaded
 tools, package caches, and user projects grow that disk afterward. A strict
 200 MB total sandbox bundle is not achieved by this configuration. The Windows
-NSIS installer measures 620.1 MiB; installed app files total about 1.12 GiB
+NSIS installer measures 620.2 MiB; installed app files total about 1.12 GiB
 before VM data and downloaded tools. The portable output also contains a copy
 of the installer under `bundle/`, which is excluded from that installed size.
 
@@ -211,11 +216,16 @@ Vite/React in a cross-origin iframe, DOM actions and capture, WebSocket HMR,
 and a subsequent boot preserving files and installed tools. Updating an existing
 VM's bootstrap and restarting it also passed. Native WebView acceptance passed
 Linux command output and denial of native commands from preview content.
-The production memonOS client also passed three consecutive `ls` commands
-listing Bot.md and Memory.md, with desktop files included in the first snapshot
-without waiting for VM boot (about 3.7 seconds during installer compression in the
-Windows acceptance profile). Native UI acceptance also checks the taskbar settings
+Production memonOS acceptance checks eight consecutive `ls` commands, five during
+a 21 MiB background transfer, and another after restarting the VM. Each must finish
+within three seconds with complete output. Desktop files are included in the first
+snapshot without waiting for VM boot. The native fixture uses its own folder grant
+registry, VM, and WebView profile. Native UI acceptance also checks the taskbar settings
 popover, cancellation during startup, and stopping a running
 command without background polls restarting the VM. Screenshots are saved under
 `publish/.cache/native-sandbox-smoke/` (`starting.png`, `terminal.png`, `stopped.png`).
+The Windows 0.5.49 run displayed desktop files in 3.23 seconds while the VM was
+starting. Its first `ls` took 2.53 seconds; the next seven took 36–231 ms, the five
+during the background upload took 218–1399 ms, and the command after restart took
+1.49 seconds. These are acceptance measurements on the test PC, not timing guarantees.
 macOS and Linux native acceptance has not been run on those hosts.

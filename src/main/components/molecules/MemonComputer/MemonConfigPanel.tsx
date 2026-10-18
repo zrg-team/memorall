@@ -44,7 +44,7 @@ export const MemonConfigPanel = ({
 						type="button"
 						aria-label="Open computer settings"
 						title={`Computer settings · Sandbox: ${label}`}
-						className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						<Settings2 size={14} />
 						<span className="flex flex-col items-start gap-0.5">
