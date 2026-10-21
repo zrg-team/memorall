@@ -147,7 +147,7 @@ describe("OpenRouterTab", () => {
 			baseUrl: "https://openrouter.ai/api/v1",
 		});
 		expect(busy).toHaveBeenCalledWith(true);
-		expect(busy).toHaveBeenLastCalledWith(false);
+		await waitFor(() => expect(busy).toHaveBeenLastCalledWith(false));
 	});
 
 	it("reports an already connected provider without choosing a model", async () => {
@@ -159,7 +159,7 @@ describe("OpenRouterTab", () => {
 			<OpenRouterTab onConnectionChanged={connected} onModelLoaded={loaded} />,
 		);
 		await screen.findByText("openai.openrouterReady");
-		expect(connected).toHaveBeenLastCalledWith(true);
+		await waitFor(() => expect(connected).toHaveBeenLastCalledWith(true));
 		expect(loaded).not.toHaveBeenCalled();
 		fireEvent.click(screen.getByText("openai.unloadConfiguration"));
 		await waitFor(() => expect(connected).toHaveBeenLastCalledWith(false));
@@ -186,7 +186,7 @@ describe("OpenRouterTab", () => {
 			apiKey: "sk-or-saved",
 			baseURL: "https://openrouter.ai/api/v1",
 		});
-		expect(connected).toHaveBeenLastCalledWith(true);
+		await waitFor(() => expect(connected).toHaveBeenLastCalledWith(true));
 	});
 
 	it("unlocks the existing master key and resumes saving a replacement API key", async () => {
