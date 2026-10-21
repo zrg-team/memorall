@@ -36,6 +36,13 @@ async function open(
 	await expect(page.getByText(APP_READY, { exact: true })).toBeVisible({
 		timeout: 90_000,
 	});
+	await expect(
+		page.getByRole("heading", { name: "Sign up or sign in to OpenRouter" }),
+	).toBeVisible();
+	await page
+		.getByRole("button", { name: "Other setup options", exact: true })
+		.click();
+	await expect(page.getByText("Other options", { exact: true })).toBeVisible();
 }
 
 test("offers local models when the browser can store and run them", async ({
