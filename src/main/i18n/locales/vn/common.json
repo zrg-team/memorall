@@ -510,9 +510,9 @@
 			},
 			"startHere": {
 				"title": "Bắt đầu tại đây",
-				"content": "Chỉ còn một lựa chọn nữa là Chat hoạt động. Ba cách bắt đầu:\n\n• Dịch vụ quản lý — đăng nhập, không cần cấu hình gì.\n• Mô hình cục bộ — chạy trên thiết bị này, không tốn phí API.\n• Khóa của bạn — dùng OpenAI, OpenRouter hoặc nhà cung cấp khác.\n\nChọn một trên màn hình này rồi gửi tin nhắn đầu tiên. Hướng dẫn này luôn có trong Cài đặt → Trợ giúp & hướng dẫn.",
-				"cursor": "Chọn thiết lập",
-				"agent": "Chọn một cách."
+				"content": "Bắt đầu với hướng dẫn OpenRouter trên màn hình này: tạo tài khoản và khóa API, kết nối khóa rồi chọn mô hình miễn phí. Không cần thẻ tín dụng cho mô hình miễn phí và có giới hạn sử dụng.\n\nCác cách thiết lập khác cho phép chạy mô hình cục bộ hoặc kết nối nhà cung cấp khác. Hướng dẫn này luôn có trong Cài đặt → Trợ giúp & hướng dẫn.",
+				"cursor": "Thiết lập OpenRouter",
+				"agent": "Bắt đầu miễn phí."
 			},
 			"finishReady": {
 				"title": "Xong rồi",

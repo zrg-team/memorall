@@ -12,6 +12,7 @@ import {
 	type JobNotificationMessage,
 } from "@/services/background-jobs/bridges/types";
 import { openExtensionPopup } from "@/background/core/notifications";
+import { openTranscriptionStudio } from "@/background/tab-transcription";
 import {
 	isRelayableContentSender,
 	registerContentJobConsumer,
@@ -577,6 +578,17 @@ export function registerMessageHandler(onPopupOpened: () => void): void {
 
 		if (type === BACKGROUND_EVENTS.OPEN_FULL_PAGE)
 			return handleOpenFullPage(sendResponse);
+
+		if (type === BACKGROUND_EVENTS.OPEN_TRANSCRIPTION_STUDIO) {
+			void openTranscriptionStudio(
+				typeof msg.sessionId === "string" ? msg.sessionId : undefined,
+			)
+				.then(() => sendResponse({ success: true }))
+				.catch((error) =>
+					sendResponse({ success: false, error: String(error) }),
+				);
+			return true;
+		}
 
 		if (type === BACKGROUND_EVENTS.OPEN_SAVE_PAGE)
 			return handleOpenSavePage(sendResponse);

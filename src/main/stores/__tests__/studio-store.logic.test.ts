@@ -109,6 +109,57 @@ describe("studio store", () => {
 			[],
 		);
 	});
+	it("refreshes external recording threads without changing the user's open or new thread", async () => {
+		const store = useStudioStore.getState();
+		const id = "00000000-0000-4000-8000-000000000001";
+		await pg.query(
+			"INSERT INTO conversations(id,title,mode,metadata) VALUES($1,'Video recording','speech-to-text',$2)",
+			[id, JSON.stringify({ tabTranscription: { id, status: "complete" } })],
+		);
+		store.newConversation("speech-to-text");
+		await store.refreshConversations("speech-to-text");
+		expect(
+			useStudioStore.getState().modes["speech-to-text"]?.currentConversationId,
+		).toBeNull();
+		expect(
+			useStudioStore.getState().modes["speech-to-text"]?.conversations,
+		).toMatchObject([{ id, title: "Video recording" }]);
+		await store.openConversation("speech-to-text", id);
+		await store.refreshConversations("speech-to-text");
+		expect(
+			useStudioStore.getState().modes["speech-to-text"]?.currentConversationId,
+		).toBe(id);
+		expect(useStudioStore.getState().modes["speech-to-text"]?.items).toEqual(
+			[],
+		);
+	});
+
+	it("opens a linked recording beyond the latest history page and keeps it selected on refresh", async () => {
+		const id = "00000000-0000-4000-8000-000000000002";
+		await pg.query(
+			"INSERT INTO conversations(id,title,mode,metadata,updated_at) VALUES($1,'Older recording','speech-to-text',$2,'2000-01-01')",
+			[id, JSON.stringify({ tabTranscription: { id, status: "complete" } })],
+		);
+		await pg.exec(
+			"INSERT INTO conversations(id,title,mode) SELECT md5('new-recording-' || n)::uuid, 'New recording ' || n, 'speech-to-text' FROM generate_series(1, 52) AS n",
+		);
+		const store = useStudioStore.getState();
+		await store.loadMode("speech-to-text");
+		expect(
+			useStudioStore
+				.getState()
+				.modes["speech-to-text"]?.conversations.some((row) => row.id === id),
+		).toBe(false);
+		await store.openConversation("speech-to-text", id);
+		await store.refreshConversations("speech-to-text");
+		await store.loadMode("speech-to-text");
+		const selected = useStudioStore.getState().modes["speech-to-text"]!;
+		expect(selected.currentConversationId).toBe(id);
+		expect(selected.conversations.find((row) => row.id === id)).toMatchObject({
+			title: "Older recording",
+			metadata: { tabTranscription: { id } },
+		});
+	});
 
 	it("deletes stored media with the generation and with the session", async () => {
 		const store = useStudioStore.getState();

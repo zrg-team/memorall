@@ -49,14 +49,15 @@ const messageOf = (error: unknown): string => {
 };
 
 const TOAST_ERROR =
-	/missing chunk number \d+ for toast value \d+ in (?:pg_toast\.)?(pg_toast_\d+)/i;
+	/(?:missing chunk number \d+|unexpected chunk number \d+ \(expected \d+\)) for toast value \d+ in (?:pg_toast\.)?(pg_toast_\d+)/i;
 
 export const isUsageStorageCorruption = (error: unknown): boolean =>
 	TOAST_ERROR.test(messageOf(error));
 
 async function resolveTable(query: RecoveryQuery, error: unknown) {
 	const toast = TOAST_ERROR.exec(messageOf(error))?.[1];
-	if (!toast) throw new Error("This error is not a missing TOAST chunk.");
+	if (!toast)
+		throw new Error("This error is not a supported TOAST chunk error.");
 	const { rows } = await query(
 		`SELECT owner.relname AS name
 		 FROM pg_class owner
@@ -156,7 +157,7 @@ export async function clearDamagedUsageFields(
 		if (!target || !Object.hasOwn(target.columns, field.column))
 			throw new Error("Unsupported recovery field.");
 		if (!isUsageStorageCorruption(field.error))
-			throw new Error("Recovery requires a confirmed missing TOAST chunk.");
+			throw new Error("Recovery requires a confirmed TOAST chunk error.");
 	}
 	for (const field of fields) {
 		const target = TABLES[field.table];

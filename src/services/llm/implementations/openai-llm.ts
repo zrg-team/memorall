@@ -648,8 +648,15 @@ export class OpenAILLM implements BaseLLM {
 			// models (`/systemone`) are listed by their output modality.
 			if (this.isOpenRouter()) {
 				const listed = new Set(modelsRaw.map((m) => String(m?.id)));
-				for (const entry of await this.fetchDecisionModels()) {
-					if (!listed.has(String(entry?.id))) modelsRaw.push(entry);
+				const extra = await Promise.all([
+					this.fetchModalityModels("decisions"),
+					this.fetchModalityModels("transcription"),
+				]);
+				for (const entry of extra.flat()) {
+					if (!listed.has(String(entry?.id))) {
+						modelsRaw.push(entry);
+						listed.add(String(entry?.id));
+					}
 				}
 			}
 			const now = Math.floor(Date.now() / 1000);
@@ -672,7 +679,10 @@ export class OpenAILLM implements BaseLLM {
 					...(pricing ? { pricing } : {}),
 					// Image input, where the listing says (OpenRouter does).
 					...(Array.isArray(input)
-						? { supportsVision: input.includes("image") }
+						? {
+								supportsVision: input.includes("image"),
+								supportsAudio: input.includes("audio"),
+							}
 						: {}),
 					id,
 					name: id,
@@ -722,10 +732,12 @@ export class OpenAILLM implements BaseLLM {
 	}
 
 	/** Decision models are optional extras: a failure lists none of them. */
-	private async fetchDecisionModels(): Promise<any[]> {
+	private async fetchModalityModels(
+		modality: "decisions" | "transcription",
+	): Promise<any[]> {
 		try {
 			const res = await fetch(
-				`${this.baseURL}/models?output_modalities=decisions`,
+				`${this.baseURL}/models?output_modalities=${modality}`,
 				{ method: "GET", headers: this.getHeaders() },
 			);
 			if (!res.ok) return [];

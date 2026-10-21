@@ -116,6 +116,7 @@ interface HubModel {
 /** Why a Hub repo cannot run in the browser studios. */
 export type HubUnavailableReason =
 	| "no-onnx"
+	| "missing-files"
 	| "custom-runtime"
 	| "unsupported-architecture"
 	/** No decision config, tokenizer and ONNX graph found together. */
@@ -132,6 +133,7 @@ export interface HubModelSummary {
 	reason?: HubUnavailableReason;
 	/** The repo's architecture, when it is the reason. */
 	modelType?: string;
+	missingFiles?: string[];
 }
 
 function summarizeHubModel(
@@ -148,7 +150,11 @@ function summarizeHubModel(
 		runnable: runnability.runnable,
 		...(runnability.runnable
 			? {}
-			: { reason: runnability.reason, modelType: runnability.modelType }),
+			: {
+					reason: runnability.reason,
+					modelType: runnability.modelType,
+					missingFiles: runnability.missingFiles,
+				}),
 	};
 }
 
@@ -384,6 +390,7 @@ export type BrowserRunnability =
 			reason: HubUnavailableReason;
 			/** The repo's `model_type`, for an unsupported architecture. */
 			modelType?: string;
+			missingFiles?: string[];
 	  };
 
 /**
@@ -413,6 +420,16 @@ export function browserRunnability(
 		/\.onnx$/i.test(sibling.rfilename),
 	);
 	if (model.siblings && !hasOnnx) return { runnable: false, reason: "no-onnx" };
+	if (task === "automatic-speech-recognition" && model.siblings) {
+		const files = new Set(model.siblings.map((file) => file.rfilename));
+		const missingFiles = [
+			"config.json",
+			"tokenizer.json",
+			"preprocessor_config.json",
+		].filter((file) => !files.has(file));
+		if (missingFiles.length)
+			return { runnable: false, reason: "missing-files", missingFiles };
+	}
 	const modelType = model.config?.model_type;
 	if (!modelType) {
 		// Without a file listing there is nothing to go on but the tag.
@@ -461,6 +478,8 @@ export function unavailableReasonText(
 	task?: MediaPipelineTask,
 ): string {
 	switch (runnability.reason) {
+		case "missing-files":
+			return `${repoId} is missing required model files: ${runnability.missingFiles?.join(", ") ?? "tokenizer or processor files"}. Choose a complete Transformers.js export.`;
 		case "no-onnx":
 			return `${repoId} has no ONNX weights, so it cannot run in the browser.`;
 		case "not-decision-model":

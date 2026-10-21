@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 	registerWebToolBrowserHandler: vi.fn(),
 	registerCoAgentBrowserHandler: vi.fn(),
 	registerViewportCaptureHandler: vi.fn(),
+	registerTabTranscriptionHandler: vi.fn(),
 	openStandalonePage: vi.fn(async () => undefined),
 	logInfo: vi.fn(),
 	logError: vi.fn(),
@@ -59,6 +60,9 @@ vi.mock("@/background/co-agent-browser-handler", () => ({
 }));
 vi.mock("@/background/viewport-capture-handler", () => ({
 	registerViewportCaptureHandler: mocks.registerViewportCaptureHandler,
+}));
+vi.mock("@/background/tab-transcription", () => ({
+	registerTabTranscriptionHandler: mocks.registerTabTranscriptionHandler,
 }));
 vi.mock("@/utils/open-standalone", () => ({
 	openStandalonePage: mocks.openStandalonePage,

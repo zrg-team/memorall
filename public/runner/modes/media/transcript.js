@@ -50,8 +50,8 @@ export function joinTranscriptParts(parts) {
 
 /**
  * The OpenAI transcription options mapped onto pipeline options. Timestamps
- * and long-form chunking are always asked for; pipelines that cannot honour an
- * option are retried with their defaults by the caller.
+ * and long-form chunking are always asked for. The caller handles English-only
+ * models explicitly so inference never silently drops the requested language.
  *
  * @param {{ language?: string, task?: string }} input
  */

@@ -266,6 +266,12 @@ async function loadWithFallbacks(messageId, config, onEvent) {
 		) {
 			continue;
 		}
+		if (error?.code === "MEDIA_OOM") {
+			resetConnection(
+				`Media runtime released after ${config?.id} ran out of memory`,
+			);
+			return terminal;
+		}
 		if (error?.code !== "MODEL_LOAD_FAILED") return terminal;
 		resetConnection(
 			`Media runtime restarted after ${config?.id} failed to load`,

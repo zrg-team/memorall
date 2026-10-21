@@ -9,7 +9,7 @@ import {
 	Trash2,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MasterKeySetupDialog } from "@/main/components/molecules/MasterKeySetupDialog";
 import { PasskeyPromptDialog } from "@/main/components/molecules/PasskeyPromptDialog";
@@ -35,12 +35,21 @@ import secureSession from "@/utils/secure-session";
 
 interface OpenRouterTabProps {
 	onModelLoaded?: (modelId: string, provider: "openrouter") => void;
+	onConnectionChanged?: (connected: boolean) => void;
+	onBusyChanged?: (busy: boolean) => void;
+	/** The guided setup already supplies its heading and security explanation. */
+	simplified?: boolean;
 }
 
 export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 	onModelLoaded,
+	onConnectionChanged,
+	onBusyChanged,
+	simplified = false,
 }) => {
 	const { t } = useTranslation("llm");
+	const apiKeyId = useId();
+	const baseUrlId = useId();
 	// Component state
 	const [configState, setConfigState] = useState<
 		"loading" | "no-config" | "has-config" | "loaded"
@@ -71,6 +80,27 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 	useEffect(() => {
 		checkOpenRouterState();
 	}, []);
+
+	useEffect(() => {
+		if (configState !== "loading") {
+			onConnectionChanged?.(configState === "loaded");
+		}
+	}, [configState, onConnectionChanged]);
+
+	useEffect(() => {
+		onBusyChanged?.(
+			configState === "loading" ||
+				isLoading ||
+				showMasterKeySetup ||
+				showMasterKeyUnlock,
+		);
+	}, [
+		configState,
+		isLoading,
+		showMasterKeySetup,
+		showMasterKeyUnlock,
+		onBusyChanged,
+	]);
 
 	const checkOpenRouterState = async () => {
 		setConfigState("loading");
@@ -202,6 +232,8 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 
 		if (pendingSaveConfig) {
 			await saveAndActivateConfig(pendingSaveConfig);
+		} else {
+			await handleLoadConfig();
 		}
 
 		setShowMasterKeyUnlock(false);
@@ -235,7 +267,11 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 
 		setUnlockProviders([]);
 		setShowMasterKeyUnlock(false);
-		setShowMasterKeySetup(true);
+		if (pendingSaveConfig) {
+			setShowMasterKeySetup(true);
+		} else {
+			await checkOpenRouterState();
+		}
 	};
 
 	// Load configuration (auto-load if master key is unlocked)
@@ -247,8 +283,8 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 			// Check if master key is unlocked
 			const isUnlocked = await isMasterKeyUnlocked();
 			if (!isUnlocked) {
-				setError(t("openai.masterKeyNotUnlocked"));
-				setIsLoading(false);
+				setUnlockProviders(await getEncryptedProviders());
+				setShowMasterKeyUnlock(true);
 				return;
 			}
 
@@ -350,19 +386,21 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 		tempApiKey.trim().length > 0 && tempBaseUrl.trim().length > 0;
 
 	return (
-		<div className="space-y-4">
+		<div className={simplified ? "openrouter-theme space-y-4" : "space-y-4"}>
 			{/* Security Notice */}
-			<div className="p-3 border rounded-lg bg-muted/20 border-border">
-				<div className="flex items-center gap-2 mb-2">
-					<Shield className="w-4 h-4 text-primary" />
-					<span className="text-sm font-medium text-foreground">
-						{t("openai.secureStorage")}
-					</span>
+			{!simplified && (
+				<div className="p-3 border rounded-lg bg-muted/20 border-border">
+					<div className="flex items-center gap-2 mb-2">
+						<Shield className="w-4 h-4 text-primary" />
+						<span className="text-sm font-medium text-foreground">
+							{t("openai.secureStorage")}
+						</span>
+					</div>
+					<p className="text-xs text-muted-foreground">
+						{t("openai.masterKeySecurityDescription")}
+					</p>
 				</div>
-				<p className="text-xs text-muted-foreground">
-					{t("openai.masterKeySecurityDescription")}
-				</p>
-			</div>
+			)}
 
 			{/* Loading State */}
 			{configState === "loading" && (
@@ -377,23 +415,29 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 			{/* No Configuration - Show Connect Form */}
 			{configState === "no-config" && (
 				<div className="space-y-4">
-					<div className="text-center py-2">
-						<h3 className="text-sm font-medium text-foreground mb-1">
-							{t("openai.noConfigurationFound")}
-						</h3>
-						<p className="text-xs text-muted-foreground">
-							{t("openai.createNewConfiguration")}
-						</p>
-					</div>
+					{!simplified && (
+						<div className="text-center py-2">
+							<h3 className="text-sm font-medium text-foreground mb-1">
+								{t("openai.noConfigurationFound")}
+							</h3>
+							<p className="text-xs text-muted-foreground">
+								{t("openrouter.createNewConfiguration")}
+							</p>
+						</div>
+					)}
 
 					<div className="grid grid-cols-1 gap-3">
 						<div>
-							<label className="text-xs text-muted-foreground">
+							<label
+								htmlFor={apiKeyId}
+								className="text-xs text-muted-foreground"
+							>
 								{t("openrouter.apiKey")}{" "}
 								<span className="text-destructive">*</span>
 							</label>
 							<div className="relative">
 								<Input
+									id={apiKeyId}
 									type={showApiKey ? "text" : "password"}
 									placeholder={t("openrouter.apiKeyPlaceholder")}
 									value={tempApiKey}
@@ -406,6 +450,11 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 									onClick={() => setShowApiKey(!showApiKey)}
 									className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded"
 									disabled={isLoading}
+									aria-label={t(
+										showApiKey
+											? "openrouter.hideApiKey"
+											: "openrouter.showApiKey",
+									)}
 								>
 									{showApiKey ? (
 										<EyeOff className="w-4 h-4 text-muted-foreground" />
@@ -416,20 +465,26 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 							</div>
 						</div>
 
-						<div>
-							<label className="text-xs text-muted-foreground">
-								{t("openai.baseUrl")}
-							</label>
-							<Input
-								placeholder={t("openrouter.baseUrlPlaceholder")}
-								value={tempBaseUrl}
-								onChange={(e) => setTempBaseUrl(e.target.value)}
-								disabled={isLoading}
-							/>
-							<div className="text-xs text-muted-foreground mt-1">
-								{t("openai.defaultBaseUrl")}
+						{!simplified && (
+							<div>
+								<label
+									htmlFor={baseUrlId}
+									className="text-xs text-muted-foreground"
+								>
+									{t("openai.baseUrl")}
+								</label>
+								<Input
+									id={baseUrlId}
+									placeholder={t("openrouter.baseUrlPlaceholder")}
+									value={tempBaseUrl}
+									onChange={(e) => setTempBaseUrl(e.target.value)}
+									disabled={isLoading}
+								/>
+								<div className="text-xs text-muted-foreground mt-1">
+									{t("openai.defaultBaseUrl")}
+								</div>
 							</div>
-						</div>
+						)}
 					</div>
 
 					{/* Validation Warnings */}
@@ -447,7 +502,7 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 					<Button
 						onClick={handleSaveConfig}
 						disabled={isLoading || !isValidNewConfig}
-						className="w-full"
+						className={simplified ? "openrouter-action w-full" : "w-full"}
 					>
 						{isLoading ? (
 							<>
@@ -457,7 +512,11 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 						) : (
 							<>
 								<Shield className="w-4 h-4 mr-2" />
-								{t("openai.saveAndEncrypt")}
+								{t(
+									simplified
+										? "openrouterGuide.connectAction"
+										: "openai.saveAndEncrypt",
+								)}
 							</>
 						)}
 					</Button>
@@ -491,7 +550,7 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 						<Button
 							onClick={handleLoadConfig}
 							disabled={isLoading}
-							className="flex-1"
+							className={simplified ? "openrouter-action flex-1" : "flex-1"}
 						>
 							{isLoading ? (
 								<>
@@ -501,18 +560,24 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 							) : (
 								<>
 									<Shield className="w-4 h-4 mr-2" />
-									{t("openai.loadConfiguration")}
+									{t(
+										simplified
+											? "openrouterGuide.unlockAction"
+											: "openai.loadConfiguration",
+									)}
 								</>
 							)}
 						</Button>
-						<Button
-							onClick={handleDeleteConfig}
-							disabled={isLoading}
-							variant="outline"
-							className="text-destructive hover:text-destructive hover:bg-destructive/10"
-						>
-							<Trash2 className="w-4 h-4" />
-						</Button>
+						{!simplified && (
+							<Button
+								onClick={handleDeleteConfig}
+								disabled={isLoading}
+								variant="outline"
+								className="text-destructive hover:text-destructive hover:bg-destructive/10"
+							>
+								<Trash2 className="w-4 h-4" />
+							</Button>
+						)}
 					</div>
 				</div>
 			)}
@@ -532,29 +597,33 @@ export const OpenRouterTab: React.FC<OpenRouterTabProps> = ({
 						</div>
 					</div>
 
-					<div className="text-center py-4">
-						<p className="text-sm text-muted-foreground">
-							{t("openai.modelsAvailableInYourModels")}
-						</p>
-					</div>
+					{!simplified && (
+						<div className="text-center py-4">
+							<p className="text-sm text-muted-foreground">
+								{t("openai.modelsAvailableInYourModels")}
+							</p>
+						</div>
+					)}
 
-					<div className="flex gap-2">
-						<Button
-							onClick={() => setConfigState("has-config")}
-							variant="outline"
-							className="flex-1"
-						>
-							{t("openai.unloadConfiguration")}
-						</Button>
-						<Button
-							onClick={handleDeleteConfig}
-							disabled={isLoading}
-							variant="outline"
-							className="text-destructive hover:text-destructive hover:bg-destructive/10"
-						>
-							<Trash2 className="w-4 h-4" />
-						</Button>
-					</div>
+					{!simplified && (
+						<div className="flex gap-2">
+							<Button
+								onClick={() => setConfigState("has-config")}
+								variant="outline"
+								className="flex-1"
+							>
+								{t("openai.unloadConfiguration")}
+							</Button>
+							<Button
+								onClick={handleDeleteConfig}
+								disabled={isLoading}
+								variant="outline"
+								className="text-destructive hover:text-destructive hover:bg-destructive/10"
+							>
+								<Trash2 className="w-4 h-4" />
+							</Button>
+						</div>
+					)}
 				</div>
 			)}
 

@@ -1,6 +1,13 @@
 import { Loader2, Menu, Settings2 } from "lucide-react";
 import type React from "react";
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import {
+	Suspense,
+	lazy,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -20,12 +27,14 @@ import { useStudioStore } from "@/main/stores/studio";
 import type { MediaCategory } from "@/services/llm/interfaces/model-category";
 import { useStudioModel } from "../hooks/use-studio-model";
 import { useStudioModelInfo } from "../hooks/use-studio-model-info";
+import { useStudioHistory } from "../hooks/use-studio-history";
 import { studioModeDescriptor } from "../studio-modes";
 import { StudioModelStatus } from "./shared/StudioModelStatus";
 import { StudioModelPickerContext } from "./shared/studio-model-picker";
 import type { StudioCanvasProps } from "./studio-canvas";
 import { StudioHistoryRail } from "./StudioHistoryRail";
 import { StudioNoModels } from "./StudioNoModels";
+import { TabTranscriptionPanel } from "./transcription/TabTranscriptionPanel";
 
 const SpeechStudio = lazy(() =>
 	import("./speech/SpeechStudio").then((module) => ({
@@ -86,12 +95,28 @@ export const StudioPage: React.FC<StudioPageProps> = ({
 }) => {
 	const { t } = useTranslation("studio");
 	const navigate = useNavigate();
+	useStudioHistory(mode);
 	const descriptor = studioModeDescriptor(mode);
 	const { current, loading, load, ensureReady } = useStudioModel(mode);
 	const modelInfo = useStudioModelInfo(current);
 	const selectable = useSelectableModels(mode);
 	const modeState = useStudioStore((store) => store.modes[mode]);
-	const loadMode = useStudioStore((store) => store.loadMode);
+	const refreshConversations = useStudioStore(
+		(store) => store.refreshConversations,
+	);
+	const refreshRecordingThreads = useCallback(
+		() => refreshConversations("speech-to-text"),
+		[refreshConversations],
+	);
+	const selectedConversation = modeState?.conversations.find(
+		(conversation) => conversation.id === modeState.currentConversationId,
+	);
+	const recordingThread =
+		mode === "speech-to-text" &&
+		Boolean(
+			(selectedConversation?.metadata as Record<string, unknown> | undefined)
+				?.tabTranscription,
+		);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const headerSlot = useWorkspaceHeaderSlot();
 	const headerLeadingSlot = useWorkspaceHeaderLeadingSlot();
@@ -127,9 +152,8 @@ export const StudioPage: React.FC<StudioPageProps> = ({
 	}, [current, ensureReady]);
 
 	useEffect(() => {
-		void loadMode(mode);
 		setHistoryOpen(false);
-	}, [loadMode, mode]);
+	}, [mode]);
 
 	const Canvas = CANVASES[mode];
 
@@ -258,46 +282,58 @@ export const StudioPage: React.FC<StudioPageProps> = ({
 						/>
 					) : null}
 
-					<div className="min-h-0 flex-1">
-						{loading || !modeState?.loaded ? (
-							<div className="flex h-full items-center justify-center">
-								<Loader2
-									size={18}
-									className="animate-spin text-muted-foreground"
-								/>
-							</div>
-						) : !current ? (
-							<StudioNoModels
-								mode={mode}
-								modelPicker={selectable.models.length > 0 ? modelPicker : null}
-							/>
-						) : (
-							<Suspense
-								fallback={
-									<div className="flex h-full items-center justify-center">
-										<Loader2
-											size={18}
-											className="animate-spin text-muted-foreground"
-										/>
-									</div>
-								}
-							>
-								<StudioModelPickerContext.Provider value={modelPicker}>
-									<Canvas
-										// Keyed by mode only: the first generation creates the session,
-										// and remounting then would cut off a stream in progress.
-										key={mode}
-										mode={mode}
-										model={current}
-										modelInfo={modelInfo}
-										items={modeState.items}
-										ensureModelReady={ensureReady}
-										isNarrow={isNarrow}
+					{mode === "speech-to-text" ? (
+						<TabTranscriptionPanel
+							sessionId={
+								recordingThread ? modeState?.currentConversationId : null
+							}
+							onSessionsChanged={refreshRecordingThreads}
+						/>
+					) : null}
+					{!recordingThread ? (
+						<div className="min-h-0 flex-1">
+							{loading || !modeState?.loaded ? (
+								<div className="flex h-full items-center justify-center">
+									<Loader2
+										size={18}
+										className="animate-spin text-muted-foreground"
 									/>
-								</StudioModelPickerContext.Provider>
-							</Suspense>
-						)}
-					</div>
+								</div>
+							) : !current ? (
+								<StudioNoModels
+									mode={mode}
+									modelPicker={
+										selectable.models.length > 0 ? modelPicker : null
+									}
+								/>
+							) : (
+								<Suspense
+									fallback={
+										<div className="flex h-full items-center justify-center">
+											<Loader2
+												size={18}
+												className="animate-spin text-muted-foreground"
+											/>
+										</div>
+									}
+								>
+									<StudioModelPickerContext.Provider value={modelPicker}>
+										<Canvas
+											// Keyed by mode only: the first generation creates the session,
+											// and remounting then would cut off a stream in progress.
+											key={mode}
+											mode={mode}
+											model={current}
+											modelInfo={modelInfo}
+											items={modeState.items}
+											ensureModelReady={ensureReady}
+											isNarrow={isNarrow}
+										/>
+									</StudioModelPickerContext.Provider>
+								</Suspense>
+							)}
+						</div>
+					) : null}
 				</div>
 			</div>
 		</TooltipProvider>

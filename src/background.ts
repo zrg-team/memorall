@@ -19,6 +19,7 @@ import { registerMessageHandler } from "@/background/messaging";
 import { registerWebToolBrowserHandler } from "@/background/web-tool-browser-handler";
 import { registerCoAgentBrowserHandler } from "@/background/co-agent-browser-handler";
 import { registerViewportCaptureHandler } from "./background/viewport-capture-handler";
+import { registerTabTranscriptionHandler } from "./background/tab-transcription";
 import { openStandalonePage } from "@/utils/open-standalone";
 
 // ── CRITICAL: synchronous setup at module load time ───────────────────────────
@@ -35,6 +36,7 @@ registerContextMenuHandler();
 registerWebToolBrowserHandler();
 registerCoAgentBrowserHandler();
 registerViewportCaptureHandler();
+registerTabTranscriptionHandler();
 
 registerMessageHandler(() => {
 	// Safe place to verify offscreen is alive (triggered on popup open)

@@ -198,6 +198,7 @@
 		"you": "You"
 	},
 	"modelError": {
+		"missing-files": "This model repository is missing files required by the browser. Choose a complete model from the recommendations.",
 		"unsupported-architecture": "This model's architecture ({{modelType}}) can't run in the browser yet. Pick another model, or use it through an OpenAI-compatible server.",
 		"custom-runtime": "This model needs its own runtime, so it can't run in the browser. Pick another model, or use it through an OpenAI-compatible server.",
 		"session": "The browser couldn't open this model's files, even after trying other precisions. Try again, or pick another model.",

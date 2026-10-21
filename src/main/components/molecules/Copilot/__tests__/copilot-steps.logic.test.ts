@@ -53,6 +53,9 @@ describe("copilot tour steps", () => {
 		expect(steps[0].target).toContain("no-models-screen");
 		expect(steps[steps.length - 1].id).toBe("start-here");
 		expect(steps[steps.length - 1].navigationPath).toBe("/");
+		expect(steps[steps.length - 1].cursorTarget).toBe(
+			"copilot-setup-openrouter",
+		);
 	});
 
 	// The tour is the only place a new user learns these tabs exist, so a tab

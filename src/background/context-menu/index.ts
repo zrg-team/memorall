@@ -7,6 +7,7 @@ export { MENU_IDS };
 // ── Translations ──────────────────────────────────────────────────────────────
 
 type MenuTexts = {
+	transcribeTab: string;
 	savePage: string;
 	convertToKnowledge: string;
 	recall: string;
@@ -19,6 +20,7 @@ type MenuTexts = {
 
 const TEXTS: Record<Language, MenuTexts> = {
 	en: {
+		transcribeTab: "🎙 Start / stop tab transcription",
 		savePage: "💾 Save page",
 		convertToKnowledge: "✨ Convert to knowledge",
 		recall: "💬 Ask about this page",
@@ -29,6 +31,7 @@ const TEXTS: Record<Language, MenuTexts> = {
 		openDocuments: "📄 Open documents",
 	},
 	vn: {
+		transcribeTab: "🎙 Bắt đầu / dừng chép lời tab",
 		savePage: "💾 Lưu trang",
 		convertToKnowledge: "✨ Chuyển thành kiến thức",
 		recall: "💬 Hỏi về trang này",
@@ -48,6 +51,12 @@ function getMenuDefinitions(
 	const t = TEXTS[language];
 
 	return [
+		{
+			id: MENU_IDS.TRANSCRIBE_TAB,
+			title: t.transcribeTab,
+			contexts: ["page", "video", "audio"],
+			documentUrlPatterns: ["http://*/*", "https://*/*"],
+		},
 		{
 			id: MENU_IDS.SAVE_PAGE,
 			title: t.savePage,
@@ -147,6 +156,9 @@ export async function createContextMenus(language: Language): Promise<void> {
 export async function updateContextMenuText(language: Language): Promise<void> {
 	try {
 		const t = TEXTS[language];
+		await chrome.contextMenus.update(MENU_IDS.TRANSCRIBE_TAB, {
+			title: t.transcribeTab,
+		});
 
 		await chrome.contextMenus.update(MENU_IDS.SAVE_PAGE, { title: t.savePage });
 		await chrome.contextMenus.update(MENU_IDS.CONVERT_TO_KNOWLEDGE, {

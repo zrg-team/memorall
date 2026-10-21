@@ -1,4 +1,5 @@
 import { logInfo, logError } from "@/utils/logger";
+import { toggleTabTranscription } from "@/background/tab-transcription";
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import { activityTrackingManager } from "@/background/activity-tracking-manager";
 import { BACKGROUND_EVENTS } from "@/constants/events";
@@ -328,6 +329,7 @@ export function registerContextMenuHandler(): void {
 		if (!tab) return;
 
 		const id = info.menuItemId as string;
+		if (id === MENU_IDS.TRANSCRIBE_TAB) return toggleTabTranscription(tab);
 
 		if (id === MENU_IDS.OPEN_DOCUMENTS) return handleOpenDocuments();
 		if (id === MENU_IDS.RECALL) return handleRecall(info, tab);

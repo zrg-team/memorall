@@ -31,12 +31,14 @@ const appendCopilotStyles = (parent: ShadowRoot, css: string): void => {
 
 export const createShadowPage = ({
 	customStyles,
+	id = "memorall-embedded-chat-modal",
 }: {
 	customStyles: string;
+	id?: string;
 }) => {
 	// Create container element
 	const container = document.createElement("div");
-	container.id = "memorall-embedded-chat-modal";
+	container.id = id;
 
 	// Create Shadow DOM for complete CSS isolation
 	const shadowRoot = container.attachShadow({ mode: "closed" });

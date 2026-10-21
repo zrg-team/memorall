@@ -1,4 +1,5 @@
 export const MENU_IDS = {
+	TRANSCRIBE_TAB: "transcribe-tab",
 	SAVE_PAGE: "save-page",
 	CONVERT_TO_KNOWLEDGE: "convert-to-knowledge",
 	SAVE_DIVIDER: "save-divider",

@@ -520,9 +520,9 @@
 			},
 			"startHere": {
 				"title": "Start here",
-				"content": "One choice left and chat comes alive. Three ways in:\n\n• Managed service — sign in, nothing to configure.\n• Local models — run on this device, no API cost.\n• Your own keys — bring OpenAI, OpenRouter, or another provider.\n\nPick one on this screen, then send your first message. This tour is always in Settings → Help & Tour.",
-				"cursor": "Pick a setup",
-				"agent": "Choose one."
+				"content": "Start with the OpenRouter guide on this screen: create an account and API key, connect it, then choose a free model. No credit card is required for free models, and usage limits apply.\n\nOther setup options lets you run a local model or connect another provider. This tour is always in Settings → Help & Tour.",
+				"cursor": "Set up OpenRouter",
+				"agent": "Start for free."
 			},
 			"finishReady": {
 				"title": "You're set",

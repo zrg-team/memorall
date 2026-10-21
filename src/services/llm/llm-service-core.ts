@@ -40,6 +40,7 @@ import {
 	CURRENT_MODELS_BY_CATEGORY_KEY,
 	DEFAULT_ON_DEMAND_SERVICE_CONFIGS,
 	DEFAULT_SERVICES,
+	DEFAULT_TRANSCRIPTION_MODEL,
 	isLocalServerService,
 	LOCAL_SERVER_SERVICES,
 	LOCAL_SERVERS_CHANGED_KEY,
@@ -445,6 +446,14 @@ export abstract class LLMServiceCore {
 					.limit(1),
 			);
 			this.currentModelsByCategory = sanitizeCategorySelections(rows[0]?.data);
+			if (!this.currentModelsByCategory["speech-to-text"]) {
+				await this.setCurrentModelFor(
+					"speech-to-text",
+					DEFAULT_TRANSCRIPTION_MODEL.provider,
+					DEFAULT_TRANSCRIPTION_MODEL.modelId,
+					DEFAULT_TRANSCRIPTION_MODEL.serviceName,
+				);
+			}
 		} catch (error) {
 			logWarn("Failed to load per-category models from storage:", error);
 		}

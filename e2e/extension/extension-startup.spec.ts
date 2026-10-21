@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import { expect, test } from "@playwright/test";
 import { type BrowserContext, chromium, type Worker } from "playwright";
 
@@ -142,7 +142,16 @@ test.afterAll(async () => {
 		});
 	}
 	if (profilePath) {
-		rmSync(profilePath, { recursive: true, force: true });
+		const resolvedProfile = resolve(profilePath);
+		if (
+			!resolvedProfile.startsWith(`${resolve(tmpdir())}${sep}`) ||
+			!basename(resolvedProfile).startsWith("memorall-extension-e2e-")
+		) {
+			throw new Error(
+				`Refusing to remove an unexpected test profile: ${resolvedProfile}`,
+			);
+		}
+		rmSync(resolvedProfile, { recursive: true, force: true });
 	}
 });
 
@@ -257,6 +266,91 @@ test("background platform APIs, offscreen runtime, and extension storage work", 
 		),
 	).toBe(marker);
 	await page.close();
+});
+
+test("tab recorder reads and writes preferences in the real offscreen document", async () => {
+	// Offscreen documents expose runtime only. A normal extension page (or a
+	// mocked chrome.storage) hides the platform restriction behind the crash.
+	await expect(async () => {
+		const ready = await extensionServiceWorker.evaluate(async () =>
+			chrome.runtime.sendMessage({
+				type: "memorall:tab-transcription:offscreen",
+				action: "prepare",
+			}),
+		);
+		expect(ready?.success).toBe(true);
+	}).toPass({ timeout: 30_000 });
+	const title = `Recorder preferences regression ${Date.now()}`;
+	const result = await extensionServiceWorker.evaluate(
+		async (recordingTitle) => {
+			const key = "memorall.tab-transcription.preferences";
+			const database = await new Promise<IDBDatabase>(
+				(resolveDatabase, reject) => {
+					const request = indexedDB.open("memorall-shared-storage", 1);
+					request.onsuccess = () => resolveDatabase(request.result);
+					request.onerror = () => reject(request.error);
+				},
+			);
+			try {
+				await new Promise<void>((resolveWrite, reject) => {
+					const transaction = database.transaction("kvstore", "readwrite");
+					transaction
+						.objectStore("kvstore")
+						.put({ language: "vi", translation: null }, key);
+					transaction.oncomplete = () => resolveWrite();
+					transaction.onabort = () => reject(transaction.error);
+				});
+				const send = (command: Record<string, unknown>) =>
+					chrome.runtime.sendMessage({
+						type: "memorall:tab-transcription:offscreen",
+						...command,
+					});
+				// Deliberately invalid capture: preferences must load before the browser
+				// refuses this stream. No model download, paid request or microphone use.
+				const start = await send({
+					action: "start",
+					streamId: "memorall-e2e-invalid-stream",
+					tabId: -1,
+					title: recordingTitle,
+				});
+				const list = await send({ action: "list" });
+				const session = list.sessions?.find(
+					(entry: { title: string }) => entry.title === recordingTitle,
+				);
+				if (!session) return { start, list };
+				const configured = await send({
+					action: "configure",
+					sessionId: session.id,
+					language: "en",
+					translation: null,
+				});
+				const stored = await new Promise<unknown>((resolveRead, reject) => {
+					const request = database
+						.transaction("kvstore")
+						.objectStore("kvstore")
+						.get(key);
+					request.onsuccess = () => resolveRead(request.result);
+					request.onerror = () => reject(request.error);
+				});
+				return { start, session, configured, stored };
+			} finally {
+				database.close();
+			}
+		},
+		title,
+	);
+	expect(result.start.success).toBe(false);
+	expect(result.start.error).not.toContain("reading 'local'");
+	expect(result.session).toMatchObject({
+		status: "failed",
+		sourceLanguage: "vi",
+	});
+	expect(result.session.endedAt).toBeGreaterThan(0);
+	expect(result.configured).toMatchObject({
+		success: true,
+		session: { sourceLanguage: "en" },
+	});
+	expect(result.stored).toEqual({ language: "en", translation: null });
 });
 
 test("options application initializes without runtime errors", async () => {

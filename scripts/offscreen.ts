@@ -30,6 +30,7 @@ import {
 	type DefaultOnDemandServiceName,
 } from "@/services/llm/constants";
 import { RuntimeProcessor } from "@/services/runtime/runtime-processor";
+import { registerTabTranscriptionOffscreen } from "@/platform/extension/tab-transcription-offscreen";
 
 type OffscreenGlobal = typeof globalThis & {
 	__memorallOffscreenProcessor__?: OffscreenProcessor;
@@ -96,6 +97,7 @@ class OffscreenProcessor {
 	private processFactory: ProcessFactory;
 	private dependencies: ProcessDependencies;
 	private runtimeProcessor: RuntimeProcessor | null = null;
+	private ready: Promise<void>;
 
 	constructor() {
 		// Initialize dependencies for dependency injection
@@ -112,7 +114,16 @@ class OffscreenProcessor {
 		// Send initial progress immediately to let UI know we're starting
 		this.reportProgress();
 
-		this.initialize();
+		this.ready = this.initialize();
+		registerTabTranscriptionOffscreen(async () => {
+			await this.ready;
+			if (!this.currentProgress.done || this.currentProgress.error) {
+				throw new Error(
+					this.currentProgress.error ||
+						"Memorall is still starting. Try again shortly.",
+				);
+			}
+		});
 
 		logInfo(`[OFFSCREEN] construct`);
 	}

@@ -1,4 +1,5 @@
 import React from "react";
+import { SiOpenrouter } from "@icons-pack/react-simple-icons";
 import {
 	LogIn,
 	Cpu,
@@ -19,6 +20,7 @@ import { platform } from "@/platform/current";
 import { cn } from "@/lib/utils";
 import { hasLocalModelSupport } from "@/main/modules/llm/utils/browser-support";
 import { Button } from "@/main/components/ui/button";
+import { Separator } from "@/main/components/ui/separator";
 import {
 	Card,
 	CardContent,
@@ -40,6 +42,7 @@ import {
 import { YourModels } from "@/main/modules/llm/components/YourModels";
 import { ExternalProvidersConfig } from "@/main/modules/llm/components/ExternalProvidersConfig";
 import { MagicSetup } from "@/main/modules/llm/components/MagicSetup";
+import { OpenRouterSetup } from "@/main/modules/llm/components/OpenRouterSetup";
 import { useAuth, useAuthActions } from "@/main/modules/supabase";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
 import { Input } from "@/main/components/ui/input";
@@ -69,8 +72,8 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 	const { isLoading, isInitialized } = useAuth();
 	const canRunLocalModels = hasLocalModelSupport();
 	const [selectedOption, setSelectedOption] = React.useState<
-		"login" | "local" | "keys" | null
-	>(null);
+		"openrouter" | "login" | "local" | "keys" | null
+	>("openrouter");
 	const [authMode, setAuthMode] = React.useState<"signin" | "signup">("signin");
 	const [email, setEmail] = React.useState("");
 	const [password, setPassword] = React.useState("");
@@ -271,7 +274,7 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 	// Show no-models screen with 3 setup options
 	return (
 		<div
-			className="flex flex-col h-full bg-background"
+			className="openrouter-theme flex flex-col h-full bg-background"
 			data-copilot="no-models-screen chat-center"
 			data-agent-cursor-point="copilot-no-models-screen copilot-chat-center"
 		>
@@ -291,6 +294,41 @@ export const NoModelsScreen: React.FC<NoModelsScreenProps> = ({
 							</p>
 						</div>
 					</div>
+
+					{selectedOption === "openrouter" && (
+						<div className="mx-auto max-w-2xl space-y-4">
+							<OpenRouterSetup onModelLoaded={onModelLoaded} />
+							<Button
+								variant="outline"
+								className="w-full"
+								onClick={() => setSelectedOption(null)}
+							>
+								{tLlm("openrouterGuide.otherOptions")}
+							</Button>
+						</div>
+					)}
+
+					{!selectedOption && (
+						<div className="mx-auto max-w-5xl space-y-8">
+							<div className="flex justify-center">
+								<Button
+									size="lg"
+									className="openrouter-action w-full transition-all duration-200 ease-out active:scale-[0.98] sm:w-auto"
+									onClick={() => setSelectedOption("openrouter")}
+								>
+									<SiOpenrouter className="mr-2 h-4 w-4" aria-hidden="true" />
+									{tLlm("openrouterGuide.title")}
+								</Button>
+							</div>
+							<div className="flex items-center gap-4">
+								<Separator className="w-auto flex-1" />
+								<span className="shrink-0 text-sm text-muted-foreground">
+									{tLlm("openrouterGuide.otherOptionsLabel")}
+								</span>
+								<Separator className="w-auto flex-1" />
+							</div>
+						</div>
+					)}
 
 					{/* 3 Setup Cards - Responsive Grid */}
 					{!selectedOption && (

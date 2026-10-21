@@ -31,9 +31,8 @@ import { useLocalModels } from "../hooks/use-local-models";
 import { useMagicModelDownload } from "../hooks/use-magic-model-download";
 import { useModelOperations } from "../hooks/use-model-operations";
 import { MagicSetup } from "./MagicSetup";
-import { OpenRouterTab } from "./OpenRouterTab";
+import { OpenRouterSetup } from "./OpenRouterSetup";
 import { ProgressSection } from "./YourModels/components/ProgressSection";
-import { RemoteModelsSection } from "./YourModels/components/RemoteModelsSection";
 
 export type RecommendedPath = "fast" | "free";
 
@@ -75,7 +74,7 @@ export const RecommendedSetup: React.FC<RecommendedSetupProps> = ({
 	browseAction,
 }) => {
 	const { t } = useTranslation("llm");
-	const [path, setPath] = React.useState<RecommendedPath | null>(null);
+	const [path, setPath] = React.useState<RecommendedPath | null>("fast");
 
 	// ── OpenRouter (Fast) status ─────────────────────────────────────────────
 	const [openrouterConnected, setOpenrouterConnected] = React.useState(false);
@@ -105,8 +104,8 @@ export const RecommendedSetup: React.FC<RecommendedSetupProps> = ({
 	}, []);
 
 	React.useEffect(() => {
-		void refreshOpenRouterStatus();
-	}, [refreshOpenRouterStatus]);
+		if (path === null) void refreshOpenRouterStatus();
+	}, [refreshOpenRouterStatus, path]);
 
 	const { localModels: openrouterModels, localModelsLoading } = useLocalModels(
 		"openrouter",
@@ -116,7 +115,7 @@ export const RecommendedSetup: React.FC<RecommendedSetupProps> = ({
 
 	// ── Local models (Free) status + download pipeline ───────────────────────
 	const [loading, setLoading] = React.useState(false);
-	const { current, setCurrent } = useCurrentModel();
+	const { setCurrent } = useCurrentModel();
 	const { downloadedModels, downloadedOnly, fetchDownloadedModels } =
 		useDownloadedModels();
 	const {
@@ -320,70 +319,7 @@ export const RecommendedSetup: React.FC<RecommendedSetupProps> = ({
 		return (
 			<div className="space-y-4">
 				{header}
-
-				<ol className="flex items-center gap-2 text-xs">
-					{[
-						{ step: 1, label: t("recommended.fast.stepConnect") },
-						{ step: 2, label: t("recommended.fast.stepPick") },
-					].map(({ step, label }, index) => {
-						const done = step === 1 && openrouterConnected;
-						const active = step === (openrouterConnected ? 2 : 1);
-						return (
-							<li key={step} className="flex items-center gap-2">
-								{index > 0 && (
-									<span className="h-px w-6 bg-border" aria-hidden="true" />
-								)}
-								<span
-									className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${
-										active
-											? "border-primary bg-primary/10 font-medium text-primary"
-											: "border-border text-muted-foreground"
-									}`}
-								>
-									{done ? (
-										<Check className="h-3 w-3" />
-									) : (
-										<span className="font-mono">{step}</span>
-									)}
-									{label}
-								</span>
-							</li>
-						);
-					})}
-				</ol>
-
-				<div className="rounded-lg border p-3">
-					<OpenRouterTab
-						// A successful connect is not a model choice — it only advances
-						// the stepper. The real pick bubbles up from the list below.
-						onModelLoaded={() => {
-							setOpenrouterConnected(true);
-							void refreshOpenRouterStatus();
-						}}
-					/>
-				</div>
-
-				{openrouterConnected && (
-					<div className="space-y-2">
-						<div className="text-sm text-muted-foreground">
-							{t("recommended.fast.pickHint")}
-						</div>
-						<RemoteModelsSection
-							providers={[
-								{
-									provider: "openrouter",
-									models: openrouterModels,
-									loading: localModelsLoading,
-									ready: true,
-								},
-							]}
-							current={current}
-							loading={loading}
-							onModelLoaded={onModelLoaded}
-							defaultExpanded
-						/>
-					</div>
-				)}
+				<OpenRouterSetup onModelLoaded={onModelLoaded} />
 			</div>
 		);
 	}
