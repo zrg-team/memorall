@@ -433,6 +433,45 @@ describe("Hub model inspection", () => {
 			browserRunnability({ siblings: [{ rfilename: "model.safetensors" }] }),
 		).toEqual({ runnable: false, reason: "no-onnx" });
 	});
+	it("rejects incomplete ASR repositories before downloading any weights", async () => {
+		const model = {
+			id: "org/incomplete-asr",
+			pipeline_tag: "automatic-speech-recognition",
+			config: { model_type: "wav2vec2" },
+			siblings: [
+				"config.json",
+				"preprocessor_config.json",
+				"onnx/model.onnx",
+			].map((rfilename) => ({ rfilename })),
+		};
+		expect(
+			browserRunnability(model, "automatic-speech-recognition"),
+		).toMatchObject({
+			runnable: false,
+			reason: "missing-files",
+			missingFiles: ["tokenizer.json"],
+		});
+		const fetcher = vi.fn(async () => new Response(JSON.stringify(model)));
+		await expect(
+			inspectHubModel(model.id, { fetch: fetcher as typeof fetch }),
+		).rejects.toThrow("missing required model files: tokenizer.json");
+		expect(fetcher).toHaveBeenCalledTimes(1);
+		expect(
+			await fetchHubModelSummary(model.id, "automatic-speech-recognition", {
+				fetch: fetcher as typeof fetch,
+			}),
+		).toMatchObject({ runnable: false, reason: "missing-files" });
+		expect(
+			browserRunnability(
+				{
+					...model,
+					config: { model_type: "whisper" },
+					siblings: [...model.siblings, { rfilename: "tokenizer.json" }],
+				},
+				"automatic-speech-recognition",
+			),
+		).toEqual({ runnable: true });
+	});
 
 	it("knows which architectures each task's pipeline can load, before download", () => {
 		const onnx = [{ rfilename: "onnx/model.onnx" }];

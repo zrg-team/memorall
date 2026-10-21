@@ -58,6 +58,8 @@ interface StudioStore {
 	modes: Partial<Record<MediaCategory, StudioModeState>>;
 	/** Load the session list and open the newest session (or none). */
 	loadMode: (mode: MediaCategory) => Promise<void>;
+	/** Refresh externally created recording threads without changing the open thread. */
+	refreshConversations: (mode: MediaCategory) => Promise<void>;
 	openConversation: (mode: MediaCategory, id: string) => Promise<void>;
 	/** Start an empty session; the first generation gives it a title. */
 	newConversation: (mode: MediaCategory) => void;
@@ -195,6 +197,38 @@ export const toStudioItem = (
 export const useStudioStore = create<StudioStore>((set, get) => {
 	const modeState = (mode: MediaCategory): StudioModeState =>
 		get().modes[mode] ?? emptyModeState();
+	const loadHistory = async (mode: MediaCategory): Promise<Conversation[]> => {
+		const conversations = await serviceManager.databaseService.use(
+			({ db, schema }) =>
+				db
+					.select()
+					.from(schema.conversations)
+					.where(eq(schema.conversations.mode, mode))
+					.orderBy(desc(schema.conversations.updatedAt))
+					.limit(HISTORY_LIMIT),
+		);
+		const selectedId = modeState(mode).currentConversationId;
+		if (
+			selectedId &&
+			!conversations.some((conversation) => conversation.id === selectedId)
+		) {
+			const [selected] = await serviceManager.databaseService.use(
+				({ db, schema }) =>
+					db
+						.select()
+						.from(schema.conversations)
+						.where(
+							and(
+								eq(schema.conversations.id, selectedId),
+								eq(schema.conversations.mode, mode),
+							),
+						)
+						.limit(1),
+			);
+			if (selected) conversations.push(selected);
+		}
+		return conversations;
+	};
 
 	const patchMode = (
 		mode: MediaCategory,
@@ -258,18 +292,14 @@ export const useStudioStore = create<StudioStore>((set, get) => {
 
 	return {
 		modes: {},
+		refreshConversations: async (mode) => {
+			const conversations = await loadHistory(mode);
+			patchMode(mode, () => ({ conversations }));
+		},
 
 		loadMode: async (mode) => {
 			try {
-				const conversations = await serviceManager.databaseService.use(
-					({ db, schema }) =>
-						db
-							.select()
-							.from(schema.conversations)
-							.where(eq(schema.conversations.mode, mode))
-							.orderBy(desc(schema.conversations.updatedAt))
-							.limit(HISTORY_LIMIT),
-				);
+				const conversations = await loadHistory(mode);
 				const previous = modeState(mode);
 				const currentId =
 					previous.currentConversationId &&
@@ -298,6 +328,31 @@ export const useStudioStore = create<StudioStore>((set, get) => {
 				pendingMetadata: {},
 			}));
 			try {
+				// A direct thread link can refer to a recording outside the latest 50.
+				if (
+					!modeState(mode).conversations.some(
+						(conversation) => conversation.id === id,
+					)
+				) {
+					const [conversation] = await serviceManager.databaseService.use(
+						({ db, schema }) =>
+							db
+								.select()
+								.from(schema.conversations)
+								.where(
+									and(
+										eq(schema.conversations.id, id),
+										eq(schema.conversations.mode, mode),
+									),
+								)
+								.limit(1),
+					);
+					if (!conversation) throw new Error("Studio session not found");
+					if (modeState(mode).currentConversationId !== id) return;
+					patchMode(mode, (state) => ({
+						conversations: [conversation, ...state.conversations],
+					}));
+				}
 				const items = await loadItems(mode, id);
 				if (modeState(mode).currentConversationId === id) {
 					patchMode(mode, () => ({ items }));

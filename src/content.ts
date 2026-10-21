@@ -44,6 +44,11 @@ import {
 	loadEmbeddedUi,
 } from "./content/load-embedded-ui";
 import { handleWebContentCommand } from "./content/modules/web-commands";
+import {
+	createTabTranscriptionControls,
+	TAB_TRANSCRIPTION,
+} from "./content/modules/tab-transcription";
+import { TAB_TRANSCRIPTION_SHOW } from "./services/tab-transcription/types";
 import type { BackgroundMessage, MessageResponse } from "./embedded/types";
 import { isJobNotificationMessage } from "./services/background-jobs/bridges/types";
 import { logError, logInfo, removeLegacyPageLogDatabase } from "./utils/logger";
@@ -72,6 +77,25 @@ const resolveAssetUrl = (path: string) => chrome.runtime.getURL(path);
 const sendUserAction = (message: WebPageActionMessage) => {
 	void chrome.runtime.sendMessage(message).catch(() => undefined);
 };
+
+const transcriptionControls = createTabTranscriptionControls(
+	(command) =>
+		chrome.runtime.sendMessage({ type: TAB_TRANSCRIPTION, ...command }),
+	async (sessionId) => {
+		const result = await chrome.runtime.sendMessage({
+			type: BACKGROUND_EVENTS.OPEN_TRANSCRIPTION_STUDIO,
+			sessionId,
+		});
+		if (!result?.success)
+			throw new Error(
+				result?.error || "Could not open this recording's thread.",
+			);
+	},
+	async (actions) =>
+		(
+			await loadEmbeddedUi(resolveAssetUrl)
+		).tabTranscription.mountTabTranscription(actions),
+);
 
 const loadUiHandlers = () =>
 	loadEmbeddedUi(resolveAssetUrl).then((module) => module.uiHandlers);
@@ -120,6 +144,10 @@ const messageListener = (
 	const message = rawMessage as BackgroundMessage;
 
 	switch (message.type) {
+		case TAB_TRANSCRIPTION_SHOW:
+			transcriptionControls.show();
+			sendResponse({ success: true });
+			return false;
 		case "web-tool:tab-capture":
 			sendResponse({
 				success: true,
@@ -244,9 +272,11 @@ async function restoreCoAgentIfActiveInThisTab(): Promise<void> {
 }
 
 void restoreCoAgentIfActiveInThisTab();
+transcriptionControls.restore();
 
 export default function main() {
 	return () => {
+		transcriptionControls.dispose();
 		chrome.runtime.onMessage.removeListener(messageListener);
 		logInfo("🧹 Memorall content script cleaned up");
 	};

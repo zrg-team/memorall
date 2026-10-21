@@ -95,6 +95,24 @@ const describeAttempt = ({ device, dtype, optimization }) =>
 		.filter(Boolean)
 		.join("/");
 
+// Precision/device changes cannot supply missing shared assets or more memory.
+// Missing ONNX variants may still be recoverable with another precision.
+export function isTerminalLoadError(error) {
+	const message = String(error?.message ?? error);
+	return (
+		/out of memory|allocation failed|memory access out of bounds/i.test(
+			message,
+		) ||
+		/^\d+$/.test(message) ||
+		(/could not locate file|ModelFileNotFoundError|not found|\b404\b/i.test(
+			message,
+		) &&
+			/(?:tokenizer(?:_config)?|preprocessor_config|processor_config|config|vocab|merges)\.(?:json|txt)/i.test(
+				message,
+			))
+	);
+}
+
 /**
  * Loads one attempt from `loadAttempts`. A failure throws `ModelLoadError`
  * naming the next attempt: retrying needs a fresh ONNX Runtime, which only the
@@ -138,7 +156,10 @@ export async function loadMediaBundle({
 			progress_callback,
 		});
 	} catch (error) {
-		const next = index + 1 < attempts.length ? index + 1 : null;
+		const next =
+			!isTerminalLoadError(error) && index + 1 < attempts.length
+				? index + 1
+				: null;
 		const nextLabel =
 			next === null ? "" : `; next: ${describeAttempt(attempts[next])}`;
 		console.warn(

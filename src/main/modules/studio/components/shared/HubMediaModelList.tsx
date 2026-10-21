@@ -36,6 +36,7 @@ import {
 } from "../../hooks/use-hub-media-models";
 import { studioModeDescriptor } from "../../studio-modes";
 import { OCRModelRecommendations } from "../ocr/OCRModelRecommendations";
+import { TranscriptionModelRecommendations } from "../transcription/TranscriptionModelRecommendations";
 
 interface HubMediaModelListProps {
 	category: MediaCategory;
@@ -166,6 +167,13 @@ export const HubMediaModelList: React.FC<HubMediaModelListProps> = ({
 
 	return (
 		<div className="space-y-3" data-hub-media-models={hub.filter}>
+			{hub.filter === "speech-to-text" && !hub.query.trim() ? (
+				<TranscriptionModelRecommendations
+					onUse={use}
+					busy={hub.busy}
+					percent={hub.percent}
+				/>
+			) : null}
 			{hub.filter === "ocr" && !hub.query.trim() ? (
 				<OCRModelRecommendations
 					onSearch={hub.setQuery}
@@ -438,25 +446,30 @@ export const HubMediaModelList: React.FC<HubMediaModelListProps> = ({
 									data-model-unavailable={result.reason}
 								>
 									<AlertTriangle size={13} className="mt-1 shrink-0" />
-									{result.reason === "no-onnx"
-										? t("models.unavailable.noOnnx", {
+									{result.reason === "missing-files"
+										? t("models.unavailable.missingFiles", {
 												defaultValue:
-													"No ONNX weights, so it can't run in the browser.",
+													"Missing required tokenizer or processor files. Choose a complete Transformers.js export.",
 											})
-										: result.reason === "unsupported-architecture"
-											? t("models.unavailable.architecture", {
-													modelType: result.modelType ?? "",
-													defaultValue: `Its architecture (${result.modelType ?? "unknown"}) can't run in the browser studio yet. Serve it behind an OpenAI-compatible API to use it here.`,
+										: result.reason === "no-onnx"
+											? t("models.unavailable.noOnnx", {
+													defaultValue:
+														"No ONNX weights, so it can't run in the browser.",
 												})
-											: result.reason === "not-decision-model"
-												? t("models.unavailable.notDecision", {
-														defaultValue:
-															"No decision model here: it needs rl_agent_config.json, a tokenizer.json and ONNX graphs in the same folder.",
+											: result.reason === "unsupported-architecture"
+												? t("models.unavailable.architecture", {
+														modelType: result.modelType ?? "",
+														defaultValue: `Its architecture (${result.modelType ?? "unknown"}) can't run in the browser studio yet. Serve it behind an OpenAI-compatible API to use it here.`,
 													})
-												: t("models.unavailable.customRuntime", {
-														defaultValue:
-															"This export needs inference code that the local runtime does not support. Choose a compatible export.",
-													})}
+												: result.reason === "not-decision-model"
+													? t("models.unavailable.notDecision", {
+															defaultValue:
+																"No decision model here: it needs rl_agent_config.json, a tokenizer.json and ONNX graphs in the same folder.",
+														})
+													: t("models.unavailable.customRuntime", {
+															defaultValue:
+																"This export needs inference code that the local runtime does not support. Choose a compatible export.",
+														})}
 								</p>
 							)}
 							{hub.busy === result.id ? (

@@ -108,7 +108,13 @@ export const PROVIDER_REGISTRY: Readonly<
 		requiresAuth: true,
 		readyKey: "openrouter_ready",
 		encryptionKey: "openrouter_config",
-		categories: ["chat", "ocr", "image-generation", "decision"],
+		categories: [
+			"chat",
+			"ocr",
+			"image-generation",
+			"decision",
+			"speech-to-text",
+		],
 	},
 	custom: {
 		id: "custom",

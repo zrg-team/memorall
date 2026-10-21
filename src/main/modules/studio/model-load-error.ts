@@ -8,6 +8,7 @@ export type ModelErrorKind =
 	| "custom-runtime"
 	| "session"
 	| "memory"
+	| "missing-files"
 	| "network"
 	| "other";
 
@@ -26,6 +27,13 @@ const WRAPPERS =
 export function describeModelError(raw: unknown): DescribedModelError {
 	const text = raw instanceof Error ? raw.message : String(raw ?? "");
 	const detail = text.replace(WRAPPERS, "").trim() || text;
+	if (
+		/could not locate file|ModelFileNotFoundError|missing required (?:model )?files/i.test(
+			detail,
+		)
+	) {
+		return { kind: "missing-files", detail };
+	}
 
 	const unsupported =
 		/Unsupported model type:?\s*"?([\w.-]+)"?(?:\s+for task\s+"?([\w-]+)"?)?/i.exec(
@@ -66,6 +74,8 @@ export function describeModelError(raw: unknown): DescribedModelError {
 
 /** English fallbacks for each kind; `studio:modelError.<kind>` wins. */
 export const MODEL_ERROR_TEXT: Record<ModelErrorKind, string> = {
+	"missing-files":
+		"This model repository is missing files required by the browser. Choose a complete model from the recommendations.",
 	"unsupported-architecture":
 		"This model's architecture ({{modelType}}) can't run in the browser yet. Pick another model, or use it through an OpenAI-compatible server.",
 	"custom-runtime":

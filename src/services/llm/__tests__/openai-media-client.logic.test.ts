@@ -53,6 +53,41 @@ vi.stubGlobal("fetch", fetchMock);
 
 afterEach(() => fetchMock.mockReset());
 
+describe("OpenRouter speech-to-text", () => {
+	it("uses its JSON transcript endpoint without probing unsupported streaming or verbose options", async () => {
+		fetchMock.mockResolvedValue(
+			new Response(JSON.stringify({ text: "Xin chào", language: "vi" }), {
+				headers: { "content-type": "application/json" },
+			}),
+		);
+		const result = await collect(
+			streamTranscription(transport(true), {
+				model: "provider/native-asr",
+				file: {
+					kind: "bytes",
+					bytes: new Uint8Array([1, 2, 3]),
+					mimeType: "audio/wav",
+				},
+				language: "vi",
+			}),
+		);
+		expect(fetchMock).toHaveBeenCalledOnce();
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe("https://api.test/v1/audio/transcriptions");
+		const form = init!.body as FormData;
+		expect(form.get("response_format")).toBe("json");
+		expect(form.get("language")).toBe("vi");
+		expect(form.has("stream")).toBe(false);
+		expect(form.has("timestamp_granularities[]")).toBe(false);
+		expect(result).toEqual([
+			{
+				type: "transcript.text.done",
+				result: expect.objectContaining({ text: "Xin chào", language: "vi" }),
+			},
+		]);
+	});
+});
+
 describe("speech", () => {
 	it("posts /audio/speech and returns the audio bytes", async () => {
 		fetchMock.mockResolvedValue(

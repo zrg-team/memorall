@@ -64,6 +64,7 @@ describe("what the model is allowed to see", () => {
 		expect(isNonModelMessageType(COAGENT_SESSION_START)).toBe(true);
 		expect(isNonModelMessageType(COAGENT_SESSION_END)).toBe(true);
 		expect(isNonModelMessageType("separator")).toBe(true);
+		expect(isNonModelMessageType("transcription_chunk")).toBe(true);
 	});
 
 	it("leaves real messages alone", () => {

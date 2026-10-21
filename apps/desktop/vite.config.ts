@@ -48,6 +48,12 @@ export default defineConfig({
 	publicDir: fileURLToPath(new URL("../../public", import.meta.url)),
 	resolve: {
 		alias: [
+			...(["integrations", "features", "memory"] as const).map((name) => ({
+				find: `flow-${name}`,
+				replacement: fileURLToPath(
+					new URL(`../../src/services/flows-${name}`, import.meta.url),
+				),
+			})),
 			{
 				find: /^@\/services\/database\/bridges\/current-proxy-transport$/,
 				replacement: fileURLToPath(

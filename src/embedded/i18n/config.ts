@@ -4,6 +4,7 @@ import {
 	type Language,
 } from "@/constants/language";
 import { logWarn } from "@/utils/logger";
+import { platform } from "@/platform/current";
 import { enEmbeddedLocale } from "./locales/en";
 import { vnEmbeddedLocale } from "./locales/vn";
 
@@ -17,8 +18,8 @@ export type EmbeddedLocale = EmbeddedTranslations[Language];
 
 export async function loadLanguageFromStorage(): Promise<Language> {
 	try {
-		const result = await chrome.storage.local.get(LANGUAGE_STORAGE_KEY);
-		const savedLanguage = result[LANGUAGE_STORAGE_KEY];
+		const savedLanguage =
+			await platform.persistentStore.get<Language>(LANGUAGE_STORAGE_KEY);
 
 		if (savedLanguage && (savedLanguage === "en" || savedLanguage === "vn")) {
 			return savedLanguage;

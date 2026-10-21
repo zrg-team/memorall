@@ -123,7 +123,7 @@ describe("usage storage recovery with real missing TOAST chunks", () => {
 		).rejects.toThrow("Unsupported recovery field");
 		await expect(
 			inspectUsageStorage(query, "connection closed"),
-		).rejects.toThrow("not a missing TOAST chunk");
+		).rejects.toThrow("not a supported TOAST chunk error");
 		const unavailable: RecoveryQuery = async () => {
 			throw new Error("connection closed");
 		};
@@ -165,5 +165,95 @@ describe("usage storage recovery with real missing TOAST chunks", () => {
 			(await pg.query("SELECT metadata FROM messages WHERE uuid = $1", [bad]))
 				.rows,
 		).toEqual([{ metadata: { usage: { cost: 99 } } }]);
+	});
+});
+
+describe("usage storage recovery with out-of-sequence TOAST chunks", () => {
+	let pg: PGlite;
+	let failure: unknown;
+	const query: RecoveryQuery = (sql, params) => pg.query(sql, params);
+	const bad = "00000000-0000-0000-0000-000000000003";
+	const good = "00000000-0000-0000-0000-000000000004";
+
+	beforeAll(async () => {
+		pg = new PGlite();
+		await pg.waitReady;
+		await pg.exec(`
+			CREATE TABLE messages (uuid uuid PRIMARY KEY, content text, metadata jsonb, parts jsonb);
+			ALTER TABLE messages ALTER COLUMN metadata SET STORAGE EXTERNAL;
+		`);
+		await pg.query("INSERT INTO messages VALUES ($1, 'keep reply', $2, '[]')", [
+			bad,
+			{ usage: { cost: 1 }, padding: "x".repeat(20_000) },
+		]);
+		await pg.query(
+			"INSERT INTO messages VALUES ($1, 'healthy reply', $2, '[]')",
+			[good, { usage: { cost: 2 } }],
+		);
+		const { rows } = await pg.query<{ name: string }>(
+			"SELECT reltoastrelid::regclass::text AS name FROM pg_class WHERE oid = 'messages'::regclass",
+		);
+		const toast = rows[0].name;
+		// Isolated in-memory fixture only: leave later chunks present, matching
+		// the error that used to abort the screenshot's recovery scan.
+		await pg.query(
+			"UPDATE pg_class SET relkind = 'r' WHERE oid = $1::regclass",
+			[toast],
+		);
+		try {
+			await pg.exec(`DELETE FROM ${toast} WHERE chunk_seq = 0`);
+		} finally {
+			await pg.query(
+				"UPDATE pg_class SET relkind = 't' WHERE oid = $1::regclass",
+				[toast],
+			);
+		}
+		try {
+			await pg.query("SELECT metadata FROM messages WHERE uuid = $1", [bad]);
+		} catch (error) {
+			failure = error;
+		}
+	}, 30_000);
+
+	afterAll(async () => {
+		await pg.close();
+	});
+
+	it("recognizes the unexpected-chunk error and keeps index rebuild lossless", async () => {
+		expect(String(failure)).toMatch(/unexpected chunk number 1 \(expected 0\)/);
+		expect(
+			isUsageStorageCorruption(new Error("query failed", { cause: failure })),
+		).toBe(true);
+		await rebuildUsageStorageIndex(query, failure);
+		await expect(
+			pg.query("SELECT metadata FROM messages WHERE uuid = $1", [bad]),
+		).rejects.toThrow(/unexpected chunk number/);
+	});
+
+	it("continues inspection when a missing-chunk report leads to an unexpected chunk", async () => {
+		const originalError = String(failure).replace(
+			/unexpected chunk number 1 \(expected 0\)/,
+			"missing chunk number 0",
+		);
+		const damaged = await inspectUsageStorage(query, originalError);
+		expect(damaged).toEqual([
+			{
+				table: "messages",
+				id: bad,
+				column: "metadata",
+				error: expect.stringContaining("unexpected chunk number"),
+			},
+		]);
+		await expect(clearDamagedUsageFields(query, damaged)).resolves.toBe(1);
+		expect(
+			(
+				await pg.query(
+					"SELECT content, metadata, parts FROM messages ORDER BY uuid",
+				)
+			).rows,
+		).toEqual([
+			{ content: "keep reply", metadata: {}, parts: [] },
+			{ content: "healthy reply", metadata: { usage: { cost: 2 } }, parts: [] },
+		]);
 	});
 });

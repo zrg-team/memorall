@@ -266,6 +266,25 @@ export async function createTranscription(
 	transport: OpenAIMediaTransport,
 	request: TranscriptionCreateParams,
 ): Promise<Transcription> {
+	// OpenRouter STT returns JSON; not every model offers verbose timestamps.
+	// Avoid an unsupported-format round trip on every short live segment.
+	if (transport.isOpenRouter) {
+		if (request.task === "translate")
+			throw new Error(
+				"OpenRouter speech-to-text returns the original language. Use a translation model and target language for translated text.",
+			);
+		const response = await fetch(`${transport.baseURL}/audio/transcriptions`, {
+			method: "POST",
+			headers: transport.headers(),
+			body: await transcriptionForm(
+				{ ...request, response_format: request.response_format ?? "json" },
+				{ stream: false, verbose: request.response_format === "verbose_json" },
+			),
+			signal: request.signal,
+		});
+		if (!response.ok) throw await failure(response, "Transcription");
+		return toTranscription(await response.json());
+	}
 	// Ask for timestamps first; servers that only return plain JSON reject
 	// `verbose_json`, and get the request again without it.
 	for (const verbose of [true, false]) {
@@ -292,6 +311,13 @@ export async function* streamTranscription(
 	transport: OpenAIMediaTransport,
 	request: TranscriptionCreateParams,
 ): AsyncIterableIterator<TranscriptionStreamEvent> {
+	if (transport.isOpenRouter) {
+		yield {
+			type: "transcript.text.done",
+			result: await createTranscription(transport, request),
+		};
+		return;
+	}
 	const response = await fetch(`${transport.baseURL}/audio/transcriptions`, {
 		method: "POST",
 		headers: transport.headers(),

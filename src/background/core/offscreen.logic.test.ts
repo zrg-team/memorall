@@ -24,7 +24,10 @@ describe("offscreen database owner", () => {
 			offscreen: {
 				createDocument: mocks.create,
 				closeDocument: mocks.close,
-				Reason: { IFRAME_SCRIPTING: "IFRAME_SCRIPTING" },
+				Reason: {
+					IFRAME_SCRIPTING: "IFRAME_SCRIPTING",
+					USER_MEDIA: "USER_MEDIA",
+				},
 			},
 		});
 	});
@@ -52,6 +55,9 @@ describe("offscreen database owner", () => {
 		const { ensureOffscreenDocument } = await import("./offscreen");
 		await Promise.all([ensureOffscreenDocument(), ensureOffscreenDocument()]);
 		expect(mocks.create).toHaveBeenCalledOnce();
+		expect(mocks.create).toHaveBeenCalledWith(
+			expect.objectContaining({ reasons: ["IFRAME_SCRIPTING", "USER_MEDIA"] }),
+		);
 		expect(mocks.close).not.toHaveBeenCalled();
 	});
 

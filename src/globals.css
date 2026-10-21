@@ -240,6 +240,30 @@
 	transform: translateY(0);
 }
 
+/* OpenRouter's official Grape/Volt palette: https://openrouter.ai/brand */
+.openrouter-theme {
+	--openrouter-accent: #7624f4;
+	--openrouter-on-accent: #ffffff;
+}
+
+.dark .openrouter-theme,
+.dark.openrouter-theme {
+	--openrouter-accent: #c8ff00;
+	--openrouter-on-accent: #03080a;
+}
+
+.openrouter-action {
+	background-color: var(--openrouter-accent);
+	color: var(--openrouter-on-accent);
+}
+
+.openrouter-action:hover {
+	background-color: var(--openrouter-accent);
+	border-color: var(--openrouter-accent);
+	box-shadow: 0 4px 16px color-mix(in srgb, var(--openrouter-accent) 20%, transparent);
+	filter: brightness(0.95);
+}
+
 /* Auto-growing textarea support */
 .field-sizing-content {
 	field-sizing: content;

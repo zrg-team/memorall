@@ -11,7 +11,9 @@
  * GPT-5.6 family. Revisit when OpenAI announces the next deprecation round.
  */
 export const DEFAULT_OPENAI_MODEL = "gpt-5.6-terra";
-export const DEFAULT_OPENROUTER_MODEL = `openai/${DEFAULT_OPENAI_MODEL}`;
+// A new OpenRouter connection must work without purchasing credits. This router
+// chooses only free models, including when it needs to fall back to another one.
+export const DEFAULT_OPENROUTER_MODEL = "openrouter/free";
 
 // OpenAI recommended models
 export const RECOMMENDATION_OPENAI_LLMS = [

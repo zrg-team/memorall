@@ -163,7 +163,7 @@ export const buildCopilotSteps = (
 			placement: "center",
 			action: "navigate",
 			navigationPath: "/",
-			cursorTarget: hasLLMConfigured ? undefined : "copilot-setup-managed",
+			cursorTarget: hasLLMConfigured ? undefined : "copilot-setup-openrouter",
 			layoutMode: "setup-focus",
 		}),
 	];

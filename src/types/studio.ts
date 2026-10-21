@@ -111,9 +111,11 @@ export const STUDIO_MESSAGE_TYPES: Record<MediaCategory, string> = {
 	"text-to-audio": "text_to_audio",
 };
 
-export const STUDIO_MESSAGE_TYPE_SET: ReadonlySet<string> = new Set(
-	Object.values(STUDIO_MESSAGE_TYPES),
-);
+export const STUDIO_MESSAGE_TYPE_SET: ReadonlySet<string> = new Set([
+	...Object.values(STUDIO_MESSAGE_TYPES),
+	// Continuous tab recordings live in their own sessions and enter models only through explicit summaries.
+	"transcription_chunk",
+]);
 
 export type StudioGenerationStatus =
 	| "running"

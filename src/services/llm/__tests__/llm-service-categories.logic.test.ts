@@ -116,6 +116,7 @@ vi.mock("../implementations/local-openai-llm", () => ({
 import {
 	CURRENT_MODEL_KEY,
 	CURRENT_MODELS_BY_CATEGORY_KEY,
+	DEFAULT_TRANSCRIPTION_MODEL,
 } from "../constants";
 import { UnsupportedModelOperationError } from "../llm-service-core";
 import { LLMServiceMain } from "../llm-service-main";
@@ -139,6 +140,7 @@ const writesTo = (key: string) =>
 describe("per-category model selection", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		dbUse.mockReset().mockResolvedValue([]);
 		runners.clear();
 		runners.set("wllama", createRunner("wllama"));
 		runners.set(
@@ -161,6 +163,44 @@ describe("per-category model selection", () => {
 			"openai",
 			createRunner("openai", { extra: { serve: undefined } }),
 		);
+	});
+	it("initializes multilingual Base as the saved transcription default without loading weights", async () => {
+		const service = new LLMServiceMain();
+		vi.spyOn(service, "ensureAllServices").mockResolvedValue();
+		await service.initialize();
+		expect(await service.getCurrentModelFor("speech-to-text")).toEqual(
+			DEFAULT_TRANSCRIPTION_MODEL,
+		);
+		expect(await service.getCurrentModel()).toBeNull();
+		expect(writesTo(CURRENT_MODELS_BY_CATEGORY_KEY)).toEqual([
+			[
+				CURRENT_MODELS_BY_CATEGORY_KEY,
+				{ "speech-to-text": DEFAULT_TRANSCRIPTION_MODEL },
+			],
+		]);
+		expect(service.list()).toEqual([]);
+		expect(runners.get(MEDIA)?.serve).not.toHaveBeenCalled();
+		service.destroy();
+	});
+
+	it("preserves a saved transcription choice and other category selections at startup", async () => {
+		const saved = {
+			"speech-to-text": {
+				...DEFAULT_TRANSCRIPTION_MODEL,
+				modelId: "onnx-community/whisper-small",
+			},
+			"text-to-speech": {
+				...DEFAULT_TRANSCRIPTION_MODEL,
+				modelId: SPEECH_MODEL,
+			},
+		};
+		dbUse.mockResolvedValueOnce([]).mockResolvedValueOnce([{ data: saved }]);
+		const service = new LLMServiceMain();
+		vi.spyOn(service, "ensureAllServices").mockResolvedValue();
+		await service.initialize();
+		expect(await service.getCurrentModels()).toEqual(saved);
+		expect(writesTo(CURRENT_MODELS_BY_CATEGORY_KEY)).toHaveLength(0);
+		service.destroy();
 	});
 
 	it.each([LLMServiceMain, LLMServiceProxy])(

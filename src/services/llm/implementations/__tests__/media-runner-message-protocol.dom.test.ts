@@ -705,6 +705,29 @@ describe("protocol hygiene", () => {
 });
 
 describe("load fallbacks", () => {
+	it("releases a worker after a memory failure and can load a smaller model next", async () => {
+		lab.scripts.serve = async ({ id, payload }, emit) => {
+			if (payload.config.id === ASR.id)
+				emit(id, "error", {
+					error: {
+						code: "MEDIA_OOM",
+						message: "Out of memory: Array buffer allocation failed",
+						nextLoadAttempt: null,
+					},
+				});
+			else emit(id, "complete", { id: payload.config.id, loaded: true });
+		};
+		const runner = await loadRunner();
+		const failed = await runner.send("serve", { model: ASR.id, config: ASR })
+			.done;
+		expect(failed.payload.error.code).toBe("MEDIA_OOM");
+		expect(lab.handleCalls).toHaveLength(1);
+		const tiny = { ...ASR, id: "org/tiny" };
+		expect(
+			(await runner.send("serve", { model: tiny.id, config: tiny }).done).type,
+		).toBe("complete");
+		expect(lab.enginesCreated).toBe(2);
+	});
 	it("retries a failed load in a fresh worker with the next attempt", async () => {
 		lab.scripts.serve = async ({ id, payload }, emit) => {
 			if (payload.loadAttempt === 0) {

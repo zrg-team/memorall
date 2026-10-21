@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 	hasMasterKey: vi.fn(),
 	isMasterKeyUnlocked: vi.fn(),
 	llmCreate: vi.fn(),
+	llmHas: vi.fn(),
+	loadProviderConfig: vi.fn(),
 	saveProviderConfig: vi.fn(),
 	resetMasterKeyAndEncryptedConfigs: vi.fn(),
 	secureDelete: vi.fn(),
@@ -33,7 +35,7 @@ vi.mock("@/services", () => ({
 		databaseService: { use: mocks.databaseUse },
 		llmService: {
 			create: mocks.llmCreate,
-			has: vi.fn(() => false),
+			has: mocks.llmHas,
 			getCurrentModel: vi.fn(async () => null),
 			clearCurrentModel: vi.fn(),
 			clearCurrentModelsForProvider: vi.fn(async () => undefined),
@@ -65,7 +67,7 @@ vi.mock("@/utils/master-key", () => ({
 	getMasterStrongPassword: mocks.getMasterStrongPassword,
 	hasMasterKey: mocks.hasMasterKey,
 	isMasterKeyUnlocked: mocks.isMasterKeyUnlocked,
-	loadProviderConfig: vi.fn(),
+	loadProviderConfig: mocks.loadProviderConfig,
 	resetMasterKeyAndEncryptedConfigs: mocks.resetMasterKeyAndEncryptedConfigs,
 	saveProviderConfig: mocks.saveProviderConfig,
 	setupMasterKey: vi.fn(),
@@ -104,6 +106,7 @@ import { OpenRouterTab } from "../OpenRouterTab";
 
 beforeEach(() => {
 	mocks.databaseUse.mockResolvedValue([]);
+	mocks.llmHas.mockReturnValue(false);
 	mocks.secureExists.mockResolvedValue(false);
 	mocks.hasMasterKey.mockResolvedValue(true);
 	mocks.deleteMasterKeyIfUnused.mockResolvedValue(false);
@@ -120,6 +123,72 @@ afterEach(() => {
 });
 
 describe("OpenRouterTab", () => {
+	it("uses a simple API-key form in guided setup while keeping encryption and the default URL", async () => {
+		mocks.isMasterKeyUnlocked.mockResolvedValue(true);
+		const loaded = vi.fn();
+		const busy = vi.fn();
+		render(
+			<OpenRouterTab simplified onModelLoaded={loaded} onBusyChanged={busy} />,
+		);
+		fireEvent.change(await screen.findByLabelText(/openrouter.apiKey/), {
+			target: { value: "sk-or-guided" },
+		});
+		expect(
+			screen.queryByText("openai.noConfigurationFound"),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText("openai.secureStorage")).not.toBeInTheDocument();
+		expect(screen.queryByLabelText("openai.baseUrl")).not.toBeInTheDocument();
+		fireEvent.click(screen.getByText("openrouterGuide.connectAction"));
+		await waitFor(() =>
+			expect(loaded).toHaveBeenCalledWith("openrouter/free", "openrouter"),
+		);
+		expect(mocks.saveProviderConfig).toHaveBeenCalledWith("openrouter", {
+			apiKey: "sk-or-guided",
+			baseUrl: "https://openrouter.ai/api/v1",
+		});
+		expect(busy).toHaveBeenCalledWith(true);
+		await waitFor(() => expect(busy).toHaveBeenLastCalledWith(false));
+	});
+
+	it("reports an already connected provider without choosing a model", async () => {
+		mocks.llmHas.mockReturnValue(true);
+		mocks.secureExists.mockResolvedValue(true);
+		const connected = vi.fn();
+		const loaded = vi.fn();
+		render(
+			<OpenRouterTab onConnectionChanged={connected} onModelLoaded={loaded} />,
+		);
+		await screen.findByText("openai.openrouterReady");
+		await waitFor(() => expect(connected).toHaveBeenLastCalledWith(true));
+		expect(loaded).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByText("openai.unloadConfiguration"));
+		await waitFor(() => expect(connected).toHaveBeenLastCalledWith(false));
+	});
+
+	it("unlocks and loads a saved provider configuration", async () => {
+		mocks.databaseUse.mockResolvedValue([{ createdAt: new Date() }]);
+		mocks.isMasterKeyUnlocked
+			.mockResolvedValueOnce(false)
+			.mockResolvedValue(true);
+		mocks.loadProviderConfig.mockResolvedValue({
+			apiKey: "sk-or-saved",
+			baseUrl: "https://openrouter.ai/api/v1",
+		});
+		const connected = vi.fn();
+		render(<OpenRouterTab onConnectionChanged={connected} />);
+		fireEvent.click(await screen.findByText("openai.loadConfiguration"));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "unlock master key" }),
+		);
+		await screen.findByText("openai.openrouterReady");
+		expect(mocks.llmCreate).toHaveBeenCalledWith("openrouter", {
+			type: "openrouter",
+			apiKey: "sk-or-saved",
+			baseURL: "https://openrouter.ai/api/v1",
+		});
+		await waitFor(() => expect(connected).toHaveBeenLastCalledWith(true));
+	});
+
 	it("unlocks the existing master key and resumes saving a replacement API key", async () => {
 		const onModelLoaded = vi.fn();
 		render(<OpenRouterTab onModelLoaded={onModelLoaded} />);

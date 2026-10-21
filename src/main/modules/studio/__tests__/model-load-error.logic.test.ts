@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { describeModelError } from "../model-load-error";
 
 describe("describeModelError", () => {
+	it("explains missing model assets separately from memory and network failures", () => {
+		expect(
+			describeModelError(
+				'ModelLoadError: Could not locate file: "https://huggingface.co/org/asr/resolve/main/tokenizer.json"',
+			).kind,
+		).toBe("missing-files");
+		expect(
+			describeModelError(
+				"org/asr is missing required model files: tokenizer.json",
+			).kind,
+		).toBe("missing-files");
+		expect(
+			describeModelError("RangeError: Array buffer allocation failed").kind,
+		).toBe("memory");
+	});
 	it("explains an architecture the browser runtime cannot run", () => {
 		expect(
 			describeModelError(

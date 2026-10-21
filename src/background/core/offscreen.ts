@@ -89,9 +89,12 @@ export async function ensureOffscreenDocument(): Promise<void> {
 		try {
 			await chrome.offscreen.createDocument({
 				url: offscreenUrl,
-				reasons: [chrome.offscreen.Reason.IFRAME_SCRIPTING],
+				reasons: [
+					chrome.offscreen.Reason.IFRAME_SCRIPTING,
+					chrome.offscreen.Reason.USER_MEDIA,
+				],
 				justification:
-					"Run LLM and embedding services with iframe support for knowledge graph processing",
+					"Run local AI services and record user-selected tab audio for continuous transcription",
 			});
 			offscreenCreated = true;
 			logInfo("✅ Offscreen document created successfully");

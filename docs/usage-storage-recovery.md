@@ -1,4 +1,4 @@
-# Usage page: missing TOAST chunks
+# Usage page: damaged TOAST chunks
 
 `missing chunk number 0 for toast value 352266 in pg_toast_287161` means
 PostgreSQL cannot reconstruct a saved, out-of-line value. It can result from
@@ -6,6 +6,12 @@ an unreadable TOAST index or missing underlying chunks. It is not a token
 formatting or provider error. The numbers are local database identifiers;
 `352266` is **not** a message id and `287161` must not be assumed to identify
 the same table on a different installation.
+
+`unexpected chunk number 16 (expected 0) for toast value 574039 in pg_toast_287161`
+is another form of this damage: PostgreSQL found a chunk in the wrong sequence.
+Recovery recognizes both missing and unexpected chunk errors, including when
+an inspection started from a missing-chunk error encounters an unexpected one.
+Previously that second error aborted inspection before fields could be listed.
 
 The usage query reads `messages.metadata`, `messages.parts`, conversation and
 agent labels, and the model usage ledger. One unreadable value aborts the query.

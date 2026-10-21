@@ -2,11 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cacheUrlMatchesRepo } from "../../../../../public/runner/modes/media/cache.js";
 import { toErrorPayload } from "../../../../../public/runner/modes/media/cancellation.js";
 import {
+	detectWhisperLanguage,
+	transcribe,
+} from "../../../../../public/runner/modes/media/asr.js";
+import {
 	adaptDtype,
 	chooseDevice,
 	dtypeLabel,
 } from "../../../../../public/runner/modes/media/device.js";
 import { createMediaEngine } from "../../../../../public/runner/modes/media/engine.js";
+import { serveEngineOnPort } from "../../../../../public/runner/modes/media/engine-port.js";
 import { runImageTool } from "../../../../../public/runner/modes/media/image-tools.js";
 import {
 	loadAttempts,
@@ -133,6 +138,163 @@ describe("buildSegments", () => {
 });
 
 describe("ASR options", () => {
+	it("detects multilingual speech from the language token instead of defaulting to English", async () => {
+		const generate = vi.fn(async () => ({
+			data: BigInt64Array.from([1n, 5n]),
+		}));
+		const pipe = {
+			processor: vi.fn(async () => ({ input_features: "audio-features" })),
+			model: {
+				config: { vocab_size: 8 },
+				generation_config: {
+					is_multilingual: true,
+					decoder_start_token_id: 1,
+					lang_to_id: { "<|en|>": 4, "<|vi|>": 5 },
+				},
+				generate,
+			},
+		};
+		expect(
+			await detectWhisperLanguage(pipe, new Float32Array(10), cancellation),
+		).toBe("vi");
+		expect(generate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				input_features: "audio-features",
+				decoder_input_ids: [1],
+				max_new_tokens: 1,
+				forced_decoder_ids: null,
+				suppress_tokens: [0, 1, 2, 3, 6, 7],
+			}),
+		);
+	});
+	it("uses Whisper's timestamp-aware streamer when its tokenizer declares timestamp tokens", async () => {
+		const whisper = vi.fn(function (_tokenizer, _options) {});
+		const generic = vi.fn();
+		const pipe = Object.assign(
+			vi.fn(async () => ({ text: "Xin chào" })),
+			{ tokenizer: { timestamp_begin: 100 } },
+		);
+		const result = await transcribe({
+			transformers: { WhisperTextStreamer: whisper, TextStreamer: generic },
+			bundle: { pipe, device: "wasm" },
+			payload: { audio: new Float32Array(160), language: "vi" },
+			cancellation,
+			sendChunk: vi.fn(),
+		});
+		expect(whisper).toHaveBeenCalledOnce();
+		expect(generic).not.toHaveBeenCalled();
+		expect(result.language).toBe("vi");
+	});
+	it("auto-detects once before transcription and passes the original language to generation", async () => {
+		const generate = vi.fn(async () => ({
+			data: BigInt64Array.from([1n, 5n]),
+		}));
+		const pipe = Object.assign(
+			vi.fn(async () => ({ text: "Xin chào" })),
+			{
+				processor: vi.fn(async () => ({ input_features: "features" })),
+				model: {
+					config: { vocab_size: 8 },
+					generation_config: {
+						is_multilingual: true,
+						decoder_start_token_id: 1,
+						lang_to_id: { "<|en|>": 4, "<|vi|>": 5 },
+					},
+					generate,
+				},
+			},
+		);
+		const input = {
+			transformers: {},
+			bundle: { pipe, device: "wasm" },
+			payload: { audio: new Float32Array(160), task: "transcribe" },
+			cancellation,
+			sendChunk: vi.fn(),
+		};
+		expect(await transcribe(input)).toMatchObject({
+			text: "Xin chào",
+			language: "vi",
+		});
+		expect(pipe).toHaveBeenCalledWith(
+			input.payload.audio,
+			expect.objectContaining({ language: "vi", task: "transcribe" }),
+		);
+		await transcribe({
+			...input,
+			payload: { ...input.payload, language: "vi" },
+		});
+		expect(generate).toHaveBeenCalledOnce();
+	});
+	it("reports failed language detection instead of producing an English transcript", async () => {
+		const pipe = Object.assign(vi.fn(), {
+			processor: vi.fn(async () => ({})),
+			model: {
+				config: { vocab_size: 8 },
+				generation_config: {
+					is_multilingual: true,
+					decoder_start_token_id: 1,
+					lang_to_id: { "<|vi|>": 5 },
+				},
+				generate: vi.fn(async () => ({ data: BigInt64Array.from([1n, 2n]) })),
+			},
+		});
+		await expect(
+			transcribe({
+				transformers: {},
+				bundle: { pipe, device: "wasm" },
+				payload: { audio: new Float32Array(160) },
+				cancellation,
+				sendChunk: vi.fn(),
+			}),
+		).rejects.toThrow("Could not detect the speech language");
+		expect(pipe).not.toHaveBeenCalled();
+	});
+	it("does not repeat a failed allocation or discard the requested language", async () => {
+		const pipe = vi.fn(async () => {
+			throw new RangeError("Array buffer allocation failed");
+		});
+		await expect(
+			transcribe({
+				transformers: {},
+				bundle: { pipe, device: "wasm" },
+				payload: { audio: new Float32Array(160), language: "vi" },
+				cancellation,
+				sendChunk: vi.fn(),
+			}),
+		).rejects.toThrow("Array buffer allocation failed");
+		expect(pipe).toHaveBeenCalledOnce();
+	});
+	it("supports English-only models explicitly and rejects incompatible language selections", async () => {
+		const pipe = Object.assign(
+			vi.fn(
+				async (_audio: Float32Array, _options: Record<string, unknown>) => ({
+					text: "Hello",
+				}),
+			),
+			{ model: { generation_config: { is_multilingual: false } } },
+		);
+		const input = {
+			transformers: {},
+			bundle: { pipe, device: "wasm" },
+			payload: {
+				audio: new Float32Array(160),
+				language: "en",
+				task: "transcribe",
+			},
+			cancellation,
+			sendChunk: vi.fn(),
+		};
+		expect(await transcribe(input)).toMatchObject({
+			text: "Hello",
+			language: "en",
+		});
+		expect(pipe.mock.calls[0][1]).not.toHaveProperty("language");
+		expect(pipe.mock.calls[0][1]).not.toHaveProperty("task");
+		await expect(
+			transcribe({ ...input, payload: { ...input.payload, language: "vi" } }),
+		).rejects.toThrow("English only");
+		expect(pipe).toHaveBeenCalledOnce();
+	});
 	it("maps OpenAI transcription options onto pipeline options", () => {
 		expect(buildAsrOptions({ language: "VI", task: "translate" })).toEqual({
 			return_timestamps: true,
@@ -607,6 +769,75 @@ describe("media engine", () => {
 });
 
 describe("loadMediaBundle", () => {
+	it.each([
+		[new RangeError("Array buffer allocation failed"), null, "MEDIA_OOM"],
+		[
+			new Error(
+				'Could not locate file: "https://huggingface.co/org/model/resolve/main/tokenizer.json"',
+			),
+			null,
+			"MODEL_LOAD_FAILED",
+		],
+		[
+			new Error(
+				'Could not locate file: "https://huggingface.co/org/model/resolve/main/onnx/model_quantized.onnx"',
+			),
+			1,
+			"MODEL_LOAD_FAILED",
+		],
+	])(
+		"does not retry shared missing assets or memory failures: %s",
+		async (error, next, code) => {
+			vi.spyOn(console, "warn").mockImplementation(() => undefined);
+			const pipeline = vi.fn().mockRejectedValue(error);
+			const failure = await loadMediaBundle({
+				transformers: { pipeline },
+				config: { id: "org/model", task: "automatic-speech-recognition" },
+				forceDevice: "wasm",
+			}).catch((reason) => reason);
+			expect(pipeline).toHaveBeenCalledTimes(1);
+			expect(toErrorPayload(failure).error).toMatchObject({
+				code,
+				nextLoadAttempt: next,
+			});
+		},
+	);
+
+	it("returns a terminal error when a model download rejects outside its awaited operation", async () => {
+		const listeners = new Map<string, (event: any) => void>();
+		const postMessage = vi.fn();
+		const abort = vi.fn();
+		serveEngineOnPort(
+			{
+				postMessage,
+				addEventListener: (name: string, callback: (event: any) => void) =>
+					listeners.set(name, callback),
+			},
+			() => ({ handle: () => new Promise(() => {}), abort }),
+		);
+		listeners.get("message")!({
+			data: { id: "load", type: "serve", payload: {} },
+		});
+		const preventDefault = vi.fn();
+		listeners.get("unhandledrejection")!({
+			reason: new RangeError("Array buffer allocation failed"),
+			preventDefault,
+		});
+		expect(abort).toHaveBeenCalledWith("load");
+		expect(postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				id: "load",
+				type: "error",
+				payload: {
+					error: expect.objectContaining({
+						code: "MEDIA_OOM",
+						nextLoadAttempt: null,
+					}),
+				},
+			}),
+		);
+		expect(preventDefault).toHaveBeenCalledOnce();
+	});
 	it("falls back to full precision, then WASM, for any model", () => {
 		expect(loadAttempts("webgpu", undefined)).toEqual([
 			{ device: "webgpu", dtype: undefined },

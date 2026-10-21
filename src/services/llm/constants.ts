@@ -1,4 +1,7 @@
-import type { ServiceProvider } from "./interfaces/llm-service.interface";
+import type {
+	CurrentModelInfo,
+	ServiceProvider,
+} from "./interfaces/llm-service.interface";
 import type { LLMRegistry } from "./interfaces/service";
 
 // Shared constants for LLM services
@@ -13,6 +16,13 @@ export const DEFAULT_SERVICES = {
 	LMSTUDIO: "lmstudio",
 	OLLAMA: "ollama",
 } as const;
+
+/** Product default; the generic media loader inspects/downloads it on first use. */
+export const DEFAULT_TRANSCRIPTION_MODEL = {
+	modelId: "onnx-community/whisper-base",
+	provider: "transformer-media",
+	serviceName: DEFAULT_SERVICES.TRANSFORMER_MEDIA,
+} as const satisfies CurrentModelInfo;
 
 export type DefaultOnDemandServiceName =
 	| typeof DEFAULT_SERVICES.WLLAMA

@@ -55,6 +55,7 @@ export function classifyByModalities(modalities: {
 		return null;
 	}
 	const categories: ModelCategory[] = [];
+	if (output.includes("transcription")) categories.push("speech-to-text");
 	if (output.includes("text")) categories.push("chat");
 	if (output.includes("text") && modalities.input?.includes("image")) {
 		categories.push("ocr");

@@ -17,11 +17,13 @@
 import type * as CoAgentModule from "@/embedded/pages/CoAgent";
 import type * as MemoryHandlersModule from "./modules/memory-handlers";
 import type * as UiHandlersModule from "./modules/ui-handlers";
+import type * as TranscriptionModule from "@/embedded/pages/TabTranscription";
 
 export interface EmbeddedUiBundle {
 	readonly coAgent: typeof CoAgentModule;
 	readonly memoryHandlers: typeof MemoryHandlersModule;
 	readonly uiHandlers: typeof UiHandlersModule;
+	readonly tabTranscription: typeof TranscriptionModule;
 }
 
 /**

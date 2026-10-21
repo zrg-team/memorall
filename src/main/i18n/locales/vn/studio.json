@@ -198,6 +198,7 @@
 		"you": "Bạn"
 	},
 	"modelError": {
+		"missing-files": "Kho mô hình thiếu các tệp cần thiết cho trình duyệt. Hãy chọn một mô hình đầy đủ trong danh sách đề xuất.",
 		"unsupported-architecture": "Kiến trúc của mô hình này ({{modelType}}) chưa chạy được trong trình duyệt. Hãy chọn mô hình khác, hoặc dùng qua máy chủ tương thích OpenAI.",
 		"custom-runtime": "Mô hình này cần runtime riêng nên không chạy được trong trình duyệt. Hãy chọn mô hình khác, hoặc dùng qua máy chủ tương thích OpenAI.",
 		"session": "Trình duyệt không mở được tệp của mô hình, kể cả khi thử các độ chính xác khác. Hãy thử lại hoặc chọn mô hình khác.",

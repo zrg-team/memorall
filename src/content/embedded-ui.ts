@@ -16,5 +16,6 @@
  */
 
 export * as coAgent from "@/embedded/pages/CoAgent";
+export * as tabTranscription from "@/embedded/pages/TabTranscription";
 export * as memoryHandlers from "./modules/memory-handlers";
 export * as uiHandlers from "./modules/ui-handlers";
