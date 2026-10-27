@@ -5,6 +5,7 @@ import {
 	indexRootOf,
 	indexRoots,
 	isSkippedName,
+	isUnindexedPath,
 	moveFolderIndexRules,
 	normalizeFolderIndexConfig,
 	removeFolderIndexRules,
@@ -22,6 +23,19 @@ describe("folder index config", () => {
 		const config = withOkf("/Work");
 		expect(effectiveIndexTypes(config, "/Work/Invoices/2026")).toEqual(["okf"]);
 		expect(effectiveIndexTypes(config, "/Notes")).toEqual([]);
+	});
+
+	it("never indexes /tmp, whatever the rules say", () => {
+		const config = withOkf("/", "/tmp/keep");
+		expect(effectiveIndexTypes(config, "/Notes")).toEqual(["okf"]);
+		expect(effectiveIndexTypes(config, "/tmp")).toEqual([]);
+		expect(effectiveIndexTypes(config, "/tmp/downloads/paper.pdf")).toEqual([]);
+		expect(effectiveIndexTypes(config, "/tmp/keep")).toEqual([]);
+		expect(effectiveIndexTypes(config, "/tmpfiles")).toEqual(["okf"]);
+		expect(indexRoots(config, "okf")).toEqual(["/"]);
+		expect(indexRootOf(config, "okf", "/tmp/downloads/paper.pdf")).toBeNull();
+		expect(isUnindexedPath("/tmp/")).toBe(true);
+		expect(isUnindexedPath("/projects/tmp")).toBe(false);
 	});
 
 	it("lets a subfolder leave an inherited index, and rejoin it", () => {

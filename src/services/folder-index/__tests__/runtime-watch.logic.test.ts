@@ -67,6 +67,21 @@ describe("index change scheduling", () => {
 		expect(f.syncPaths).toHaveBeenCalledTimes(1);
 		expect(f.unsubscribe).toHaveBeenCalled();
 	});
+	it("schedules nothing for changes in /tmp", async () => {
+		const f = fixture();
+		f.emit("/tmp/downloads/paper.pdf");
+		await vi.advanceTimersByTimeAsync(2500);
+		expect(f.syncPaths).not.toHaveBeenCalled();
+		f.notify({
+			scope: "root",
+			operation: "move",
+			oldPath: "/tmp/downloads/paper.pdf",
+			newPath: "/Work/paper.pdf",
+		});
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(f.syncPaths).toHaveBeenCalledWith(["/Work/paper.pdf"]);
+		f.stop();
+	});
 	it("does not suppress a user folder named like the physical private store", async () => {
 		const f = fixture();
 		f.emit("/home/indexes/my-notes.txt");
