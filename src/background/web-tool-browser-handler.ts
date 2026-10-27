@@ -1178,7 +1178,7 @@ const handleFetchImageCommand = async (
 				type: "web-tool:fetch-image",
 				url: request.url,
 			},
-			15_000,
+			request.timeoutMs ?? 15_000,
 		);
 		if (response.type !== "web-tool:fetch-image-result") {
 			throw new Error("Invalid fetch-image response from content script.");

@@ -135,11 +135,23 @@ export const normalizeFolderIndexConfig = (
 	return config;
 };
 
+/**
+ * Scratch space no index covers, whatever the rules say. Web tools download
+ * into /tmp by default; indexing every throwaway file there would fill search
+ * with noise and spend summaries and embeddings on it.
+ */
+export const UNINDEXED_FOLDERS: readonly string[] = ["/tmp"];
+
+/** Whether `path` is in a folder that is never indexed. */
+export const isUnindexedPath = (path: string): boolean =>
+	UNINDEXED_FOLDERS.some((folder) => isSameOrInside(path, folder));
+
 /** Index types in effect at `path`: each folder from the root adds and removes its own. */
 export const effectiveIndexTypes = (
 	config: FolderIndexConfig,
 	path: string,
 ): string[] => {
+	if (isUnindexedPath(path)) return [];
 	const types = new Set<string>();
 	for (const folder of folderLineage(path)) {
 		const rule = config.folders[folder];

@@ -4,6 +4,7 @@ import type {
 } from "@/services/filesystem/document-filesystem";
 import { logError } from "@/utils/logger";
 import { FolderIndexer } from "./folder-indexer";
+import { isUnindexedPath } from "./index-config";
 import { OkfIndex } from "./okf/okf-index";
 import { OkfReader } from "./okf/okf-query";
 import { EmbeddingIndex } from "./embedding/embedding-index";
@@ -70,7 +71,10 @@ export const watchLibrary = (
 		const events = leafChanges(change).filter(
 			(event) => event.origin !== "folder-index",
 		);
-		const paths = events.flatMap(changedPaths);
+		// Scratch space is never indexed: a download into /tmp schedules nothing.
+		const paths = events
+			.flatMap(changedPaths)
+			.filter((path) => !isUnindexedPath(path));
 		if (!paths.length) return;
 		const handle = async (event: FilesystemChangeEvent) => {
 			// Rules follow their folder when it moves; a deleted folder's go.

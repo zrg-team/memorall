@@ -40,6 +40,7 @@ import "./web/web-read.js";
 import "./web/web-search.js";
 import "./web/web-dom.js";
 import "./web/web-wait.js";
+import "./web/web-download.js";
 
 import "./planner/index.js";
 

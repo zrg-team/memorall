@@ -55,6 +55,11 @@ export interface WebSnapshotPayload {
 	html: string;
 	text: string;
 	domAccessible: boolean;
+	/**
+	 * `document.contentType`: "application/pdf" or "image/png" when the tab
+	 * shows a file in the browser's own viewer. Absent from older senders.
+	 */
+	contentType?: string;
 }
 
 export interface WebBrowserSurface {
@@ -308,10 +313,13 @@ export type WebBrowserCommandRequest =
 	  } & WebScreenshotOptions)
 	| {
 			source: typeof WEB_BROWSER_COMMAND_SOURCE;
+			/** Fetches any URL from inside the page, not only an image. */
 			command: "fetch-image";
 			sessionId: string;
 			url: string;
 			tabId: number;
+			/** A large file (a PDF) takes longer than an image. */
+			timeoutMs?: number;
 	  }
 	/**
 	 * Get an image a page shows but nothing can download: open it in its own tab

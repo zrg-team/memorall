@@ -223,7 +223,7 @@ declare global {
 | 📄 Documents | read, write, edit, move, remove, search |
 | 🗂️ Filesystem | `fs_*` virtual file operations |
 | 🐳 Sandbox | run code, servers, logs, package install |
-| 🌐 Web browser | `web_open`, `web_read`, `web_wait`, DOM access |
+| 🌐 Web browser | `web_open`, `web_read`, `web_wait`, `web_download`, DOM access |
 
 ---
 

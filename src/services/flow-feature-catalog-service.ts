@@ -847,6 +847,7 @@ const FEATURE_UI_METADATA: Record<string, FeatureCatalogMetadata> = {
 			"web_find_in_page",
 			"web_dom_action",
 			"web_wait",
+			"web_download",
 			"web_fetch_image",
 			"web_read_images",
 		],

@@ -34,7 +34,11 @@ import type { IDatabaseService } from "@/services/database/interfaces/database-s
 import { schema as appDatabaseSchema } from "@/services/database/schema";
 import type { IEmbeddingService } from "@/services/embedding/interfaces/embedding-service.interface";
 import type { DocumentFileSystem } from "@/services/filesystem/document-filesystem";
-import { awaitWebChallengeResolution } from "@/services/flows-integrations/tools/web/web-tool-registry";
+import { readWebResourceText } from "@/services/flows-integrations/tools/web/web-resource-text";
+import {
+	awaitWebChallengeResolution,
+	downloadWebResource,
+} from "@/services/flows-integrations/tools/web/web-tool-registry";
 import type { ILLMService } from "@/services/llm/interfaces/llm-service.interface";
 import type { ReasoningEffort } from "@/types/openai";
 import type {
@@ -605,6 +609,10 @@ export const toFlowWebBrowser = (
 	// the context that runs the tools can park one, so a proxy method for it would
 	// be meaningless.
 	awaitChallengeResolution: (args) => awaitWebChallengeResolution(args),
+	// Also straight to the registry: bytes are better not relayed through a
+	// proxy, and the session whose tab fetches them lives here.
+	downloadResource: (args) => downloadWebResource(args),
+	readResourceText: (args) => readWebResourceText(args),
 });
 
 const normalizeSandboxCommand = (

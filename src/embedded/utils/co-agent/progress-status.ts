@@ -55,6 +55,7 @@ const TOOL_LABELS: Record<string, string> = {
 	web_dom_action: "Inspecting the page",
 	web_read_images: "Looking at images",
 	web_fetch_image: "Fetching an image",
+	web_download: "Downloading a file",
 	memory_remember: "Saving to memory",
 	memory_retrieve: "Searching memory",
 	knowledge_graph: "Searching knowledge",

@@ -3,7 +3,16 @@ import {
 	detectWebBlock,
 	type WebBlockSignal,
 } from "@memorall/agent-harness-flows/tools/web/challenge-detection";
+import type {
+	WebDownloadedResource,
+	WebDownloadResourceArgs,
+} from "@memorall/agent-harness-flows/interfaces/services/web-browser";
+import { isPageContentType } from "@memorall/agent-harness-flows/tools/web/file-content-type";
 import { DEFAULT_WEB_MAX_HTML_CHARS } from "@memorall/agent-harness-flows/tools/web/max-html-chars";
+import {
+	decodeBase64Bytes,
+	downloadResourceBytes,
+} from "@memorall/agent-harness-flows/utils/download-resource";
 import { actOnRef, buildPageOutline } from "@/co-agent/dom/page-outline";
 import { UnavailableBrowserCommandPort } from "@/platform/core/unavailable-browser-command-port";
 import { platform } from "@/platform/current";
@@ -65,6 +74,8 @@ interface WebSessionState {
 	 * pages report "DOM blocked".
 	 */
 	stale?: boolean;
+	/** `document.contentType`; a file type when the tab shows a PDF or image. */
+	contentType?: string;
 	lastAccessedAt: number;
 	createdAt: number;
 	mode: WebBrowserMode;
@@ -436,6 +447,7 @@ const applySnapshotToSession = (
 	session.html = snapshot.html;
 	session.text = snapshot.text;
 	session.domAccessible = snapshot.domAccessible;
+	session.contentType = snapshot.contentType;
 	session.block = detectWebBlock({ html: snapshot.html, text: snapshot.text });
 	session.stale = false;
 	session.lastAccessedAt = Date.now();
@@ -450,6 +462,7 @@ const captureIframeSnapshot = (session: WebSessionState): WebSessionState => {
 	session.html = html;
 	session.text = safeText(document);
 	session.domAccessible = Boolean(document);
+	session.contentType = document?.contentType;
 	session.block = detectWebBlock({ html, text: session.text });
 	session.stale = false;
 	session.lastAccessedAt = Date.now();
@@ -663,6 +676,12 @@ export const openWebSession = async ({
 		applySnapshotToSession(session, response.snapshot);
 		WEB_SESSIONS.set(id, session);
 		persistSession(session);
+		// A PDF or an image in the browser's viewer has no text to wait for: the
+		// render check would spend its whole timeout on an empty `<embed>`.
+		if (!isPageContentType(session.contentType)) {
+			scheduleInactivityClose(id);
+			return { session, disposable: !persist, renderReady: true };
+		}
 		if (!waitForRender) {
 			scheduleInactivityClose(id);
 			return { session, disposable: !persist, renderReady: false };
@@ -714,6 +733,10 @@ export const openWebSession = async ({
 	captureIframeSnapshot(session);
 	WEB_SESSIONS.set(id, session);
 
+	if (!timedOut && !isPageContentType(session.contentType)) {
+		scheduleInactivityClose(id);
+		return { session, disposable: !persist, renderReady: true };
+	}
 	if (timedOut || !waitForRender) {
 		scheduleInactivityClose(id);
 		return {
@@ -1674,6 +1697,11 @@ export const waitForPageRender = async ({
 			continue;
 		}
 
+		// A file in the browser's viewer is as rendered as it will get.
+		if (!isPageContentType(session.contentType)) {
+			return { matched: true, html: session.html, lastText: session.text };
+		}
+
 		const currentSnapshot = {
 			currentUrl: session.currentUrl,
 			title: session.title,
@@ -1974,6 +2002,77 @@ export const fetchImageFromSession = async (
 	}
 
 	return { base64: response.base64, mimeType: response.mimeType };
+};
+
+const errorReason = (error: unknown): string =>
+	error instanceof Error ? error.message : String(error);
+
+/**
+ * A file's bytes: fetched from inside the session's tab when there is one,
+ * else downloaded directly.
+ *
+ * Inside the tab the request carries the site's cookies and its own Referer,
+ * which is how a PDF behind a login or a paywall proxy comes back at all; for
+ * a PDF the tab is showing it is usually served from cache too. A direct
+ * download sends neither, but needs no tab, and is the way through when the
+ * tab is gone or the file is too large for the page's message channel.
+ */
+export const downloadWebResource = async ({
+	url,
+	sessionId,
+	timeoutMs = DEFAULT_TIMEOUT_MS,
+	maxBytes,
+}: WebDownloadResourceArgs): Promise<WebDownloadedResource> => {
+	const session = sessionId
+		? (WEB_SESSIONS.get(sessionId) ?? (await recoverSession(sessionId)))
+		: null;
+	let sessionError: unknown;
+	if (
+		session &&
+		session.mode !== "iframe" &&
+		typeof session.tabId === "number"
+	) {
+		try {
+			const response = await sendWebBrowserCommand({
+				source: WEB_BROWSER_COMMAND_SOURCE,
+				command: "fetch-image",
+				sessionId: session.id,
+				url,
+				tabId: session.tabId,
+				timeoutMs,
+			});
+			if (response.command !== "fetch-image") {
+				throw new Error("Invalid fetch response from background.");
+			}
+			const bytes = decodeBase64Bytes(response.base64);
+			if (maxBytes && bytes.length > maxBytes) {
+				throw new Error(`The file is larger than ${maxBytes} bytes.`);
+			}
+			scheduleInactivityClose(session.id);
+			return { url, mimeType: response.mimeType, bytes };
+		} catch (error) {
+			sessionError = error;
+		}
+	}
+
+	try {
+		const downloaded = await downloadResourceBytes({
+			url,
+			timeoutMs,
+			maxBytes,
+		});
+		return {
+			url: downloaded.finalUrl,
+			mimeType: downloaded.mimeType,
+			bytes: downloaded.bytes,
+			...(downloaded.filename ? { filename: downloaded.filename } : {}),
+		};
+	} catch (directError) {
+		if (sessionError === undefined) throw directError;
+		throw new Error(
+			`Could not download ${url}. Through the page: ${errorReason(sessionError)}. Directly: ${errorReason(directError)}.`,
+		);
+	}
 };
 
 /**
