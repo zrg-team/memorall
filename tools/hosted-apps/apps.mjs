@@ -156,6 +156,17 @@ export const HOSTED_APP_BUILDS = [
 					"  else if (boards.some((b) => b.id === globalThis.__memorallLaunchBoard))\n    await openBoard(boards.find((b) => b.id === globalThis.__memorallLaunchBoard), { keepAddress: true });\n  else await followBoardAddress(location.href);\n  holdPreviews(false);",
 				count: 1,
 			},
+			{
+				// pdf.js's legacy build bundles core-js, whose old-IE fallback
+				// spells a "javascript:" URL in pieces; Chrome Web Store review
+				// rejects that as obfuscated code. The modern build has no
+				// polyfills and is the one Memorall itself runs everywhere.
+				file: "src/content/pdf-loader.js",
+				find: '    import("pdfjs-dist/legacy/build/pdf.min.mjs"),\n    import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"),',
+				replace:
+					'    import("pdfjs-dist/build/pdf.min.mjs"),\n    import("pdfjs-dist/build/pdf.worker.min.mjs?url"),',
+				count: 1,
+			},
 		],
 	},
 	{
