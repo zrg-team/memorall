@@ -378,7 +378,8 @@ const snapshotCode = (maxHtmlChars: number): string => `(() => {
     title: document.title || '',
     html: (document.documentElement?.outerHTML || document.body?.innerHTML || '').slice(0, ${Math.max(0, maxHtmlChars)}),
     text: (clone.body?.innerText || clone.documentElement?.textContent || '').trim(),
-    domAccessible: true
+    domAccessible: true,
+    contentType: document.contentType || ''
   };
 })()`;
 

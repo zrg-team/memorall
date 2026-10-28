@@ -77,6 +77,13 @@ Multiple web sessions can be open simultaneously. Use sessionId to target a spec
 - web_find_in_page: find text/regex matches inside the current rendered page content. It does not search the web or a search engine.
 - web_dom_action: query DOM nodes, click, input text, read node details, focus, scroll.
 - web_wait: wait for page render stability, a selector appear/disappear, or a fixed time delay.
+- web_download: download a file (PDF, image, audio, video, archive, spreadsheet, any data) from a URL and save it to the root filesystem.
+
+## FILES AND DOWNLOADS
+- A URL can be a file rather than a page, like https://arxiv.org/pdf/2610.32253. web_open, web_read and web_find_in_page notice this, save the file, and return a \`file\` object (\`path\`, \`mimeType\`, \`size\`) plus its readable text (a PDF's pages) as \`text\`/\`content\`. Do not web_wait for a file to render.
+- Use web_download when the user asks to download or save something, or to keep a file a page links to (a PDF link, an image src, an attachment). Pass the page's sessionId when the file needs that site's login.
+- Files land in /tmp/downloads by default: scratch space that is not indexed. When the user wants to keep a file, pass web_download a \`file_path\` outside /tmp.
+- Read a saved file's remaining text with the filesystem tools rather than downloading it again.
 
 ## WEB SEARCH TOOL
 - web_search opens each engine in a real browser tab, loads the search results page, and extracts titles, URLs, and snippets — all in a single call.
@@ -114,6 +121,7 @@ export const WEB_FEATURE_TOOLS: ToolName[] = [
 	"web_find_in_page",
 	"web_dom_action",
 	"web_wait",
+	"web_download",
 	hostTool("web_fetch_image"),
 ];
 

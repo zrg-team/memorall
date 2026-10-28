@@ -324,4 +324,26 @@ describe("folder indexer with OKF", () => {
 		]);
 		expect(state.running).toEqual([]);
 	});
+
+	it("leaves /tmp out of an index over the whole library", async () => {
+		const store = memoryStore();
+		const library = memoryLibrary({
+			"/Notes/todo.md": { content: "# Todo", documentType: "markdown" },
+			"/tmp/downloads/paper.pdf": { content: "%PDF-1.7" },
+		});
+		const indexer = new FolderIndexer(store, library);
+		indexer.register(new OkfIndex({ store, library }));
+		await indexer.setFolderType("/", "okf", true);
+		await indexer.whenIdle();
+
+		const { files } = await indexer.collectFiles(
+			await indexer.loadConfig(),
+			"okf",
+			"/",
+		);
+		expect(files.map((file) => file.path)).toEqual(["/Notes/todo.md"]);
+		await expect(indexer.setFolderType("/tmp", "okf", true)).rejects.toThrow(
+			"never indexed",
+		);
+	});
 });

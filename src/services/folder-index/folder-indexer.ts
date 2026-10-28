@@ -6,6 +6,7 @@ import {
 	indexRoots,
 	isSameOrInside,
 	isSkippedName,
+	isUnindexedPath,
 	moveFolderIndexRules,
 	normalizeFolderIndexConfig,
 	normalizeFolderPath,
@@ -260,7 +261,10 @@ export class FolderIndexer {
 	}
 
 	/** Brings up to date the indexes that cover any of these library paths. */
-	async syncPaths(paths: string[]): Promise<void> {
+	async syncPaths(changed: string[]): Promise<void> {
+		// A change in scratch space touches no index.
+		const paths = changed.filter((path) => !isUnindexedPath(path));
+		if (!paths.length) return;
 		const config = await this.loadConfig();
 		for (const type of this.types.values()) {
 			for (const root of indexRoots(config, type.id)) {
@@ -303,6 +307,10 @@ export class FolderIndexer {
 	): Promise<void> {
 		if (!this.types.has(typeId))
 			throw new Error(`Unknown index type: ${typeId}`);
+		if (enabled && isUnindexedPath(folder))
+			throw new Error(
+				`${normalizeFolderPath(folder)} is scratch space and is never indexed. Move the files somewhere else to index them.`,
+			);
 		const { before, after } = await this.updateConfig((config) =>
 			setFolderIndexType(config, folder, typeId, enabled),
 		);

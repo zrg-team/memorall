@@ -12,11 +12,17 @@ import {
 	withWebSessionTarget,
 } from "./web-input.js";
 import {
+	findInText,
+	isFileSession,
+	saveSessionFile,
+	type WebResourceServices,
+	webFileFields,
+} from "./web-resource.js";
+import {
 	createDefaultWebErrorResult,
 	createWebResult,
 	requireWebBrowserService,
 	resolveWebBlock,
-	type WebToolServices,
 	webBlockFields,
 } from "./web-tool-utils.js";
 
@@ -73,7 +79,7 @@ const schema = z.preprocess((input) => {
 type Input = z.infer<typeof schema>;
 type SearchResult = WebSearchMatch[];
 
-export const createWebSearchTool: ToolFactory<Input, WebToolServices> = (
+export const createWebSearchTool: ToolFactory<Input, WebResourceServices> = (
 	services,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
@@ -107,11 +113,8 @@ export const createWebSearchTool: ToolFactory<Input, WebToolServices> = (
 			}
 			const pattern = input.pattern ?? input.query;
 			const selector = input.selector?.trim() || undefined;
-
-			const matches: SearchResult = await webBrowser.searchInSessionHtml({
-				sessionId: session.id,
+			const searchOptions = {
 				pattern: pattern!,
-				selector,
 				isRegex: input.isRegex ?? false,
 				caseSensitive: input.caseSensitive ?? false,
 				maxMatches: Math.max(1, Math.min(50, input.maxMatches ?? 10)),
@@ -119,6 +122,32 @@ export const createWebSearchTool: ToolFactory<Input, WebToolServices> = (
 					20,
 					Math.min(2_000, input.maxSnippetChars ?? 180),
 				),
+			};
+
+			// A PDF's viewer has no text in its DOM: search the file's own text.
+			if (isFileSession(session)) {
+				const file = await saveSessionFile(services, session);
+				const matches = findInText(file.text ?? "", searchOptions);
+				const { file: fileInfo } = webFileFields(file, 0);
+				return createWebResult({
+					actionType: TOOL_NAME,
+					success: true,
+					sessionId: session.id,
+					url: session.currentUrl,
+					pattern,
+					matches,
+					count: matches.length,
+					file: fileInfo,
+					hint: file.text
+						? `This page is a file (${file.mimeType}); the matches come from its text.`
+						: `This page is a file (${file.mimeType}) with no text this tool can read.`,
+				});
+			}
+
+			const matches: SearchResult = await webBrowser.searchInSessionHtml({
+				sessionId: session.id,
+				selector,
+				...searchOptions,
 			});
 
 			const result = createWebResult({
@@ -149,7 +178,7 @@ declare global {
 	interface ToolTypeRegistry {
 		[TOOL_NAME]: {
 			input: Input;
-			services: WebToolServices;
+			services: WebResourceServices;
 		};
 	}
 }

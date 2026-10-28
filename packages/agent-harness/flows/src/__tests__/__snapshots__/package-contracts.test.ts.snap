@@ -700,6 +700,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
   "sandbox_snapshot",
   "send_message_to_agent",
   "web_dom_action",
+  "web_download",
   "web_find_in_page",
   "web_open",
   "web_read",
@@ -1934,6 +1935,42 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     },
   },
   {
+    "description": "Download a file from a URL — a PDF, image, audio, video, archive, spreadsheet or any other data — and save it to the root filesystem. Pass the sessionId of the page that links to it when the file needs that site's login. Returns the saved path, type and size; files stop at 50 MB.",
+    "name": "web_download",
+    "parameters": {
+      "properties": {
+        "file_path": {
+          "description": "Where to save it in the root filesystem: a file path, or a folder ending in "/". Default: /tmp/downloads/<filename>",
+          "type": "string",
+        },
+        "includeText": {
+          "description": "Also return the file's readable text (a PDF's pages, a CSV). Default false.",
+          "type": "boolean",
+        },
+        "maxChars": {
+          "description": "Limit the returned text when includeText is true. Values are clamped to 1024-500000.",
+          "type": "number",
+        },
+        "sessionId": {
+          "description": "Web session whose page fetches the file, so a file behind the site's login comes through. Downloads directly without one.",
+          "type": "string",
+        },
+        "timeoutMs": {
+          "description": "Download timeout in milliseconds (default 60000).",
+          "type": "number",
+        },
+        "url": {
+          "description": "Address of the file to download: a PDF, image, audio, video, archive, document or any other data.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "url",
+      ],
+      "type": "object",
+    },
+  },
+  {
     "description": "Find text or regex matches within the currently opened rendered page. This does not search the web or a search engine.",
     "name": "web_find_in_page",
     "parameters": {
@@ -1992,7 +2029,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     },
   },
   {
-    "description": "Open a web URL in a browser window (or \`tab\`; \`iframe\` only for a local server), wait for the initial navigation load, and expose \`sessionId\` for follow-up actions. When \`renderReady\` is false the page timed out but partial content is included — inspect \`partialContent\` to decide whether to call \`web_wait\` then \`web_read\`, or skip this page. If \`blocked\` is present the page is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the content: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
+    "description": "Open a web URL in a browser window (or \`tab\`; \`iframe\` only for a local server), wait for the initial navigation load, and expose \`sessionId\` for follow-up actions. When \`renderReady\` is false the page timed out but partial content is included — inspect \`partialContent\` to decide whether to call \`web_wait\` then \`web_read\`, or skip this page. If \`file\` is present the URL is a file (PDF, image, video, archive), not a page: it was saved to \`file.path\`, and \`text\` holds its readable text when it has any. If \`blocked\` is present the page is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the content: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
     "name": "web_open",
     "parameters": {
       "properties": {
@@ -2029,7 +2066,7 @@ exports[`Memorall flow registered contracts > registers every core tool contract
     },
   },
   {
-    "description": "Read rendered page content from an active web session or directly from a URL. Default output is readable text. If \`blocked\` is present the content is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the page: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
+    "description": "Read rendered page content from an active web session or directly from a URL. Default output is readable text. A URL that is a file (PDF, image, spreadsheet) is downloaded and saved instead: \`file.path\` says where, and \`content\` is its readable text. If \`blocked\` is present the content is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the page: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
     "name": "web_read",
     "parameters": {
       "properties": {

@@ -61,6 +61,7 @@ const buildWebSnapshot = (maxHtmlChars?: number) => {
 		),
 		text: capSnapshotString(extractReadableDocumentText(document), limit),
 		domAccessible: true,
+		contentType: document.contentType,
 	};
 };
 

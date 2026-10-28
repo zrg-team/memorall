@@ -90,6 +90,13 @@ export interface WebSession {
 	/** The last snapshot attempt failed; this content is the previous capture. */
 	stale?: boolean;
 	/**
+	 * MIME type of the document the page loaded (`document.contentType`). A
+	 * PDF, an image or a video loads as the browser's own viewer, whose DOM has
+	 * nothing to read: this is how a tool tells that the address is a file.
+	 * Absent where the backend does not report it, which reads as a web page.
+	 */
+	contentType?: string;
+	/**
 	 * Transport handle for the page: a browser tab id on the extension, a logical
 	 * session id on the desktop sidecar. Needed to hand the page to the user.
 	 */
@@ -205,6 +212,33 @@ export interface WebWaitResult {
 	lastText: string;
 }
 
+export interface WebDownloadResourceArgs {
+	url: string;
+	/**
+	 * Fetch from inside this session's page, so the site's cookies and Referer
+	 * apply: how a file behind a login comes through. Falls back to a direct
+	 * download.
+	 */
+	sessionId?: string;
+	timeoutMs?: number;
+	maxBytes?: number;
+}
+
+export interface WebDownloadedResource {
+	/** Where the bytes came from, after redirects. */
+	url: string;
+	mimeType: string;
+	bytes: Uint8Array;
+	/** The name the server gave the file (Content-Disposition), when known. */
+	filename?: string;
+}
+
+export interface WebResourceTextArgs {
+	url: string;
+	mimeType: string;
+	bytes: Uint8Array;
+}
+
 export interface IFlowWebBrowserLifecycleService {
 	isReady(): boolean;
 	getCapabilities?(): WebBrowserCapabilities;
@@ -251,12 +285,28 @@ export interface IFlowWebBrowserDomService {
 	waitForDomSelector(args: WebWaitDomSelectorArgs): Promise<WebWaitResult>;
 }
 
+export interface IFlowWebBrowserResourceService {
+	/**
+	 * Fetch a file's bytes. Absent: tools download with a plain `fetch`, which
+	 * carries none of the site's cookies.
+	 */
+	downloadResource?(
+		args: WebDownloadResourceArgs,
+	): Promise<WebDownloadedResource>;
+	/**
+	 * The readable text of a downloaded file (a PDF's pages), or null for a
+	 * format the backend cannot read. Absent: only text formats are read.
+	 */
+	readResourceText?(args: WebResourceTextArgs): Promise<string | null>;
+}
+
 export interface IFlowWebBrowserService
 	extends IFlowWebBrowserLifecycleService,
 		IFlowWebBrowserSessionService,
 		IFlowWebBrowserContentService,
 		IFlowWebBrowserInterventionService,
-		IFlowWebBrowserDomService {}
+		IFlowWebBrowserDomService,
+		IFlowWebBrowserResourceService {}
 
 declare global {
 	interface ServiceRegistry {

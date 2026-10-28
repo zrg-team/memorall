@@ -21,6 +21,8 @@ export interface BrowserSnapshot {
 	html: string;
 	text: string;
 	domAccessible: boolean;
+	/** `document.contentType`: a file type when the page is a PDF or image. */
+	contentType?: string;
 }
 
 export interface EngineFailure {

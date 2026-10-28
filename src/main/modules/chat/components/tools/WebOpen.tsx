@@ -48,6 +48,14 @@ export const webOpenRenderer: ActionRenderer = (item, isOpen) => {
 	const error = getString(payload, "error");
 	const blocked = getWebBlockDetails(payload);
 	const tabId = getToolNumber(payload, "tabId");
+	// Set when the URL was a file (a PDF, an image) saved instead of a page.
+	const file =
+		payload.file && typeof payload.file === "object"
+			? (payload.file as Record<string, unknown>)
+			: null;
+	const filePath = file ? getString(file, "path") : undefined;
+	const fileType = file ? getString(file, "mimeType") : undefined;
+	const fileSize = file ? getToolNumber(file, "size") : undefined;
 
 	return (
 		<div className="space-y-3">
@@ -124,6 +132,20 @@ export const webOpenRenderer: ActionRenderer = (item, isOpen) => {
 							<ToolDetail label="Current URL" value={currentUrl} mono />
 						) : null}
 						{title ? <ToolDetail label="Title" value={title} /> : null}
+						{filePath ? (
+							<ToolDetail label="Saved file" value={filePath} mono />
+						) : null}
+						{fileType ? (
+							<ToolDetail
+								label="File type"
+								value={
+									fileSize !== undefined
+										? `${fileType} · ${Math.max(1, Math.round(fileSize / 1024))} KB`
+										: fileType
+								}
+								mono
+							/>
+						) : null}
 					</ToolDetailsGrid>
 				</div>
 			</ToolSection>

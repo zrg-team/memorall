@@ -16,6 +16,15 @@ import {
 	normalizeWebMaxHtmlChars,
 } from "./max-html-chars.js";
 import {
+	isFileSession,
+	looksLikeFileUrl,
+	saveFileAt,
+	saveSessionFile,
+	type WebResourceServices,
+	type WebSavedFile,
+	webFileFields,
+} from "./web-resource.js";
+import {
 	createCleanHtml,
 	createDefaultWebErrorResult,
 	createWebResult,
@@ -24,7 +33,6 @@ import {
 	stripNonReadableHtml,
 	collapseReadableWhitespace,
 	truncateContent,
-	type WebToolServices,
 	webBlockFields,
 } from "./web-tool-utils.js";
 
@@ -301,6 +309,31 @@ const createReadResult = (
 	});
 };
 
+/** A file read in place of a page: its text is the content. */
+const createFileReadResult = (
+	file: WebSavedFile,
+	maxChars: number,
+	session?: WebSession,
+): ReturnType<typeof createWebResult> => {
+	const { text, ...fileFields } = webFileFields(file, maxChars);
+	return createWebResult({
+		actionType: "web_read",
+		success: true,
+		...(session
+			? {
+					sessionId: session.id,
+					title: session.title,
+					domAccessible: session.domAccessible,
+					browserMode: session.mode,
+				}
+			: {}),
+		url: file.url,
+		contentMode: "text",
+		content: typeof text === "string" ? text : "",
+		...fileFields,
+	});
+};
+
 const buildReadSnapshot = (
 	session: WebSession,
 	contentMode: ContentMode,
@@ -396,12 +429,12 @@ const readWithSmartRetry = async ({
 	});
 };
 
-export const createWebReadTool: ToolFactory<Input, WebToolServices> = (
+export const createWebReadTool: ToolFactory<Input, WebResourceServices> = (
 	services,
 ): Tool<Input> => ({
 	name: TOOL_NAME,
 	description:
-		"Read rendered page content from an active web session or directly from a URL. Default output is readable text. If `blocked` is present the content is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the page: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
+		"Read rendered page content from an active web session or directly from a URL. Default output is readable text. A URL that is a file (PDF, image, spreadsheet) is downloaded and saved instead: `file.path` says where, and `content` is its readable text. If `blocked` is present the content is a bot wall (CAPTCHA, Cloudflare, rate limit or login gate), not the page: stop, tell the user what is blocking, and do not retry the same URL — the user has a button to solve it themselves.",
 	schema,
 	execute: async (input, context) => {
 		const webBrowser = requireWebBrowserService(services);
@@ -411,15 +444,36 @@ export const createWebReadTool: ToolFactory<Input, WebToolServices> = (
 		const maxChars = normalizeWebMaxHtmlChars(input.maxHtmlChars);
 		const timeoutMs = Math.max(500, input.timeoutMs ?? 15_000);
 		try {
-			const sessionResult = await webBrowser.getOrOpenSession({
-				sessionId: input.sessionId,
-				url: input.url,
-				timeoutMs,
-				maxHtmlChars: maxChars,
-				browserMode: input.browserMode,
-			});
+			// See web_open: a file address is read without a tab.
+			const fileUrl = input.sessionId ? undefined : input.url;
+			if (fileUrl && looksLikeFileUrl(fileUrl)) {
+				const file = await saveFileAt(services, fileUrl);
+				if (file) return createFileReadResult(file, maxChars);
+			}
+
+			let sessionResult: Awaited<
+				ReturnType<typeof webBrowser.getOrOpenSession>
+			>;
+			try {
+				sessionResult = await webBrowser.getOrOpenSession({
+					sessionId: input.sessionId,
+					url: input.url,
+					timeoutMs,
+					maxHtmlChars: maxChars,
+					browserMode: input.browserMode,
+				});
+			} catch (openError) {
+				const file = fileUrl ? await saveFileAt(services, fileUrl) : null;
+				if (file) return createFileReadResult(file, maxChars);
+				throw openError;
+			}
 			disposableSession = sessionResult.disposable;
 			sessionId = sessionResult.session.id;
+
+			if (isFileSession(sessionResult.session)) {
+				const file = await saveSessionFile(services, sessionResult.session);
+				return createFileReadResult(file, maxChars, sessionResult.session);
+			}
 
 			// Park here if the page is a bot wall. A disposable session must survive
 			// the wait: closing it would take away the page the handoff raises.
@@ -482,7 +536,7 @@ declare global {
 	interface ToolTypeRegistry {
 		[TOOL_NAME]: {
 			input: Input;
-			services: WebToolServices;
+			services: WebResourceServices;
 		};
 	}
 }

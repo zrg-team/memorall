@@ -24,6 +24,8 @@ export interface WebSession {
 	block?: WebBlockSignal | null;
 	/** The last snapshot attempt failed; this content is the previous capture. */
 	stale?: boolean;
+	/** `document.contentType`: a file type when the tab shows a PDF or image. */
+	contentType?: string;
 	/**
 	 * Transport handle for the page: a browser tab id on the extension, a logical
 	 * session id on the desktop sidecar. Needed to hand the page to the user.
