@@ -191,7 +191,25 @@ export interface InjectChatMessagePayload {
 	message: FlowRunInboxMessage;
 }
 
+/**
+ * A chat run in flight and the chat it writes to. A page that did not start
+ * the run (Main Chat, while the co-agent answers on a page) learns of it from
+ * this, so it can show the chat as running.
+ */
+export interface ChatRunInfo {
+	jobId: string;
+	conversationId: string;
+	/** The reply being written. */
+	messageId?: string;
+	startedAt: number;
+}
+
 export type ChatResult =
+	| {
+			/** The run began; sent first, before any other progress. */
+			type: "run-started";
+			run: ChatRunInfo;
+	  }
 	| {
 			type: "chunk";
 			chunk?: ChatCompletionChunk;
@@ -281,6 +299,7 @@ const JOB_NAMES = {
 	chat: "chat",
 	stopChat: "stop-chat",
 	injectChatMessage: "inject-chat-message",
+	listChatRuns: "list-chat-runs",
 } as const;
 
 /** How long a stop that arrived before its run is remembered. */
@@ -302,6 +321,11 @@ type StopChatJob = BaseJob & {
 type InjectChatMessageJob = BaseJob & {
 	jobType: typeof JOB_NAMES.injectChatMessage;
 	payload: InjectChatMessagePayload;
+};
+
+type ListChatRunsJob = BaseJob & {
+	jobType: typeof JOB_NAMES.listChatRuns;
+	payload: Record<string, never>;
 };
 
 type TokenUsage = ChatCompletionUsage;
@@ -1246,12 +1270,18 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 	private readonly stoppedBeforeStart = new Set<string>();
 	/** What the user wrote to each run in flight, by job id. */
 	private readonly runInboxes = new Map<string, FlowRunInbox>();
+	/** The chat each run in flight writes to, by job id. */
+	private readonly runChats = new Map<string, ChatRunInfo>();
 
 	async process(
 		jobId: string,
-		job: ChatJob | StopChatJob | InjectChatMessageJob,
+		job: ChatJob | StopChatJob | InjectChatMessageJob | ListChatRunsJob,
 		dependencies: ProcessDependencies,
 	): Promise<ItemHandlerResult> {
+		if (job.jobType === JOB_NAMES.listChatRuns) {
+			// For a page that opened while a run started elsewhere was going.
+			return { runs: [...this.runChats.values()] };
+		}
 		if (job.jobType === JOB_NAMES.injectChatMessage) {
 			// Refused once the run is over: the sender sends it as a new message.
 			const { targetJobId, message } = job.payload;
@@ -1278,10 +1308,31 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 		if (this.stoppedBeforeStart.delete(jobId)) stop.abort();
 		const inbox = createFlowRunInbox();
 		this.runInboxes.set(jobId, inbox);
+		const conversation = job.payload.conversation;
+		if (conversation?.id) {
+			// Every page hears a run's progress; this tells them which chat it is,
+			// so one that did not start it (Main Chat, while the co-agent answers
+			// on a page) can show that chat as running.
+			const run: ChatRunInfo = {
+				jobId,
+				conversationId: conversation.id,
+				messageId: conversation.inProgressMessage?.id,
+				startedAt: Date.now(),
+			};
+			this.runChats.set(jobId, run);
+			await dependencies
+				.updateJobProgress(jobId, {
+					stage: "Starting...",
+					progress: 1,
+					result: { type: "run-started", run } satisfies ChatResult,
+				})
+				.catch(() => undefined);
+		}
 		try {
 			return await this.runChat(jobId, job, dependencies, stop.signal, inbox);
 		} finally {
 			this.runStops.delete(jobId);
+			this.runChats.delete(jobId);
 			// Whatever the agent did not get to read goes out as a new message.
 			inbox.close();
 			this.runInboxes.delete(jobId);
@@ -2121,7 +2172,12 @@ export class ChatHandler extends BaseProcessHandler<ChatJob | StopChatJob> {
 const chatHandler = new ChatHandler();
 handlerRegistry.register({
 	instance: chatHandler,
-	jobs: [JOB_NAMES.chat, JOB_NAMES.stopChat, JOB_NAMES.injectChatMessage],
+	jobs: [
+		JOB_NAMES.chat,
+		JOB_NAMES.stopChat,
+		JOB_NAMES.injectChatMessage,
+		JOB_NAMES.listChatRuns,
+	],
 });
 
 // Extend global registry for smart type inference
@@ -2130,6 +2186,7 @@ declare global {
 		chat: ChatPayload;
 		"stop-chat": StopChatPayload;
 		"inject-chat-message": InjectChatMessagePayload;
+		"list-chat-runs": Record<string, never>;
 	}
 
 	interface JobResultRegistry {
@@ -2137,5 +2194,7 @@ declare global {
 		"stop-chat": { stopped: boolean };
 		/** False when the run was already over. */
 		"inject-chat-message": { accepted: boolean };
+		/** The chat runs in flight, wherever they were started. */
+		"list-chat-runs": { runs: ChatRunInfo[] };
 	}
 }

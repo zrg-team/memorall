@@ -13,6 +13,7 @@ import type {
 	ComplexContent,
 	ConversationContext,
 	MessageParts,
+	ToolExecutionRecord,
 } from "@/types/chat";
 import {
 	hasReplyParts,
@@ -68,6 +69,8 @@ export interface ChatStreamOptions extends ChatServiceOptions {
 		node: string;
 		metadata?: Record<string, unknown>;
 	}) => void;
+	/** A tool call started, reported progress, or finished. */
+	onToolExecution?: (execution: ToolExecutionRecord) => void;
 	onError?: (error: string) => void;
 	signal?: AbortSignal;
 }
@@ -179,6 +182,7 @@ export class EmbeddedChatService {
 			onAction,
 			onToolCalls,
 			onExecuteStart,
+			onToolExecution,
 			onError,
 			signal,
 		} = options;
@@ -359,6 +363,8 @@ export class EmbeddedChatService {
 						metadata: chatResult.metadata,
 					};
 					onExecuteStart?.(event);
+				} else if (chatResult.type === "tool-execution") {
+					onToolExecution?.(chatResult.execution);
 				} else if (chatResult.type === "action" && chatResult.actions) {
 					finalActions = mergeActions(finalActions, chatResult.actions);
 					onAction?.([...finalActions]);

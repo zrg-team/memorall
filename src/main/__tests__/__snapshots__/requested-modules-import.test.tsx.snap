@@ -172,6 +172,7 @@ exports[`requested main module coverage > imports chat, documents, agents, agent
   "../modules/chat/components/types/index.ts",
   "../modules/chat/hooks/index.ts",
   "../modules/chat/hooks/use-chat.ts",
+  "../modules/chat/hooks/use-external-chat-runs.ts",
   "../modules/chat/hooks/use-frame-coalesced-state.ts",
   "../modules/chat/hooks/use-refresh-on-focus.ts",
   "../modules/chat/services/chat-service.ts",

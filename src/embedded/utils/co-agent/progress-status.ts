@@ -67,8 +67,36 @@ export const humanizeName = (name: string): string => {
 	return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
 
-export const describeToolName = (toolName: string): string =>
-	TOOL_LABELS[toolName] ?? humanizeName(toolName);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
+/**
+ * An MCP tool's own name for itself. Its call name is `<server>__<tool>`; the
+ * server's title (or the tool's name without the server) is what reads well.
+ */
+const mcpToolLabel = (
+	toolName: string,
+	toolMetadata?: Record<string, unknown>,
+): string | undefined => {
+	const mcp = isRecord(toolMetadata?.mcp) ? toolMetadata.mcp : undefined;
+	const title = typeof mcp?.title === "string" ? mcp.title.trim() : "";
+	if (title) return title;
+	const original =
+		typeof mcp?.originalToolName === "string" ? mcp.originalToolName : "";
+	if (original) return humanizeName(original);
+	const separator = toolName.indexOf("__");
+	return separator > 0
+		? humanizeName(toolName.slice(separator + 2))
+		: undefined;
+};
+
+export const describeToolName = (
+	toolName: string,
+	toolMetadata?: Record<string, unknown>,
+): string =>
+	TOOL_LABELS[toolName] ??
+	mcpToolLabel(toolName, toolMetadata) ??
+	humanizeName(toolName);
 
 const normalizeNode = (node: string): string => node.trim().toLowerCase();
 
@@ -97,10 +125,65 @@ export const progressForNode = (
 };
 
 /** The status while a specific tool is running. */
-export const progressForTool = (toolName: string): CoAgentProgress => ({
+export const progressForTool = (
+	toolName: string,
+	toolMetadata?: Record<string, unknown>,
+): CoAgentProgress => ({
 	kind: "tool",
-	label: describeToolName(toolName),
+	label: describeToolName(toolName, toolMetadata),
 });
+
+/**
+ * The status for a step or tool the run just started.
+ *
+ * A tool's start comes through the tool dispatcher's node with the tool's
+ * name beside it; that name is the answer. It used to be read as the bare
+ * dispatcher node and shown as "Thinking" for as long as the tool ran.
+ */
+export const progressForExecuteStart = (
+	event: { node?: unknown; metadata?: Record<string, unknown> },
+	thinkingLabel: string,
+): CoAgentProgress => {
+	const tool = event.metadata?.tool;
+	if (typeof tool === "string" && tool.trim()) {
+		const toolMetadata = isRecord(event.metadata?.tool_metadata)
+			? event.metadata.tool_metadata
+			: undefined;
+		return progressForTool(tool.trim(), toolMetadata);
+	}
+	return progressForNode(
+		typeof event.node === "string" ? event.node : undefined,
+		thinkingLabel,
+	);
+};
+
+export interface CoAgentToolExecution {
+	id: string;
+	name: string;
+	status: string;
+	toolMetadata?: Record<string, unknown>;
+}
+
+/**
+ * Follows a run's tool calls as they start and finish. The status names a
+ * tool for as long as one is running (the latest started, when calls run side
+ * by side) and says thinking once none is, since the model reads the results
+ * next. One tracker per run.
+ */
+export const createToolProgressTracker = (thinkingLabel: string) => {
+	const running = new Map<string, CoAgentToolExecution>();
+	return (execution: CoAgentToolExecution): CoAgentProgress => {
+		if (execution.status === "running") {
+			if (!running.has(execution.id)) running.set(execution.id, execution);
+		} else {
+			running.delete(execution.id);
+		}
+		const latest = [...running.values()].at(-1);
+		return latest
+			? progressForTool(latest.name, latest.toolMetadata)
+			: { kind: "thinking", label: thinkingLabel };
+	};
+};
 
 /**
  * The name of the tool a run is currently on: the last one it asked for.

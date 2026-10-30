@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+	createToolProgressTracker,
 	describeToolName,
 	humanizeName,
 	latestToolName,
+	progressForExecuteStart,
 	progressForNode,
 	progressForTool,
 } from "../progress-status";
@@ -77,5 +79,54 @@ describe("what the dock says it is doing", () => {
 
 	it("leaves an empty name empty rather than inventing one", () => {
 		expect(humanizeName("   ")).toBe("");
+	});
+
+	it("names the tool a tool start is for, not the dispatcher", () => {
+		// The dispatcher's start carries the tool; it used to read as Thinking
+		// for as long as the tool ran.
+		expect(
+			progressForExecuteStart(
+				{ node: "tool_executor", metadata: { tool: "web_open" } },
+				THINKING,
+			),
+		).toEqual({ kind: "tool", label: "Opening a page" });
+		expect(progressForExecuteStart({ node: "web-feature" }, THINKING)).toEqual({
+			kind: "step",
+			label: "Web feature",
+		});
+		expect(
+			progressForExecuteStart({ node: "agent-completion" }, THINKING).label,
+		).toBe(THINKING);
+	});
+
+	it("names an MCP tool by its own title", () => {
+		expect(
+			describeToolName("github__create_issue", {
+				source: "mcp",
+				mcp: { title: "Create GitHub issue", originalToolName: "create_issue" },
+			}),
+		).toBe("Create GitHub issue");
+		expect(describeToolName("github__create_issue")).toBe("Create issue");
+	});
+
+	it("follows tool calls until none is running", () => {
+		const follow = createToolProgressTracker(THINKING);
+		expect(follow({ id: "a", name: "web_open", status: "running" }).label).toBe(
+			"Opening a page",
+		);
+		expect(follow({ id: "b", name: "web_read", status: "running" }).label).toBe(
+			"Reading a page",
+		);
+		// A progress report from the first call does not take over the status.
+		expect(follow({ id: "a", name: "web_open", status: "running" }).label).toBe(
+			"Reading a page",
+		);
+		expect(
+			follow({ id: "b", name: "web_read", status: "completed" }).label,
+		).toBe("Opening a page");
+		expect(follow({ id: "a", name: "web_open", status: "failed" })).toEqual({
+			kind: "thinking",
+			label: THINKING,
+		});
 	});
 });

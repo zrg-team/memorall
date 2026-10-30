@@ -8,8 +8,9 @@ import { buildAttachedContexts } from "@/embedded/utils/co-agent/attached-contex
 import { buildStoredTurn } from "@/embedded/utils/co-agent/stored-turn";
 import { createSmartSelectOverlay } from "@/embedded/components/SmartSelectOverlay";
 import {
+	createToolProgressTracker,
 	latestToolName,
-	progressForNode,
+	progressForExecuteStart,
 	progressForTool,
 } from "@/embedded/utils/co-agent/progress-status";
 import {
@@ -418,6 +419,7 @@ ${text}`
 		setIsSubmitting(true);
 		setMessage("");
 		setStatusLine(t("thinking"));
+		const followTool = createToolProgressTracker(t("thinking"));
 
 		let assistantMessageId: string | null = null;
 		let currentContent = "";
@@ -527,17 +529,16 @@ ${text}`
 				},
 				anchorContext: anchor && !anchor.isStale ? anchor : undefined,
 				onExecuteStart: (executeState) => {
-					// The node name is the machinery, not the work. Anything that is
-					// the model composing reads as one steady "Thinking…"; a tool run
-					// waits for the tool name, which arrives on onToolCalls.
+					// The node name is the machinery, not the work. The model
+					// composing reads as one steady "Thinking…", a step by its name,
+					// and a tool run by the tool its start names.
 					setStatusLine(
-						progressForNode(
-							typeof executeState.node === "string"
-								? executeState.node
-								: undefined,
-							t("thinking"),
-						).label,
+						progressForExecuteStart(executeState, t("thinking")).label,
 					);
+				},
+				onToolExecution: (execution) => {
+					// Named while it runs; back to thinking once no tool is.
+					setStatusLine(followTool(execution).label);
 				},
 				onProgress: (content) => {
 					if (content.trim()) {
