@@ -1,3 +1,4 @@
+import { refineMimeType } from "@memorall/agent-harness-flows/utils/download-resource";
 import type { DocumentType } from "@/types/document-library";
 
 /**
@@ -105,6 +106,20 @@ const extensionOf = (path: string): string =>
 
 export const memonFileKind = (path: string): MemonFileKind =>
 	EXTENSION_KIND[extensionOf(path)] ?? "text";
+
+/**
+ * The kind a file's first bytes show, for a file whose name says nothing
+ * (no extension, or "2610.32253"). Decoded and put in the Editor, a PDF's
+ * bytes crashed the app; a zero byte early on means binary, as git and curl
+ * tell.
+ */
+export const memonContentKind = (bytes: Uint8Array): MemonFileKind => {
+	const type = refineMimeType("application/octet-stream", bytes);
+	if (type === "application/pdf") return "pdf";
+	if (type.startsWith("image/")) return "image";
+	if (type !== "application/octet-stream") return "binary";
+	return bytes.subarray(0, 8000).includes(0) ? "binary" : "text";
+};
 
 export const memonMimeType = (path: string): string =>
 	MIME_TYPES[extensionOf(path)] ?? "application/octet-stream";

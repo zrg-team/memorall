@@ -21,6 +21,7 @@ import type { WebResourceServices } from "../tools/web/web-resource.js";
 import { createWebSearchTool } from "../tools/web/web-search.js";
 import {
 	filenameFromContentDisposition,
+	filenameFromUrl,
 	refineMimeType,
 	resourceFileName,
 } from "../utils/download-resource.js";
@@ -153,6 +154,17 @@ describe("file detection", () => {
 		).toBe("Q3.pdf");
 		expect(resourceFileName("https://x.test/", "application/zip")).toBe(
 			"download.zip",
+		);
+		expect(resourceFileName("https://x.test/site", "text/css")).toBe(
+			"site.css",
+		);
+		// The image tools' naming does not take digits after a dot for an
+		// extension either.
+		expect(filenameFromUrl("https://x.test/i/hero.webp", "image/webp")).toBe(
+			"hero.webp",
+		);
+		expect(filenameFromUrl("https://x.test/i/2610.32253", "image/png")).toMatch(
+			/^asset-.+\.png$/,
 		);
 	});
 

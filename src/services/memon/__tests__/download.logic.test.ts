@@ -18,6 +18,19 @@ describe("downloadFileName", () => {
 		expect(downloadFileName("https://a.test/a:b", "")).toBe("a-b");
 	});
 
+	it("does not take a dot in the address for an extension", () => {
+		expect(
+			downloadFileName("https://arxiv.org/pdf/2610.32253", "application/pdf"),
+		).toBe("2610.32253.pdf");
+		expect(
+			downloadFileName(
+				"https://a.test/get?id=1",
+				"application/pdf",
+				"Report.pdf",
+			),
+		).toBe("Report.pdf");
+	});
+
 	it("reads sizes the way a person does", () => {
 		expect(formatDownloadSize(512)).toBe("512 B");
 		expect(formatDownloadSize(24 * 1024)).toBe("24 KB");

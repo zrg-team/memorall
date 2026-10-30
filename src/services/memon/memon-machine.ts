@@ -4,6 +4,7 @@ import type {
 	FolderZip,
 	ZipExtraction,
 } from "@/services/filesystem/folder-zip";
+import { refineMimeType } from "@memorall/agent-harness-flows/utils/download-resource";
 import { isHyperframesComposition } from "@/services/flows-integrations/tools/hyperframes/reference";
 import { isScreenCaptureWithheldMessage } from "@/services/web-browser/site-access";
 import type {
@@ -76,7 +77,11 @@ import {
 	DEFAULT_MEMON_FEATURE_CONFIG,
 	type MemonFeatureConfig,
 } from "./feature-config";
-import { type MemonViewerKind, memonFileKind } from "./file-kinds";
+import {
+	type MemonFileKind,
+	type MemonViewerKind,
+	memonFileKind,
+} from "./file-kinds";
 import { MemonFileSync } from "./file-sync";
 import type { MemonModelsPort } from "./models-port";
 import type {
@@ -225,6 +230,8 @@ export interface MemonFilesPort {
 		onProgress?: (percent: number) => void,
 	): Promise<ZipExtraction>;
 	subscribe(listener: () => void): () => void;
+	/** The kind a file's bytes show, for a name that says nothing. */
+	contentKind?(path: string): Promise<MemonFileKind>;
 	/** What the agent reads of a file the Viewer shows. */
 	preview(
 		path: string,
@@ -283,9 +290,13 @@ export interface MemonConnectionsPort {
 
 /** Fetches a file from the web, to save into Files. */
 export interface MemonDownloadPort {
-	fetch(
-		url: string,
-	): Promise<{ bytes: Uint8Array; contentType: string; url: string }>;
+	fetch(url: string): Promise<{
+		bytes: Uint8Array;
+		contentType: string;
+		url: string;
+		/** The name the server gave the file (Content-Disposition), if any. */
+		filename?: string;
+	}>;
 }
 
 /** Agents' homes, `/agents/<agent name>`. */
@@ -2170,8 +2181,15 @@ export class MemonMachine {
 		const hostedApp = asApp ? await this.hosted.appFor(target) : null;
 		if (hostedApp) return this.hosted.open(hostedApp, target);
 		// PDFs, images, media and spreadsheets always open in the Viewer; the
-		// Editor would show their bytes as noise.
-		const kind = memonFileKind(target);
+		// Editor would show their bytes as noise. A name that says nothing (no
+		// extension, or "2610.32253") is judged by its bytes: a PDF decoded into
+		// the Editor crashed the app.
+		let kind = memonFileKind(target);
+		if (kind === "text" && this.ports.files.contentKind) {
+			kind = await this.ports.files
+				.contentKind(target)
+				.catch((): MemonFileKind => "text");
+		}
 		if (kind !== "text") return this.openViewer(target, kind);
 		let content = "";
 		let saved = true;
@@ -2471,18 +2489,17 @@ export class MemonMachine {
 			);
 		}
 		const fetched = await download.fetch(source);
+		// Many servers label every file octet-stream; the bytes say what it is,
+		// and the name's extension is what later opens it in the right app.
+		const type = refineMimeType(fetched.contentType, fetched.bytes);
 		const path = await this.placeFile(
 			to,
 			MEMON_DOWNLOADS_DIR,
-			downloadFileName(fetched.url, fetched.contentType),
+			downloadFileName(fetched.url, type, fetched.filename),
 		);
 		await this.ports.files.write(path, fetched.bytes);
 		await this.refreshFiles().catch(() => undefined);
-		return {
-			path,
-			size: fetched.bytes.byteLength,
-			type: fetched.contentType.split(";")[0]?.trim() ?? "",
-		};
+		return { path, size: fetched.bytes.byteLength, type };
 	}
 
 	/**

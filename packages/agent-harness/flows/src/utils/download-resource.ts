@@ -44,6 +44,9 @@ const RESOURCE_EXTENSIONS: Record<string, string[]> = {
 	"application/json": [".json"],
 	"application/xml": [".xml"],
 	"application/wasm": [".wasm"],
+	"application/javascript": [".js", ".mjs"],
+	"text/javascript": [".js", ".mjs"],
+	"text/css": [".css"],
 	"text/csv": [".csv"],
 	"text/tab-separated-values": [".tsv"],
 	"text/markdown": [".md", ".markdown"],
@@ -126,7 +129,8 @@ export const filenameFromUrl = (url: string, mimeType: string): string => {
 	try {
 		const { pathname } = new URL(url);
 		const base = pathname.split("/").filter(Boolean).pop() ?? "";
-		if (base && /\.\w{2,5}$/.test(base)) return base;
+		// An extension starts with a letter: "2610.32253" has none.
+		if (base && /\.[a-z][a-z0-9]{1,4}$/i.test(base)) return base;
 	} catch {
 		// Fall through to generated filename.
 	}

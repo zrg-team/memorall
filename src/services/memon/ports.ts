@@ -1,4 +1,5 @@
 import type { IFlowFileSystem } from "@memorall/agent-harness-flows/interfaces/services/filesystem";
+import { filenameFromContentDisposition } from "@memorall/agent-harness-flows/utils/download-resource";
 import type { IAgentSandboxService } from "@memorall/agent-harness-sandbox";
 import { platform } from "@/platform/current";
 import { getLocalTimezone } from "@/services/cron-jobs/cron-expression";
@@ -45,7 +46,11 @@ import {
 import { loadMemonDesktopFiles, migrateMemonHomeFiles } from "./desktop-files";
 import { formatDownloadSize, MEMON_DOWNLOAD_MAX_BYTES } from "./download";
 import { createMemonEmbeddedPort } from "./embedded-browser";
-import { type MemonViewerKind, memonMimeType } from "./file-kinds";
+import {
+	type MemonViewerKind,
+	memonContentKind,
+	memonMimeType,
+} from "./file-kinds";
 import type {
 	MemonAvailability,
 	MemonBrowserPort,
@@ -329,6 +334,9 @@ export const createMemonFilesPort = (
 		}),
 	subscribe: (listener) =>
 		documentFileSystemService.onFilesystemChanged(() => listener()),
+	async contentKind(path) {
+		return memonContentKind((await fs.readFile(path)) as Uint8Array);
+	},
 	async preview(path, kind) {
 		const bytes = (await fs.readFile(path)) as Uint8Array;
 		return {
@@ -671,10 +679,14 @@ export const createMemonDownloadPort = (): MemonDownloadPort => ({
 				`${url} is over ${formatDownloadSize(MEMON_DOWNLOAD_MAX_BYTES)}; downloads stop there.`,
 			);
 		}
+		const filename = filenameFromContentDisposition(
+			response.headers.get("content-disposition"),
+		);
 		return {
 			bytes,
 			contentType: response.headers.get("content-type") ?? "",
 			url: response.url || url,
+			...(filename ? { filename } : {}),
 		};
 	},
 });
