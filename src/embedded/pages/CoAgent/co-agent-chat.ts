@@ -29,6 +29,7 @@ export interface CoAgentChatStreamOptions
 		ChatStreamOptions,
 		| "model"
 		| "onExecuteStart"
+		| "onToolExecution"
 		| "onProgress"
 		| "onAction"
 		| "onToolCalls"
@@ -174,6 +175,7 @@ export const coAgentChatService = {
 				renderAnchorContextPrompt(options.anchorContext),
 			].filter((message): message is string => Boolean(message)),
 			onExecuteStart: options.onExecuteStart,
+			onToolExecution: options.onToolExecution,
 			onParts: options.onParts,
 			onProgress: options.onProgress,
 			onAction: options.onAction,

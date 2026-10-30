@@ -55,6 +55,7 @@ import { useHostedAppFor } from "../hooks/use-hosted-app";
 import { changeTouches } from "../utils/change-touches";
 import { HostedAppFrame } from "./HostedAppFrame";
 import { HOSTED_APPS_DATA_DIR } from "@/services/memon/apps/hosted/catalog";
+import { memonContentKind } from "@/services/memon/file-kinds";
 
 interface DocumentViewerProps {
 	file: DocumentFile;
@@ -82,11 +83,12 @@ const blobPart = (bytes: Uint8Array): Uint8Array<ArrayBuffer> =>
 		: bytes.slice();
 
 /**
- * Whether bytes are not text: a zero byte early on, as git and curl tell.
- * Decoded and drawn as code, a big zip overflowed the stack.
+ * Whether bytes are not text: a known file signature (a PDF saved without
+ * its extension) or a zero byte early on, as git and curl tell. Decoded and
+ * drawn as code, a big zip overflowed the stack.
  */
 const isBinaryContent = (bytes: Uint8Array): boolean =>
-	bytes.subarray(0, 8000).includes(0);
+	memonContentKind(bytes) !== "text";
 
 /** One empty list, so a default does not count as a new prop each render. */
 const EMPTY_TOPIC_IDS: string[] = [];

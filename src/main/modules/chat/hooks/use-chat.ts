@@ -5,7 +5,10 @@ import {
 } from "@/services/chat/coagent-session";
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { chatService } from "@/main/modules/chat/services/chat-service";
+import {
+	type ChatStreamCallbacks,
+	chatService,
+} from "@/main/modules/chat/services/chat-service";
 import { getAgentOpenUITheme } from "@/main/modules/chat/utils/agent-openui-theme";
 import { buildSendMessages } from "@/main/modules/chat/utils/build-send-messages";
 import {
@@ -210,6 +213,72 @@ const withoutKey = <T>(map: Record<string, T>, key: string) => {
 	if (!(key in map)) return map;
 	const { [key]: _removed, ...rest } = map;
 	return rest;
+};
+
+/**
+ * Shows a reply that another page is writing into `conversationId` (the
+ * co-agent answering on a web page) the way this page shows its own: text,
+ * steps and tool calls as they stream. Returns the callbacks that feed it,
+ * and `end`, which takes it down once the saved reply has been read back.
+ */
+export const showLiveReply = (
+	conversationId: string,
+	messageId: string,
+): { callbacks: ChatStreamCallbacks; end: () => void } => {
+	const update = (change: (message: InProgressMessage) => InProgressMessage) =>
+		inProgressUpdates.setCoalesced((previous) => {
+			const current = previous[conversationId];
+			return current?.id === messageId
+				? { ...previous, [conversationId]: change(current) }
+				: previous;
+		});
+	inProgressUpdates.setImmediate((previous) => ({
+		...previous,
+		[conversationId]: {
+			id: messageId,
+			conversationId,
+			content: "",
+			complexContent: null,
+			parts: null,
+			actions: [],
+		},
+	}));
+	return {
+		callbacks: {
+			onContent: (content) => update((previous) => ({ ...previous, content })),
+			onParts: (parts) => update((previous) => ({ ...previous, parts })),
+			onAction: (actions) =>
+				update((previous) => ({
+					...previous,
+					actions: cloneActions(actions),
+				})),
+			onExecuteStart: (event) =>
+				update((previous) => ({
+					...previous,
+					executeState: event,
+					executions: addStreamingExecution(previous.executions, event),
+				})),
+			onToolExecution: (execution) =>
+				update((previous) => ({
+					...previous,
+					toolExecutions: upsertToolExecution(
+						previous.toolExecutions ?? [],
+						execution,
+					),
+				})),
+			onCompaction: (compaction) =>
+				update((previous) => ({
+					...previous,
+					compactions: [...(previous.compactions ?? []), compaction],
+				})),
+		},
+		end: () =>
+			inProgressUpdates.setImmediate((previous) =>
+				previous[conversationId]?.id === messageId
+					? withoutKey(previous, conversationId)
+					: previous,
+			),
+	};
 };
 
 /**

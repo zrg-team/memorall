@@ -12,6 +12,11 @@ const REMOTE_SCRIPT_PATTERN =
 	/<script\b[^>]*\bsrc\s*=\s*["']https?:\/\/[^"']+["'][^>]*>/gi;
 const REMOTE_IMPORT_PATTERN =
 	/(?:importScripts|import)\s*\(\s*["'`]https?:\/\/[^"'`]+["'`]/gi;
+// A "javascript:" URL assembled from pieces, like core-js's old-IE fallback
+// `"java" + SCRIPT + ":"`. Chrome Web Store review rejects it as obfuscated
+// code even where it never runs.
+const SPLIT_JAVASCRIPT_URL_PATTERN =
+	/["'`]java["'`]\s*\+\s*(?:[\w$.]+|["'`]script["'`])\s*\+\s*["'`]:["'`]|["'`]java["'`]\s*\+\s*["'`]script:["'`]/gi;
 
 const isDocumentationUrl = (value) =>
 	/^https?:\/\/(?:github\.com|raw\.githubusercontent\.com)\//i.test(value) ||
@@ -22,6 +27,7 @@ const patterns = [
 	["remote executable URL", EXECUTABLE_URL_PATTERN, isDocumentationUrl],
 	["remote script tag", REMOTE_SCRIPT_PATTERN],
 	["remote dynamic import", REMOTE_IMPORT_PATTERN],
+	["split javascript: URL", SPLIT_JAVASCRIPT_URL_PATTERN],
 ];
 
 const requestedRoots = process.argv.slice(2);

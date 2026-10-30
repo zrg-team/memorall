@@ -67,6 +67,7 @@ import { useCoAgentToggle } from "@/main/stores/co-agent-activation";
 import { LOCAL_PROVIDERS } from "@/main/hooks/selectable-model";
 import { useInProgressMessage } from "@/main/modules/chat/hooks/use-chat";
 import { useRefreshOnFocus } from "@/main/modules/chat/hooks/use-refresh-on-focus";
+import { useExternalChatRuns } from "@/main/modules/chat/hooks/use-external-chat-runs";
 import { useRuntimeSessionsStore } from "@/main/stores/runtime-sessions";
 import {
 	useAgentComputer,
@@ -217,9 +218,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 		(state) => state.restoreSelectedAgentFlowId,
 	);
 
-	// The co-agent writes into this same conversation from a content script, and
-	// nothing tells this page about it. Re-read when the user comes back, so a
-	// turn taken on the web page is not missing here.
+	// The co-agent writes into this same conversation from a content script.
+	// Its runs show as running here while they last, and the conversation is
+	// re-read when the user comes back, so a turn taken on the web page is not
+	// missing here.
+	useExternalChatRuns();
 	const loadConversation = useChatStore((state) => state.loadConversation);
 	const createNewConversation = useChatStore(
 		(state) => state.createNewConversation,

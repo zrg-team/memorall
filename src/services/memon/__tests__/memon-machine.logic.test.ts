@@ -1067,6 +1067,31 @@ describe("MemonMachine", () => {
 				.path,
 		).toBe("/notes/a.png");
 
+		// A PDF whose address has a dot but no extension, labelled only
+		// octet-stream: named by its bytes, so it opens as a PDF later.
+		const pdf = new TextEncoder().encode("%PDF-1.7\n");
+		ports.download.fetch = vi.fn(async (url: string) => ({
+			bytes: pdf,
+			contentType: "application/octet-stream",
+			url,
+		}));
+		expect(
+			await machine.downloadFile("https://arxiv.org/pdf/2610.32253"),
+		).toEqual({
+			path: `${machine.home}/Downloads/2610.32253.pdf`,
+			size: pdf.length,
+			type: "application/pdf",
+		});
+		ports.download.fetch = vi.fn(async (url: string) => ({
+			bytes: pdf,
+			contentType: "application/pdf",
+			url,
+			filename: "Attention.pdf",
+		}));
+		expect(
+			(await machine.downloadFile("https://example.com/get?id=7")).path,
+		).toBe(`${machine.home}/Downloads/Attention.pdf`);
+
 		await expect(
 			machine.downloadFile("data:image/png;base64,AAAA"),
 		).rejects.toThrow("inline in the page");
@@ -1625,6 +1650,32 @@ describe("MemonMachine", () => {
 		expect(machine.viewerImage()).toBeNull();
 		await machine.openFile("/notes/photo.png", { create: true });
 		expect(machine.viewerImage()).toBe("/notes/photo.png");
+	});
+
+	it("opens a PDF saved without its extension in the Viewer, not the Editor", async () => {
+		const { machine, ports, files } = createMachine();
+		files.set("/tmp/2610.32253", "%PDF-1.7 \u0000 binary");
+		files.set("/tmp/README", "plain notes");
+		const contentKind = vi.fn(async (path: string) =>
+			files.get(path)?.startsWith("%PDF-")
+				? ("pdf" as const)
+				: ("text" as const),
+		);
+		(ports.files as { contentKind?: typeof contentKind }).contentKind =
+			contentKind;
+
+		await machine.openFile("/tmp/2610.32253");
+		expect(contentKind).toHaveBeenCalledWith("/tmp/2610.32253");
+		expect(ports.files.read).not.toHaveBeenCalled();
+		expect(machine.snapshot().viewer).toMatchObject({
+			path: "/tmp/2610.32253",
+			kind: "pdf",
+		});
+		expect(machine.findWindow("editor")).toBeUndefined();
+
+		await machine.openFile("/tmp/README");
+		expect(machine.findWindow("editor")).toBeDefined();
+		expect(ports.files.read).toHaveBeenCalledWith("/tmp/README");
 	});
 
 	it("opens images in the Viewer even when asked for the Editor", async () => {

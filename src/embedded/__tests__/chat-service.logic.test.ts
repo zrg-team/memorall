@@ -132,3 +132,50 @@ describe("tool calls across an agent run", () => {
 		expect(payload?.reminders).toEqual(["Current page: https://x.test/"]);
 	});
 });
+
+describe("tool progress across an agent run", () => {
+	it("passes on each tool call's start and finish", async () => {
+		const execution = (status: string) => ({
+			status: "processing",
+			result: {
+				type: "tool-execution",
+				execution: {
+					id: "call-1",
+					name: "web_open",
+					status,
+					startedAt: "2026-10-30T00:00:00.000Z",
+				},
+			},
+		});
+		runWith([
+			{
+				status: "processing",
+				result: {
+					type: "execute-start",
+					node: "tool_executor",
+					metadata: { tool: "web_open" },
+				},
+			},
+			execution("running"),
+			execution("completed"),
+			chunk({ role: "assistant", content: "Opened." }),
+		]);
+		const starts: unknown[] = [];
+		const executions: string[] = [];
+
+		await embeddedChatService.chatStream({
+			messages: [
+				{ id: "u", role: "user", content: "q", timestamp: new Date() },
+			],
+			model: "m",
+			mode: "custom",
+			onExecuteStart: (event) => starts.push(event),
+			onToolExecution: (record) => executions.push(record.status),
+		});
+
+		expect(starts).toEqual([
+			{ node: "tool_executor", metadata: { tool: "web_open" } },
+		]);
+		expect(executions).toEqual(["running", "completed"]);
+	});
+});

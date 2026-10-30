@@ -1,9 +1,11 @@
 import { backgroundJob } from "@/services/background-jobs/background-job";
 import type {
 	ChatResult,
+	ChatRunInfo,
 	ChatStreamConfig,
 } from "@/services/background-jobs/handlers/process-chat";
 import type { JobErrorMetadata } from "@/services/background-jobs/handlers/error-metadata";
+import type { JobProgressEvent } from "@/services/background-jobs/handlers/types";
 import {
 	cloneMessageParts,
 	MessagePartsAccumulator,
@@ -178,6 +180,176 @@ const getProgressErrorMetadata = (
 	};
 };
 
+/**
+ * Reads a chat run's progress events into the reply they build, telling the
+ * callbacks as it goes; one per run. The runs this page starts are read this
+ * way, and so is a run started elsewhere that the page shows live (the
+ * co-agent answering on a web page).
+ */
+export class ChatProgressReader {
+	content = "";
+	readonly actions: ChatAction[] = [];
+	parts: MessageParts | undefined;
+	usage: ChatStreamResult["usage"];
+	metadata: Record<string, unknown> | undefined;
+	failed = false;
+	error = "";
+	errorMetadata: JobErrorMetadata | undefined;
+	private readonly toolCallAccumulator = createToolCallAccumulator();
+	private readonly messagePartsAccumulator = new MessagePartsAccumulator();
+
+	constructor(private readonly callbacks?: ChatStreamCallbacks) {}
+
+	/** The reply's parts: the final ones, else what has streamed so far. */
+	get partsSoFar(): MessageParts | undefined {
+		return this.parts ?? this.messagePartsAccumulator.toParts();
+	}
+
+	get toolCalls(): ChatCompletionMessageToolCall[] | undefined {
+		return getAccumulatedToolCalls(this.toolCallAccumulator);
+	}
+
+	private emitParts(): void {
+		const nextParts = cloneMessageParts(this.parts);
+		if (nextParts) this.callbacks?.onParts?.(nextParts);
+	}
+
+	private keepToolCalls(
+		toolCalls: ChatCompletionMessageToolCall[] | undefined,
+	): void {
+		if (!toolCalls?.length) return;
+		for (const [index, toolCall] of toolCalls.entries()) {
+			this.toolCallAccumulator.set(index, toolCall);
+		}
+	}
+
+	/** Takes one progress event. False once the run has failed: read no more. */
+	read(progress: JobProgressEvent): boolean {
+		const callbacks = this.callbacks;
+
+		// Handle failure
+		if (progress.status === "failed") {
+			this.failed = true;
+			this.error = progress.error || "Chat request failed";
+			this.errorMetadata = getProgressErrorMetadata(
+				progress.metadata,
+				this.error,
+			);
+			callbacks?.onError?.(this.errorMetadata.message);
+			return false;
+		}
+
+		// Handle completion - get final content
+		if (progress.status === "completed" && progress.result) {
+			const chatResult = progress.result as ChatResult;
+			if (chatResult.type === "final") {
+				// Use the final content from the job result
+				this.content = chatResult.content;
+				this.metadata = chatResult.metadata;
+				if (chatResult.metadata?.actions) {
+					this.actions.splice(
+						0,
+						this.actions.length,
+						...mergeActions(this.actions, chatResult.metadata.actions),
+					);
+				}
+				if (chatResult.parts) {
+					this.parts = chatResult.parts;
+					this.emitParts();
+				}
+				this.keepToolCalls(chatResult.metadata?.tool_calls);
+				if (chatResult.metadata?.usage) {
+					this.usage = chatResult.metadata.usage;
+				}
+			}
+		}
+
+		// Process streaming updates
+		if (
+			!["processing", "pending"].includes(progress.status) ||
+			!progress.result
+		) {
+			return true;
+		}
+		const chatResult = progress.result as ChatResult;
+		const accumulator = this.messagePartsAccumulator;
+
+		if (chatResult.type === "chunk" && chatResult.chunk) {
+			accumulator.addChunk(chatResult.chunk);
+			// `toParts()` already hands back a fresh copy, so the streaming path —
+			// the one that runs per chunk — hands it straight on instead of
+			// cloning the same array a second time.
+			this.parts = accumulator.toParts();
+			if (this.parts) callbacks?.onParts?.(this.parts);
+			accumulateChunkToolCalls(
+				this.toolCallAccumulator,
+				chatResult.chunk.choices[0]?.delta?.tool_calls,
+			);
+			// Handle streaming content chunks
+			const delta = chatResult.chunk.choices[0]?.delta;
+			const isToolResultChunk = delta?.role === "tool" || !!delta?.tool_call_id;
+			const content = isToolResultChunk ? "" : delta?.content;
+			if (content) {
+				this.content += content;
+				callbacks?.onContent?.(this.content);
+			}
+		} else if (chatResult.type === "action" && chatResult.actions) {
+			// Handle action updates
+			this.actions.splice(
+				0,
+				this.actions.length,
+				...mergeActions(this.actions, chatResult.actions),
+			);
+			callbacks?.onAction?.([...this.actions]);
+		} else if (chatResult.type === "execute-start") {
+			callbacks?.onExecuteStart?.({
+				node: chatResult.node,
+				metadata: chatResult.metadata,
+			});
+		} else if (chatResult.type === "tool-execution") {
+			callbacks?.onToolExecution?.(chatResult.execution);
+		} else if (chatResult.type === "compaction") {
+			callbacks?.onCompaction?.(chatResult.compaction);
+		} else if (chatResult.type === "user-message") {
+			// Placed where the agent read it, as the saved reply has it.
+			accumulator.addUserMessage(chatResult.content);
+			this.parts = accumulator.toParts();
+			callbacks?.onParts?.(this.parts);
+			callbacks?.onInjectedMessageRead?.({
+				id: chatResult.id,
+				content: chatResult.content,
+			});
+		} else if (chatResult.type === "usage") {
+			callbacks?.onUsage?.(chatResult.usage);
+		} else if (chatResult.type === "system-reminder") {
+			// Kept where the model read it, as the saved reply has it; the message
+			// view never shows it.
+			accumulator.addSystemReminder(chatResult.content);
+			this.parts = accumulator.toParts();
+			callbacks?.onParts?.(this.parts);
+		} else if (chatResult.type === "final") {
+			// Handle final content update (e.g., after citation step). This
+			// replaces the accumulated content with the final version.
+			this.content = chatResult.content;
+			this.metadata = chatResult.metadata;
+			if (chatResult.metadata?.actions) {
+				this.actions.splice(
+					0,
+					this.actions.length,
+					...mergeActions(this.actions, chatResult.metadata.actions),
+				);
+			}
+			this.parts = chatResult.parts ?? accumulator.toParts();
+			this.keepToolCalls(chatResult.metadata?.tool_calls);
+			// Notify with the final cited content
+			callbacks?.onContent?.(this.content);
+			callbacks?.onAction?.([...this.actions]);
+			this.emitParts();
+		}
+		return true;
+	}
+}
+
 export class ChatService {
 	private static instance: ChatService;
 	private activeJobs = new Map<string, AbortController>();
@@ -258,26 +430,13 @@ export class ChatService {
 				{ stream: true },
 			);
 
-			let currentContent = "";
-			const actions: ChatAction[] = [];
-			let streamFailed = false;
-			let streamError = "";
-			let streamErrorMetadata: JobErrorMetadata | undefined;
-			let finalMetadata: Record<string, unknown> | undefined;
-			let parts: MessageParts | undefined;
-			let usage: ChatStreamResult["usage"];
-			const toolCallAccumulator = createToolCallAccumulator();
-			const messagePartsAccumulator = new MessagePartsAccumulator();
-			const emitParts = () => {
-				const nextParts = cloneMessageParts(parts);
-				if (nextParts) callbacks?.onParts?.(nextParts);
-			};
+			const reader = new ChatProgressReader(callbacks);
 
 			if (!("stream" in result)) {
 				return {
 					content: "",
 					contentParts: [],
-					actions,
+					actions: [],
 					failed: true,
 					error: "Chat request failed",
 				};
@@ -314,145 +473,7 @@ export class ChatService {
 						break;
 					}
 					if (next.done) break;
-					const progress = next.value;
-
-					// Handle failure
-					if (progress.status === "failed") {
-						streamFailed = true;
-						streamError = progress.error || "Chat request failed";
-						streamErrorMetadata = getProgressErrorMetadata(
-							progress.metadata,
-							streamError,
-						);
-						callbacks?.onError?.(streamErrorMetadata.message);
-						break;
-					}
-
-					// Handle completion - get final content
-					if (progress.status === "completed" && progress.result) {
-						const chatResult = progress.result as ChatResult;
-						if (chatResult.type === "final") {
-							// Use the final content from the job result
-							currentContent = chatResult.content;
-							finalMetadata = chatResult.metadata;
-							if (chatResult.metadata?.actions) {
-								actions.splice(
-									0,
-									actions.length,
-									...mergeActions(actions, chatResult.metadata.actions),
-								);
-							}
-							if (chatResult.parts) {
-								parts = chatResult.parts;
-								emitParts();
-							}
-							if (chatResult.metadata?.tool_calls?.length) {
-								for (const [
-									index,
-									toolCall,
-								] of chatResult.metadata.tool_calls.entries()) {
-									toolCallAccumulator.set(index, toolCall);
-								}
-							}
-							if (chatResult.metadata?.usage) {
-								usage = chatResult.metadata.usage;
-							}
-						}
-					}
-
-					// Process streaming updates
-					if (
-						["processing", "pending"].includes(progress.status) &&
-						progress.result
-					) {
-						const chatResult = progress.result as ChatResult;
-
-						if (chatResult.type === "chunk" && chatResult.chunk) {
-							messagePartsAccumulator.addChunk(chatResult.chunk);
-							// `toParts()` already hands back a fresh copy, so the streaming
-							// path — the one that runs per chunk — hands it straight on
-							// instead of cloning the same array a second time.
-							parts = messagePartsAccumulator.toParts();
-							if (parts) callbacks?.onParts?.(parts);
-							accumulateChunkToolCalls(
-								toolCallAccumulator,
-								chatResult.chunk.choices[0]?.delta?.tool_calls,
-							);
-							// Handle streaming content chunks
-							const delta = chatResult.chunk.choices[0]?.delta;
-							const isToolResultChunk =
-								delta?.role === "tool" || !!delta?.tool_call_id;
-							const content = isToolResultChunk ? "" : delta?.content;
-							if (content) {
-								currentContent += content;
-								callbacks?.onContent?.(currentContent);
-							}
-						} else if (chatResult.type === "action" && chatResult.actions) {
-							// Handle action updates
-							actions.splice(
-								0,
-								actions.length,
-								...mergeActions(actions, chatResult.actions),
-							);
-							callbacks?.onAction?.([...actions]);
-						} else if (chatResult.type === "execute-start") {
-							const event = {
-								node: chatResult.node,
-								metadata: chatResult.metadata,
-							};
-							callbacks?.onExecuteStart?.(event);
-						} else if (chatResult.type === "tool-execution") {
-							callbacks?.onToolExecution?.(chatResult.execution);
-						} else if (chatResult.type === "compaction") {
-							callbacks?.onCompaction?.(chatResult.compaction);
-						} else if (chatResult.type === "user-message") {
-							// Placed where the agent read it, as the saved reply has it.
-							messagePartsAccumulator.addUserMessage(chatResult.content);
-							parts = messagePartsAccumulator.toParts();
-							callbacks?.onParts?.(parts);
-							callbacks?.onInjectedMessageRead?.({
-								id: chatResult.id,
-								content: chatResult.content,
-							});
-						} else if (chatResult.type === "usage") {
-							callbacks?.onUsage?.(chatResult.usage);
-						} else if (chatResult.type === "system-reminder") {
-							// Kept where the model read it, as the saved reply has it; the
-							// message view never shows it.
-							messagePartsAccumulator.addSystemReminder(chatResult.content);
-							parts = messagePartsAccumulator.toParts();
-							callbacks?.onParts?.(parts);
-						} else if (chatResult.type === "final") {
-							// Handle final content update (e.g., after citation step)
-							// This replaces the accumulated content with the final version
-							currentContent = chatResult.content;
-							finalMetadata = chatResult.metadata;
-							if (chatResult.metadata?.actions) {
-								actions.splice(
-									0,
-									actions.length,
-									...mergeActions(actions, chatResult.metadata.actions),
-								);
-							}
-							if (chatResult.parts) {
-								parts = chatResult.parts;
-							} else {
-								parts = messagePartsAccumulator.toParts();
-							}
-							if (chatResult.metadata?.tool_calls?.length) {
-								for (const [
-									index,
-									toolCall,
-								] of chatResult.metadata.tool_calls.entries()) {
-									toolCallAccumulator.set(index, toolCall);
-								}
-							}
-							// Notify with the final cited content
-							callbacks?.onContent?.(currentContent);
-							callbacks?.onAction?.([...actions]);
-							emitParts();
-						}
-					}
+					if (!reader.read(next.value)) break;
 				}
 			} finally {
 				clearTimeout(graceTimer);
@@ -461,16 +482,16 @@ export class ChatService {
 
 			// Return result
 			return {
-				content: currentContent,
+				content: reader.content,
 				contentParts: [],
-				parts: parts ?? messagePartsAccumulator.toParts(),
-				actions,
-				toolCalls: getAccumulatedToolCalls(toolCallAccumulator),
-				failed: streamFailed,
-				error: streamFailed ? streamError : undefined,
-				errorMetadata: streamFailed ? streamErrorMetadata : undefined,
-				metadata: finalMetadata,
-				usage,
+				parts: reader.partsSoFar,
+				actions: reader.actions,
+				toolCalls: reader.toolCalls,
+				failed: reader.failed,
+				error: reader.failed ? reader.error : undefined,
+				errorMetadata: reader.failed ? reader.errorMetadata : undefined,
+				metadata: reader.metadata,
+				usage: reader.usage,
 				stopped: abortController.signal.aborted,
 			};
 		} catch (error) {
@@ -505,6 +526,31 @@ export class ChatService {
 		} catch {
 			return false;
 		}
+	}
+
+	/**
+	 * The chat runs in flight wherever they were started, this page or not
+	 * (the co-agent answering on a web page). Empty when it cannot be asked.
+	 */
+	async listRuns(): Promise<ChatRunInfo[]> {
+		try {
+			const execution = await backgroundJob.execute(
+				"list-chat-runs",
+				{},
+				{ stream: false },
+			);
+			if (!("promise" in execution)) return [];
+			const outcome = await execution.promise;
+			const runs = (outcome as { result?: { runs?: unknown } }).result?.runs;
+			return Array.isArray(runs) ? (runs as ChatRunInfo[]) : [];
+		} catch {
+			return [];
+		}
+	}
+
+	/** Stops a run by its job, whichever page started it. */
+	stopRun(jobId: string): void {
+		requestRunStop(jobId);
 	}
 
 	/**
