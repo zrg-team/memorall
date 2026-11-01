@@ -42,6 +42,18 @@ const isInert = (path) =>
 export const desktopBuildIsAffected = (paths) =>
 	paths.length === 0 || paths.some((path) => !isInert(path));
 
+// Intel Mac QEMU comes from Homebrew rather than the portable distribution.
+// Changes to its packager need this architecture even on pull requests.
+export const macosQemuBuildIsAffected = (paths) =>
+	paths.length === 0 ||
+	paths.some(
+		(path) =>
+			path === "tools/prepare-desktop-sandbox-runtime.mjs" ||
+			path.startsWith("tools/desktop-native-libraries.") ||
+			path === "apps/desktop/sandbox-runtime.lock.json" ||
+			path === ".github/workflows/platform-products.yml",
+	);
+
 // Prose cannot break a build. Everything else can: src/ is shared by the web,
 // extension and desktop targets, so there is no honest finer split than this.
 const isProse = (path) =>
@@ -53,7 +65,10 @@ const isProse = (path) =>
 export const codeIsAffected = (paths) =>
 	paths.length === 0 || paths.some((path) => !isProse(path));
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+	process.argv[1] &&
+	import.meta.url === pathToFileURL(process.argv[1]).href
+) {
 	const paths = process.argv
 		.slice(2)
 		.flatMap((argument) => argument.split(/\r?\n/))
@@ -61,6 +76,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 		.filter(Boolean);
 	const affected = desktopBuildIsAffected(paths);
 	const code = codeIsAffected(paths);
+	const macosQemu = macosQemuBuildIsAffected(paths);
 	const skipped = paths.filter(isInert).length;
 	console.log(
 		paths.length === 0
@@ -77,7 +93,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 	if (process.env.GITHUB_OUTPUT) {
 		appendFileSync(
 			process.env.GITHUB_OUTPUT,
-			`desktop=${affected}\ncode=${code}\n`,
+			`desktop=${affected}\ncode=${code}\nmacos_qemu=${macosQemu}\n`,
 			"utf8",
 		);
 	}

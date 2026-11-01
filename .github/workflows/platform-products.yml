@@ -38,6 +38,7 @@ jobs:
     outputs:
       desktop: ${{ steps.detect.outputs.desktop }}
       code: ${{ steps.detect.outputs.code }}
+      macos_qemu: ${{ steps.detect.outputs.macos_qemu }}
     steps:
       - uses: actions/checkout@v4
       - name: Verify the change classifier
@@ -388,16 +389,16 @@ jobs:
   # timed-out job is reported as *cancelled*, indistinguishable in the checks
   # list from a real failure.
   #
-  # So they no longer build on pull requests, where the wait buys nothing that
-  # the primary three do not already cover. Coverage is kept on pushes to main
-  # and on manual dispatch, with room in the timeout for a cold cache.
+  # They normally build on main and manual dispatch. Intel Mac also builds on
+  # PRs that change QEMU packaging: its Homebrew dylib/symlink layout is not
+  # covered by the portable QEMU distribution on the primary architectures.
   secondary-desktop:
     name: Desktop native smoke (${{ matrix.name }})
     needs: [changes, quality]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     env:
-      RUN: ${{ needs.changes.outputs.desktop == 'true' && github.event_name != 'pull_request' }}
+      RUN: ${{ needs.changes.outputs.desktop == 'true' && (github.event_name != 'pull_request' || (matrix.architecture == 'x64' && needs.changes.outputs.macos_qemu == 'true')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -417,7 +418,7 @@ jobs:
           if [ "$RUN" = "true" ]; then
             echo "Running: this change can affect the desktop build."
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "Nothing to do: second-tier architectures build on main, not on pull requests."
+            echo "Nothing to do: this PR does not require a second-tier architecture build."
           else
             echo "Nothing to do: no changed file can affect the desktop build."
           fi
@@ -451,6 +452,9 @@ jobs:
       - name: Install QEMU for Intel Mac packaging
         if: env.RUN == 'true' && runner.os == 'macOS' && matrix.architecture == 'x64'
         run: brew install qemu
+      - name: Verify native library copying and Mach-O relocation
+        if: env.RUN == 'true' && runner.os == 'macOS'
+        run: node --test tools/desktop-native-libraries.test.mjs
       - name: Install Linux Tauri and smoke-test dependencies
         if: env.RUN == 'true' && runner.os == 'Linux'
         run: |

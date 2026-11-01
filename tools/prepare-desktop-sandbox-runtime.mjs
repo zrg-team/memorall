@@ -17,6 +17,11 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
+import {
+	bundleMacosDependencies,
+	copyNativeFile,
+	stageNativeLibrary,
+} from "./desktop-native-libraries.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const lock = JSON.parse(
@@ -116,10 +121,11 @@ mkdirSync(join(nativeOutput, "bin"), { recursive: true });
 mkdirSync(join(nativeOutput, "lib"), { recursive: true });
 mkdirSync(join(nativeOutput, "share"), { recursive: true });
 for (const binary of [system, img]) {
-	cpSync(binary, join(nativeOutput, "bin", basename(binary)));
+	copyNativeFile(binary, join(nativeOutput, "bin", basename(binary)));
 	if (process.platform !== "win32")
 		chmodSync(join(nativeOutput, "bin", basename(binary)), 0o755);
 }
+const librarySources = new Map();
 for (const path of sourceFiles) {
 	const name = basename(path);
 	const windowsSystemLibrary =
@@ -128,12 +134,14 @@ for (const path of sourceFiles) {
 			existsSync(
 				join(process.env.SYSTEMROOT ?? "C:/Windows", "System32", name),
 			));
-	if (/\.(dll|dylib|so(?:\.\d+)*)$/i.test(name) && !windowsSystemLibrary)
-		cpSync(
-			path,
-			join(nativeOutput, process.platform === "win32" ? "bin" : "lib", name),
-			{ dereference: true },
+	if (/\.(dll|dylib|so(?:\.\d+)*)$/i.test(name) && !windowsSystemLibrary) {
+		const destination = join(
+			nativeOutput,
+			process.platform === "win32" ? "bin" : "lib",
+			name,
 		);
+		stageNativeLibrary(path, destination, librarySources);
+	}
 	const firmwareNames =
 		process.arch === "arm64"
 			? ["edk2-aarch64-code.fd"]
@@ -158,40 +166,16 @@ for (const path of sourceFiles) {
 	}
 }
 if (process.platform === "darwin") {
-	const pending = [
-		join(nativeOutput, "bin", systemName),
-		join(nativeOutput, "bin", `qemu-img${suffix}`),
-		...files(join(nativeOutput, "lib")),
-	];
-	const seen = new Set();
-	while (pending.length) {
-		const binary = pending.shift();
-		if (seen.has(binary)) continue;
-		seen.add(binary);
-		const dependencies = run("otool", ["-L", binary])
-			.split("\n")
-			.slice(1)
-			.map((line) => line.trim().split(" ")[0])
-			.filter(
-				(path) =>
-					path?.startsWith("/") &&
-					!path.startsWith("/usr/lib/") &&
-					!path.startsWith("/System/"),
-			);
-		for (const dependency of dependencies) {
-			const dest = join(nativeOutput, "lib", basename(dependency));
-			if (!existsSync(dest)) {
-				cpSync(dependency, dest, { dereference: true });
-				pending.push(dest);
-			}
-			run("install_name_tool", [
-				"-change",
-				dependency,
-				`@executable_path/../lib/${basename(dependency)}`,
-				binary,
-			]);
-		}
-	}
+	const seen = bundleMacosDependencies({
+		binaries: [
+			join(nativeOutput, "bin", systemName),
+			join(nativeOutput, "bin", `qemu-img${suffix}`),
+			...files(join(nativeOutput, "lib")),
+		],
+		libraryDirectory: join(nativeOutput, "lib"),
+		librarySources,
+		run,
+	});
 	const entitlements = join(cache, "qemu-entitlements.plist");
 	writeFileSync(
 		entitlements,
