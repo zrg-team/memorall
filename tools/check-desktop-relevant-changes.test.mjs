@@ -4,6 +4,7 @@ import test from "node:test";
 import {
 	codeIsAffected,
 	desktopBuildIsAffected,
+	macosQemuBuildIsAffected,
 } from "./check-desktop-relevant-changes.mjs";
 
 test("skips documentation and web-only changes", () => {
@@ -19,8 +20,24 @@ test("skips documentation and web-only changes", () => {
 	);
 });
 
+test("runs Intel Mac packaging on PRs only for QEMU packaging changes", () => {
+	for (const path of [
+		"tools/prepare-desktop-sandbox-runtime.mjs",
+		"tools/desktop-native-libraries.mjs",
+		"tools/desktop-native-libraries.test.mjs",
+		"apps/desktop/sandbox-runtime.lock.json",
+		".github/workflows/platform-products.yml",
+	])
+		assert.equal(macosQemuBuildIsAffected([path]), true, path);
+	assert.equal(macosQemuBuildIsAffected([]), true);
+	assert.equal(macosQemuBuildIsAffected(["src/main.ts", "README.md"]), false);
+});
+
 test("runs for the desktop application itself", () => {
-	assert.equal(desktopBuildIsAffected(["apps/desktop/src-tauri/src/main.rs"]), true);
+	assert.equal(
+		desktopBuildIsAffected(["apps/desktop/src-tauri/src/main.rs"]),
+		true,
+	);
 	assert.equal(
 		desktopBuildIsAffected([
 			"apps/desktop/sidecar/src/managed-browseros-runtime.ts",
@@ -56,7 +73,11 @@ test("runs for dependency and staging changes", () => {
 
 test("runs when one relevant file rides along with inert ones", () => {
 	assert.equal(
-		desktopBuildIsAffected(["README.md", "apps/web/src/main.tsx", "src/lib/db.ts"]),
+		desktopBuildIsAffected([
+			"README.md",
+			"apps/web/src/main.tsx",
+			"src/lib/db.ts",
+		]),
 		true,
 	);
 });
