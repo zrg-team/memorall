@@ -54,10 +54,15 @@ describe("provider tabs by model category", () => {
 
 	it("narrows speech to the providers that can speak", () => {
 		expect(tabsFor("text-to-speech")).toEqual([
+			"wllama",
 			"transformer-media",
 			"openai",
 			"custom",
 		]);
+	});
+
+	it("offers spoken conversations on the runner that can hold them", () => {
+		expect(tabsFor("speech-to-speech")).toEqual(["wllama"]);
 	});
 
 	it("offers only on-device runners for image tools", () => {

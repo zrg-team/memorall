@@ -30,7 +30,7 @@ describe("Wllama runner streaming contract", () => {
 		// pinned to CPU on GPU-capable machines.
 		expect(source).not.toContain("usesWebGPU");
 		expect(source).toContain(
-			"const useGPU = !mmprojFile && (await detectWebGPU());",
+			"const useGPU = projectorAllowsGPU && (await detectWebGPU());",
 		);
 		expect(source).toContain("webgpuAvailableGB");
 	});

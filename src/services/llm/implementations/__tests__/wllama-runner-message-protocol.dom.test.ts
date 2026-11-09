@@ -48,6 +48,13 @@ const lab = {
 	streamChunks: [] as unknown[],
 	loadedContextInfo: { n_ctx: 4096 } as Record<string, unknown>,
 	exitCalls: 0,
+	speechCalls: [] as Record<string, unknown>[],
+	speechChunks: [] as unknown[],
+	transcriptionCalls: [] as Record<string, unknown>[],
+	transcriptionChunks: [] as unknown[],
+	realtimeSessionsCreated: 0,
+	realtimeSent: [] as Record<string, unknown>[],
+	realtimeEvents: [] as Record<string, unknown>[],
 };
 
 class FakeCacheManager {
@@ -110,6 +117,36 @@ class FakeWllama {
 		return lab.completionResult;
 	}
 
+	async createSpeech(params: Record<string, unknown>) {
+		lab.speechCalls.push(params);
+		const chunks = lab.speechChunks;
+		return (async function* () {
+			yield* chunks;
+		})();
+	}
+
+	async createTranscription(params: Record<string, unknown>) {
+		lab.transcriptionCalls.push(params);
+		const chunks = lab.transcriptionChunks;
+		return (async function* () {
+			yield* chunks;
+		})();
+	}
+
+	async createRealtimeSession() {
+		lab.realtimeSessionsCreated += 1;
+		return {
+			send: async (event: Record<string, unknown>) => {
+				lab.realtimeSent.push(event);
+			},
+			appendAudio: async () => undefined,
+			events: async function* () {
+				yield* lab.realtimeEvents;
+			},
+			close: async () => undefined,
+		};
+	}
+
 	async exit() {
 		lab.exitCalls += 1;
 	}
@@ -132,6 +169,14 @@ class FakeModelManager {
 vi.mock("../../../../../public/runner/libs/wllama.js", () => ({
 	Wllama: FakeWllama,
 	ModelManager: FakeModelManager,
+}));
+// jsdom has no audio decoder.
+vi.mock("../../../../../public/runner/modes/media/audio-decode.js", () => ({
+	decodeAudioToMono: vi.fn(async () => ({
+		pcm: new Float32Array(16_000),
+		sampleRate: 16_000,
+		duration: 1,
+	})),
 }));
 
 interface RunnerReply {
@@ -231,6 +276,14 @@ beforeEach(() => {
 	lab.streamChunks = [];
 	lab.loadedContextInfo = { n_ctx: 4096 };
 	lab.exitCalls = 0;
+	lab.speechCalls = [];
+	lab.speechChunks = [];
+	lab.transcriptionCalls = [];
+	lab.transcriptionChunks = [];
+	lab.realtimeSessionsCreated = 0;
+	lab.realtimeSent = [];
+	lab.realtimeEvents = [];
+	localStorage.clear();
 	vi.spyOn(console, "log").mockImplementation(() => undefined);
 	vi.spyOn(console, "warn").mockImplementation(() => undefined);
 	vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -246,6 +299,244 @@ afterEach(() => {
 });
 
 const lastLoad = () => lab.loadCalls[lab.loadCalls.length - 1];
+
+describe("speech models", () => {
+	const speechModel = "org/Omni-GGUF/Omni-Q4_K_M.gguf";
+	const omniInfo = {
+		n_ctx: 4096,
+		has_chat: true,
+		has_audio_input: true,
+		has_audio_output: true,
+		has_audio_stream: true,
+		has_live_asr: false,
+		audio_input_rate: 16_000,
+		audio_output_rate: 24_000,
+		audio_voices: ["female", "male"],
+	};
+
+	/** A projector's GGUF header carrying one boolean key. */
+	function projectorHeader(key: string) {
+		const parts: Uint8Array[] = [];
+		const u32 = (value: number) => {
+			const bytes = new Uint8Array(4);
+			new DataView(bytes.buffer).setUint32(0, value, true);
+			parts.push(bytes);
+		};
+		const u64 = (value: number) => {
+			const bytes = new Uint8Array(8);
+			new DataView(bytes.buffer).setBigUint64(0, BigInt(value), true);
+			parts.push(bytes);
+		};
+		const text = (value: string) => {
+			const bytes = new TextEncoder().encode(value);
+			u64(bytes.length);
+			parts.push(bytes);
+		};
+		u32(0x46554747);
+		u32(3);
+		u64(0);
+		u64(1);
+		text(key);
+		u32(7);
+		parts.push(new Uint8Array([1]));
+		const out = new Uint8Array(
+			parts.reduce((sum, part) => sum + part.length, 0),
+		);
+		let at = 0;
+		for (const part of parts) {
+			out.set(part, at);
+			at += part.length;
+		}
+		return out.buffer;
+	}
+
+	function stubRepoWithProjector(headerKey: string) {
+		const header = projectorHeader(headerKey);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_url: string, init?: RequestInit) => {
+				if (init?.headers && "Range" in (init.headers as object)) {
+					return {
+						ok: true,
+						status: 206,
+						headers: { get: () => `bytes 0-1/${header.byteLength}` },
+						arrayBuffer: async () => header,
+					};
+				}
+				return {
+					ok: true,
+					json: async () => ({
+						siblings: [{ rfilename: "mmproj-Omni-Q8_0.gguf" }],
+					}),
+				};
+			}),
+		);
+	}
+
+	it("runs a model with an audio projector on the GPU", async () => {
+		stubRepoWithProjector("clip.has_audio_encoder");
+		const runner = await loadRunner({ webgpu: true });
+		await runner.send("serve", { model: speechModel });
+		expect(lastLoad()?.loadArgs.mmprojFile).toBe("mmproj-Omni-Q8_0.gguf");
+		expect(lastLoad()?.options.n_gpu_layers).toBe(999);
+	});
+
+	it("keeps a model with an image-only projector on the CPU", async () => {
+		stubRepoWithProjector("clip.has_vision_encoder");
+		const runner = await loadRunner({ webgpu: true });
+		await runner.send("serve", { model: speechModel });
+		expect(lastLoad()?.options.n_gpu_layers).toBe(0);
+	});
+
+	it("reports what the model says it can do", async () => {
+		lab.loadedContextInfo = omniInfo;
+		const runner = await loadRunner({ webgpu: false });
+		const [reply] = await runner.send("serve", { model: speechModel });
+		expect(reply?.payload.categories).toEqual([
+			"chat",
+			"text-to-speech",
+			"speech-to-text",
+			"speech-to-speech",
+		]);
+		expect(reply?.payload.voices).toEqual([
+			{ id: "female", name: "female" },
+			{ id: "male", name: "male" },
+		]);
+	});
+
+	it("does not call a speech-only model a chat model", async () => {
+		lab.loadedContextInfo = {
+			has_chat: false,
+			has_audio_output: true,
+			audio_output_rate: 24_000,
+			audio_voices: [],
+		};
+		const runner = await loadRunner({ webgpu: false });
+		const [reply] = await runner.send("serve", { model: speechModel });
+		expect(reply?.payload.categories).toEqual(["text-to-speech"]);
+	});
+
+	it("leaves an ordinary chat model as it was", async () => {
+		const runner = await loadRunner({ webgpu: false });
+		const [reply] = await runner.send("serve", { model: speechModel });
+		expect(reply?.payload.categories).toEqual(["chat"]);
+		expect(reply?.payload.voices).toBeUndefined();
+	});
+
+	it("remembers a model's abilities once it is unloaded", async () => {
+		lab.loadedContextInfo = omniInfo;
+		lab.cacheEntries = [
+			{
+				name: "omni.gguf",
+				size: 10,
+				metadata: {
+					originalURL:
+						"https://huggingface.co/org/Omni-GGUF/resolve/main/Omni-Q4_K_M.gguf",
+					originalSize: 10,
+				},
+			},
+		];
+		const runner = await loadRunner({ webgpu: false });
+		await runner.send("serve", { model: speechModel });
+		await runner.send("unload", { model: speechModel });
+		const [reply] = await runner.send("models");
+		const [listed] = reply?.payload.data ?? [];
+		expect(listed.loaded).toBe(false);
+		expect(listed.categories).toContain("speech-to-speech");
+		expect(listed.voices).toHaveLength(2);
+	});
+
+	it("streams speech and finishes with the rate", async () => {
+		lab.loadedContextInfo = omniInfo;
+		lab.speechChunks = [
+			{
+				audio: new Float32Array([0.5, 0.25]).buffer,
+				sample_rate: 24_000,
+				final: true,
+			},
+		];
+		const runner = await loadRunner({ webgpu: false });
+		const replies = await runner.send("audio/speech", {
+			model: speechModel,
+			input: "hello",
+			voice: "male",
+		});
+		expect(replies.map((reply) => reply.type)).toEqual([
+			"stream_chunk",
+			"complete",
+		]);
+		expect(replies[0]?.payload.sampleRate).toBe(24_000);
+		expect(Array.from(replies[0]?.payload.pcm)).toEqual([0.5, 0.25]);
+		expect(replies[1]?.payload).toEqual({ sampleRate: 24_000 });
+		expect(lab.speechCalls[0]).toMatchObject({ input: "hello", voice: "male" });
+	});
+
+	it("streams a transcript and finishes with the clean text", async () => {
+		lab.loadedContextInfo = omniInfo;
+		lab.transcriptionChunks = [
+			{ type: "transcript.text.delta", delta: "</think>Hi" },
+			{ type: "transcript.text.done", text: "Hi." },
+		];
+		const runner = await loadRunner({ webgpu: false });
+		const replies = await runner.send("audio/transcriptions", {
+			model: speechModel,
+			audio: new ArrayBuffer(8),
+		});
+		expect(replies.map((reply) => reply.type)).toEqual([
+			"stream_chunk",
+			"complete",
+		]);
+		expect(replies[0]?.payload).toEqual({ delta: "Hi" });
+		expect(replies[1]?.payload).toMatchObject({ text: "Hi.", duration: 1 });
+	});
+
+	it("runs a spoken turn and keeps its session for the next one", async () => {
+		lab.loadedContextInfo = omniInfo;
+		lab.realtimeEvents = [
+			{ type: "response.output_text.delta", delta: "Paris" },
+			{ type: "response.output_audio.delta", delta: "QUJD" },
+			{ type: "response.done", response: { status: "completed" } },
+		];
+		const runner = await loadRunner({ webgpu: false });
+		const first = await runner.send("realtime/response", {
+			model: speechModel,
+			session: "s1",
+			audio: new ArrayBuffer(8),
+		});
+		expect(first.map((reply) => reply.type)).toEqual([
+			"stream_chunk",
+			"stream_chunk",
+			"complete",
+		]);
+		expect(first[2]?.payload).toEqual({ text: "Paris", sampleRate: 24_000 });
+		await runner.send("realtime/response", {
+			model: speechModel,
+			session: "s1",
+			audio: new ArrayBuffer(8),
+		});
+		expect(lab.realtimeSessionsCreated).toBe(1);
+	});
+
+	it("reports a model that cannot do the task as an error", async () => {
+		const runner = await loadRunner({ webgpu: false });
+		const replies = await runner.send("realtime/response", {
+			model: speechModel,
+			session: "s1",
+			audio: new ArrayBuffer(8),
+		});
+		expect(replies.at(-1)?.type).toBe("error");
+		expect(replies.at(-1)?.payload.error.message).toContain(
+			"cannot hold a spoken conversation",
+		);
+	});
+
+	it("closes a session without loading a model", async () => {
+		const runner = await loadRunner({ webgpu: false });
+		const [reply] = await runner.send("realtime/close", { session: "gone" });
+		expect(reply?.type).toBe("complete");
+		expect(lab.loadCalls).toHaveLength(0);
+	});
+});
 
 describe("GGUF typed decisions", () => {
 	const decisionModel = "ggml-org/Julia-1-GGUF/Julia-1-Q8_0.gguf";

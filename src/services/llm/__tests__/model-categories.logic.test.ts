@@ -95,10 +95,12 @@ describe("provider registry", () => {
 
 	it("routes each category to providers that can serve it", () => {
 		expect(providersForCategory("text-to-speech")).toEqual([
+			"wllama",
 			"transformer-media",
 			"openai",
 			"custom",
 		]);
+		expect(providersForCategory("speech-to-speech")).toEqual(["wllama"]);
 		expect(providersForCategory("image-tools")).toEqual(["transformer-media"]);
 		expect(providersForCategory("image-generation")).not.toContain(
 			"transformer-media",
