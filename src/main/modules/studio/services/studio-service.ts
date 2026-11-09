@@ -18,8 +18,10 @@ import {
 	runDecisionGeneration,
 	runOCRGeneration,
 	type OCROptions,
+	type RealtimeTurnOptions,
 	runImageGeneration,
 	runImageToolGeneration,
+	runRealtimeTurn,
 	runSpeechGeneration,
 	runTextToolGeneration,
 	runTranscription,
@@ -214,6 +216,29 @@ export function transcribeAudio(
 			params: { language: options.language, task: options.task },
 		},
 		(update, booking) => runTranscription({ ...options, booking }, update),
+	);
+}
+
+export function respondToSpeech(
+	options: RealtimeTurnOptions,
+): Promise<StudioItem> {
+	return recordGeneration(
+		{
+			mode: "speech-to-speech",
+			model: options.model,
+			content: "Voice message",
+			inputParts: [
+				{
+					type: "input_audio",
+					input_audio: {
+						path: options.file.path,
+						mimeType: options.file.mimeType,
+						durationMs: options.durationMs,
+					},
+				},
+			],
+		},
+		(update, booking) => runRealtimeTurn({ ...options, booking }, update),
 	);
 }
 

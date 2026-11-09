@@ -46,6 +46,11 @@ const TranscriptionStudio = lazy(() =>
 		default: module.TranscriptionStudio,
 	})),
 );
+const SpeechToSpeechStudio = lazy(() =>
+	import("./speech-to-speech/SpeechToSpeechStudio").then((module) => ({
+		default: module.SpeechToSpeechStudio,
+	})),
+);
 const ImageGenerationStudio = lazy(() =>
 	import("./image-generation/ImageGenerationStudio").then((module) => ({
 		default: module.ImageGenerationStudio,
@@ -78,6 +83,7 @@ const CANVASES: Record<
 	"text-to-speech": SpeechStudio,
 	"text-to-audio": SpeechStudio,
 	"speech-to-text": TranscriptionStudio,
+	"speech-to-speech": SpeechToSpeechStudio,
 	"image-generation": ImageGenerationStudio,
 	"image-tools": ImageToolsStudio,
 	ocr: OCRStudio,

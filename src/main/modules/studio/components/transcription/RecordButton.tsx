@@ -10,6 +10,9 @@ interface RecordButtonProps {
 	level: number;
 	size: "large" | "compact";
 	disabled?: boolean;
+	/** Override the accessible names for use outside transcription. */
+	startLabel?: string;
+	stopLabel?: string;
 	onStart: () => void;
 	onStop: () => void;
 }
@@ -26,6 +29,8 @@ export const RecordButton: React.FC<RecordButtonProps> = ({
 	level,
 	size,
 	disabled,
+	startLabel,
+	stopLabel,
 	onStart,
 	onStop,
 }) => {
@@ -35,8 +40,8 @@ export const RecordButton: React.FC<RecordButtonProps> = ({
 	const blocked = state === "denied" || state === "unsupported";
 	const large = size === "large";
 	const label = recording
-		? t("record.stop", { defaultValue: "Stop and transcribe" })
-		: t("record.start", { defaultValue: "Start recording" });
+		? (stopLabel ?? t("record.stop", { defaultValue: "Stop and transcribe" }))
+		: (startLabel ?? t("record.start", { defaultValue: "Start recording" }));
 	const clamped = Math.max(0, Math.min(1, level));
 
 	return (

@@ -13,6 +13,9 @@ import type {
 	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
+	RealtimeResponseCreateParams,
+	RealtimeResponseStreamEvent,
+	RealtimeSessionCloseParams,
 	SpeechCreateParams,
 	SpeechStreamEvent,
 	Transcription,
@@ -30,6 +33,8 @@ import type {
 export const MEDIA_JOB_NAMES = {
 	audioSpeech: "audio-speech",
 	audioTranscription: "audio-transcription",
+	realtimeResponse: "realtime-response",
+	realtimeSessionClose: "realtime-session-close",
 	imageGeneration: "image-generation",
 	imageTool: "image-tool",
 	textTool: "text-tool",
@@ -48,6 +53,17 @@ export interface AudioTranscriptionPayload {
 	serviceName: string;
 	/** `file` must be a file path or base64 - the job channel is JSON only. */
 	request: WireRequest<TranscriptionCreateParams>;
+}
+
+export interface RealtimeResponsePayload {
+	serviceName: string;
+	/** `audio` must be a file path or base64 - the job channel is JSON only. */
+	request: WireRequest<RealtimeResponseCreateParams>;
+}
+
+export interface RealtimeSessionClosePayload {
+	serviceName: string;
+	request: RealtimeSessionCloseParams;
 }
 
 export interface ImageGenerationPayload {
@@ -84,6 +100,11 @@ export interface AudioSpeechResult extends Record<string, unknown> {
 
 export interface AudioTranscriptionResult extends Record<string, unknown> {
 	transcription: Transcription;
+}
+
+export interface RealtimeResponseResult extends Record<string, unknown> {
+	/** The `response.done` event, audio stored as a file. */
+	event: RealtimeResponseStreamEvent;
 }
 
 export interface ImageGenerationResult extends Record<string, unknown> {
@@ -155,6 +176,15 @@ export class MediaOperationsHandler implements ProcessHandler<BaseJob> {
 						dependencies,
 						controller.signal,
 					);
+				case MEDIA_JOB_NAMES.realtimeResponse:
+					return await this.realtimeResponse(
+						jobId,
+						job,
+						dependencies,
+						controller.signal,
+					);
+				case MEDIA_JOB_NAMES.realtimeSessionClose:
+					return await this.realtimeSessionClose(job);
 				case MEDIA_JOB_NAMES.imageGeneration:
 					return await this.imageGeneration(
 						jobId,
@@ -260,6 +290,47 @@ export class MediaOperationsHandler implements ProcessHandler<BaseJob> {
 		return { transcription: result } satisfies AudioTranscriptionResult;
 	}
 
+	private async realtimeResponse(
+		jobId: string,
+		job: BaseJob,
+		dependencies: ProcessDependencies,
+		signal: AbortSignal,
+	): Promise<ItemHandlerResult> {
+		const { serviceName, request } = job.payload as RealtimeResponsePayload;
+		let done: RealtimeResponseStreamEvent | null = null;
+
+		for await (const event of this.llm.realtimeResponseFor(serviceName, {
+			...request,
+			signal,
+		})) {
+			if (event.type !== "response.done") {
+				await this.emit(jobId, dependencies, event, 50, "Responding");
+				continue;
+			}
+			done = {
+				type: "response.done",
+				result: {
+					...event.result,
+					audio: event.result.audio
+						? await persistMediaPayload(event.result.audio, {
+								kind: "audio",
+								folder: "generated",
+							})
+						: undefined,
+				},
+			};
+		}
+
+		if (!done) throw new Error("The model finished without a response");
+		return { event: done } satisfies RealtimeResponseResult;
+	}
+
+	private async realtimeSessionClose(job: BaseJob): Promise<ItemHandlerResult> {
+		const { serviceName, request } = job.payload as RealtimeSessionClosePayload;
+		await this.llm.closeRealtimeSessionFor(serviceName, request);
+		return { closed: true };
+	}
+
 	private async imageGeneration(
 		jobId: string,
 		job: BaseJob,
@@ -349,6 +420,8 @@ declare global {
 	interface JobTypeRegistry {
 		"audio-speech": AudioSpeechPayload;
 		"audio-transcription": AudioTranscriptionPayload;
+		"realtime-response": RealtimeResponsePayload;
+		"realtime-session-close": RealtimeSessionClosePayload;
 		"image-generation": ImageGenerationPayload;
 		"image-tool": ImageToolPayload;
 		"text-tool": TextToolPayload;
@@ -359,6 +432,8 @@ declare global {
 	interface JobResultRegistry {
 		"audio-speech": AudioSpeechResult;
 		"audio-transcription": AudioTranscriptionResult;
+		"realtime-response": RealtimeResponseResult;
+		"realtime-session-close": { closed: boolean };
 		"image-generation": ImageGenerationResult;
 		"image-tool": ImageToolResult;
 		"text-tool": TextToolResult;

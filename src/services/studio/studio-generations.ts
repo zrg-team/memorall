@@ -17,6 +17,7 @@ import type {
 	DecisionQuestions,
 	ImageGenerationStreamEvent,
 	MediaPayload,
+	RealtimeResponseStreamEvent,
 	SpeechStreamEvent,
 	Transcription,
 	TranscriptionStreamEvent,
@@ -261,6 +262,72 @@ export async function runTranscription(
 		});
 	}
 	return { parts, content: result.text || options.fileName };
+}
+
+export interface RealtimeTurnOptions extends StudioRunContext {
+	model: CurrentModelInfo;
+	/** Turns with the same session share the model's context. */
+	session: string;
+	file: Extract<MediaPayload, { kind: "file" }>;
+	durationMs?: number;
+	signal?: AbortSignal;
+	/** Every streamed chunk of the spoken reply, for live playback. */
+	onAudio?: (
+		event: Extract<
+			RealtimeResponseStreamEvent,
+			{ type: "response.output_audio.delta" }
+		>,
+	) => void;
+}
+
+export async function runRealtimeTurn(
+	options: RealtimeTurnOptions,
+	update?: (parts: StudioContentPart[], content: string) => void,
+): Promise<StudioGenerationResult> {
+	let text = "";
+	let done: Extract<
+		RealtimeResponseStreamEvent,
+		{ type: "response.done" }
+	> | null = null;
+	for await (const event of llmOf(options).realtimeResponseFor(
+		options.model.serviceName,
+		{
+			model: options.model.modelId,
+			session: options.session,
+			audio: options.file,
+			signal: options.signal,
+		},
+	)) {
+		if (event.type === "response.output_text.delta") {
+			text += event.delta;
+			update?.([{ type: "text", text, role: "transcript" }], text);
+		} else if (event.type === "response.output_audio.delta") {
+			options.onAudio?.(event);
+		} else {
+			done = event;
+		}
+	}
+	if (!done) throw new Error("The model finished without a response");
+	const { result } = done;
+	const parts: StudioContentPart[] = [
+		{ type: "text", text: result.text, role: "transcript" },
+	];
+	if (result.audio) {
+		const stored = await persistMediaPayload(result.audio, {
+			kind: "audio",
+			folder: "generated",
+		});
+		parts.push({
+			type: "output_audio",
+			output_audio: {
+				path: stored.path,
+				mimeType: stored.mimeType,
+				sampleRate: result.sample_rate,
+				durationMs: result.duration_ms,
+			},
+		});
+	}
+	return { parts, content: result.text || undefined };
 }
 
 export interface ImageGenerationOptions extends StudioRunContext {

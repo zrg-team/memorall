@@ -41,6 +41,9 @@ import type {
 	TextToolParams,
 	TextToolResponse,
 	MediaPayload,
+	RealtimeResponseCreateParams,
+	RealtimeResponseStreamEvent,
+	RealtimeSessionCloseParams,
 	SpeechCreateParams,
 	SpeechResponse,
 	SpeechStreamEvent,
@@ -634,6 +637,40 @@ export class LLMProxy implements BaseLLM {
 			}
 		} finally {
 			input.cleanup();
+		}
+	}
+
+	async *realtimeResponse(
+		request: RealtimeResponseCreateParams,
+	): AsyncIterableIterator<RealtimeResponseStreamEvent> {
+		const { signal, ...wire } = request;
+		const input = await toWirePayload(wire.audio);
+		try {
+			for await (const item of this.runMediaJob(
+				"realtime-response",
+				{ serviceName: this.name, request: { ...wire, audio: input.payload } },
+				signal,
+			)) {
+				if (item.kind === "event") {
+					yield item.event as RealtimeResponseStreamEvent;
+				} else {
+					yield (item.result as { event: RealtimeResponseStreamEvent }).event;
+				}
+			}
+		} finally {
+			input.cleanup();
+		}
+	}
+
+	async closeRealtimeSession(
+		request: RealtimeSessionCloseParams,
+	): Promise<void> {
+		for await (const _item of this.runMediaJob(
+			"realtime-session-close",
+			{ serviceName: this.name, request },
+			undefined,
+		)) {
+			// Nothing streams; the job settling is the answer.
 		}
 	}
 

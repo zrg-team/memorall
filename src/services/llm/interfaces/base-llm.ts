@@ -17,6 +17,9 @@ import type {
 	TextToolParams,
 	TextToolResponse,
 	MediaVoice,
+	RealtimeResponseCreateParams,
+	RealtimeResponseStreamEvent,
+	RealtimeSessionCloseParams,
 	SpeechCreateParams,
 	SpeechResponse,
 	SpeechStreamEvent,
@@ -191,6 +194,12 @@ export interface BaseLLM {
 	audioTranscriptionsStream?(
 		request: TranscriptionCreateParams,
 	): AsyncIterableIterator<TranscriptionStreamEvent>;
+	/** One realtime turn: spoken input in, streamed text and speech out. */
+	realtimeResponse?(
+		request: RealtimeResponseCreateParams,
+	): AsyncIterableIterator<RealtimeResponseStreamEvent>;
+	/** End a realtime session and free what it holds. */
+	closeRealtimeSession?(request: RealtimeSessionCloseParams): Promise<void>;
 	/**
 	 * POST /v1/images/generations. Always evented: local generation takes long
 	 * enough that progress is part of the result.

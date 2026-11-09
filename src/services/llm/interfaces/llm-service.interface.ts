@@ -12,6 +12,9 @@ import type {
 	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
+	RealtimeResponseCreateParams,
+	RealtimeResponseStreamEvent,
+	RealtimeSessionCloseParams,
 	SpeechCreateParams,
 	SpeechResponse,
 	SpeechStreamEvent,
@@ -177,6 +180,14 @@ export interface ILLMService {
 		name: string,
 		request: TranscriptionCreateParams,
 	): AsyncIterableIterator<TranscriptionStreamEvent>;
+	realtimeResponseFor(
+		name: string,
+		request: RealtimeResponseCreateParams,
+	): AsyncIterableIterator<RealtimeResponseStreamEvent>;
+	closeRealtimeSessionFor(
+		name: string,
+		request: RealtimeSessionCloseParams,
+	): Promise<void>;
 	imagesGenerationsFor(
 		name: string,
 		request: ImageGenerateParams,

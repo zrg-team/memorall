@@ -303,16 +303,18 @@ function contentRangeTotal(response) {
  */
 
 /**
- * Fetch just enough of a GGUF to read its architecture metadata.
+ * Fetch just enough of a GGUF to read its metadata.
  *
  * Escalates the ranged read once: conventionally the architecture keys precede
  * the tokenizer's multi-megabyte token list, but writers are free to reorder.
  *
+ * @template T
  * @param {string} url
- * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal }} [options]
- * @returns {Promise<ProbedArchitecture | null>}
+ * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal }} options
+ * @param {(buffer: ArrayBuffer, response: Response) => T} read
+ * @returns {Promise<T | null>}
  */
-export async function probeGgufArchitecture(url, options = {}) {
+async function readGgufHeader(url, options, read) {
 	const doFetch = options.fetchImpl ?? fetch;
 
 	for (const byteCount of [HEADER_BYTES_FIRST_TRY, HEADER_BYTES_RETRY]) {
@@ -325,15 +327,7 @@ export async function probeGgufArchitecture(url, options = {}) {
 		}
 		const buffer = await response.arrayBuffer();
 		try {
-			const architecture = describeGgufArchitecture(
-				parseGgufMetadata(buffer, isWantedKey),
-			);
-			// The ranged response already tells us how big the weights are, which
-			// is the other half of a memory estimate for a model no catalogue
-			// entry covers.
-			return architecture
-				? { ...architecture, fileSizeBytes: contentRangeTotal(response) }
-				: architecture;
+			return read(buffer, response);
 		} catch (error) {
 			// Only a short read is worth escalating; a malformed file is not.
 			if (!(error instanceof TruncatedError)) throw error;
@@ -349,6 +343,45 @@ export async function probeGgufArchitecture(url, options = {}) {
 		}
 	}
 	return null;
+}
+
+/**
+ * @param {string} url
+ * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal }} [options]
+ * @returns {Promise<ProbedArchitecture | null>}
+ */
+export function probeGgufArchitecture(url, options = {}) {
+	return readGgufHeader(url, options, (buffer, response) => {
+		const architecture = describeGgufArchitecture(
+			parseGgufMetadata(buffer, isWantedKey),
+		);
+		// The ranged response already tells us how big the weights are, which
+		// is the other half of a memory estimate for a model no catalogue
+		// entry covers.
+		return architecture
+			? { ...architecture, fileSizeBytes: contentRangeTotal(response) }
+			: architecture;
+	});
+}
+
+const AUDIO_ENCODER_KEY = "clip.has_audio_encoder";
+
+/**
+ * Whether a multimodal projector file encodes audio.
+ * @param {string} url
+ * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal }} [options]
+ * @returns {Promise<boolean>}
+ */
+export async function probeGgufHasAudioEncoder(url, options = {}) {
+	const hasEncoder = await readGgufHeader(
+		url,
+		options,
+		(buffer) =>
+			parseGgufMetadata(buffer, (key) => key === AUDIO_ENCODER_KEY)[
+				AUDIO_ENCODER_KEY
+			] === true,
+	);
+	return hasEncoder === true;
 }
 
 export const __testing = { TruncatedError, TYPE };

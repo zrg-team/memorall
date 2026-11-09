@@ -104,6 +104,7 @@ export const STUDIO_MESSAGE_TYPES: Record<MediaCategory, string> = {
 	decision: "decision",
 	"text-to-speech": "speech",
 	"speech-to-text": "transcription",
+	"speech-to-speech": "speech_to_speech",
 	"image-generation": "image_generation",
 	"image-tools": "image_tool",
 	ocr: "ocr",

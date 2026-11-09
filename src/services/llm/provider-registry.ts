@@ -53,7 +53,13 @@ export const PROVIDER_REGISTRY: Readonly<
 		isLocal: true,
 		residentLocal: true,
 		requiresAuth: false,
-		categories: ["chat", "decision"],
+		categories: [
+			"chat",
+			"decision",
+			"text-to-speech",
+			"speech-to-text",
+			"speech-to-speech",
+		],
 	},
 	webllm: {
 		id: "webllm",
