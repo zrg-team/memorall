@@ -126,6 +126,10 @@ await llmService.serveFor('wllama-model', 'microsoft/Phi-3-mini-4k-instruct-gguf
 - Very high memory usage (models loaded in memory)
 - Progress tracking for model downloads
 
+**Speech:** any GGUF with an audio projector (`mmproj`) can serve the `text-to-speech`, `speech-to-text` and `speech-to-speech` categories through `audioSpeechFor`, `audioTranscriptionsFor` and `realtimeResponseFor`. No model is named in code: once loaded, a model reports what it can do (`has_audio_output`, `has_audio_input`, `has_audio_stream`, `has_chat`), and the runner remembers the answer for the models list. A model whose projector encodes audio (`clip.has_audio_encoder`) runs on WebGPU when available; image-only projectors stay on the CPU.
+
+`realtimeResponseFor` takes one spoken turn at a time. Turns with the same `session` id share the model's context; call `closeRealtimeSessionFor` to end one. A session lives with the loaded model, so unloading the model ends it and the next turn starts fresh.
+
 ### 🌐 WebLLMLLM (Browser-based AI)
 
 Advanced browser-based language models using WebLLM for efficient in-browser inference.

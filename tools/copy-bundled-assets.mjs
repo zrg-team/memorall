@@ -463,11 +463,11 @@ async function main() {
 		let wllamaLibrary = fs.readFileSync(wllamaLibraryDest, "utf8");
 		const compatReplacements = [
 			[
-				"https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.8.1/wasm/wllama.js",
+				"https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.13.0/wasm/wllama.js",
 				'new URL("./compat/wllama.js", import.meta.url).href',
 			],
 			[
-				"https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.8.1/wasm/wllama.wasm",
+				"https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.13.0/wasm/wllama.wasm",
 				'new URL("./compat/wllama.wasm", import.meta.url).href',
 			],
 		];

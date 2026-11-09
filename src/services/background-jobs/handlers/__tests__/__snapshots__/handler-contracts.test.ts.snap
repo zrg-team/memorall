@@ -171,6 +171,14 @@ exports[`background job handler registry > registers every background job handle
     "jobType": "memon-operation",
   },
   {
+    "handler": "MediaOperationsHandler",
+    "jobType": "realtime-response",
+  },
+  {
+    "handler": "MediaOperationsHandler",
+    "jobType": "realtime-session-close",
+  },
+  {
     "handler": "EmbeddingOperationsHandler",
     "jobType": "reload-embedding-model",
   },

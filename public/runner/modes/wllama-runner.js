@@ -11,7 +11,16 @@ import {
 import {
 	kvBytesPerToken as kvBytesPerTokenOf,
 	probeGgufArchitecture,
+	probeGgufHasAudioEncoder,
 } from "../utils/gguf-metadata.js";
+import {
+	closeRealtimeSession,
+	respondRealtime,
+	speechCategoriesOf,
+	synthesizeSpeech,
+	transcribeAudio,
+	voicesOf,
+} from "./wllama/speech.js";
 
 // v3: single WASM file — local relative path, never CDN (Chrome extension CSP)
 const WASM_PATHS = {
@@ -206,6 +215,50 @@ function detectModelCapabilities(wllama) {
 }
 
 /**
+ * What the loaded model is for, from its own report. Speech tasks are not in
+ * any catalogue: a GGUF only says what it can do once it is loaded, so the
+ * answer is remembered for the models list.
+ * @param {any} wllama
+ * @returns {{ categories: string[], voices: { id: string, name: string }[] }}
+ */
+function describeModelAbilities(wllama) {
+	if (detectModelCapabilities(wllama).supportsDecisions) {
+		return { categories: ["decision"], voices: [] };
+	}
+	const info = wllama.getLoadedContextInfo?.();
+	const categories = [
+		...(info?.has_chat === false ? [] : ["chat"]),
+		...speechCategoriesOf(info),
+	];
+	return {
+		categories: categories.length > 0 ? categories : ["chat"],
+		voices: voicesOf(info),
+	};
+}
+
+const ABILITIES_STORAGE_PREFIX = "wllama:abilities:v1:";
+
+function readModelAbilities(modelId) {
+	try {
+		const raw = localStorage.getItem(
+			ABILITIES_STORAGE_PREFIX + modelId.toLowerCase(),
+		);
+		return raw ? JSON.parse(raw) : null;
+	} catch {
+		return null;
+	}
+}
+
+function writeModelAbilities(modelId, abilities) {
+	try {
+		localStorage.setItem(
+			ABILITIES_STORAGE_PREFIX + modelId.toLowerCase(),
+			JSON.stringify(abilities),
+		);
+	} catch {}
+}
+
+/**
  * Whether the loaded model accepts a modality. Builds without the v3 probe are
  * treated as permissive so a missing method cannot silently reject every image.
  * @param {any} wllama
@@ -344,6 +397,31 @@ async function resolveHFMmprojFilename(repo) {
 	return result;
 }
 
+const AUDIO_PROJECTOR_STORAGE_PREFIX = "wllama:audio-projector:v1:";
+
+/**
+ * Whether a projector file encodes audio, read from its own header. Network
+ * errors are not cached, so a later load can still find out.
+ * @param {string} url
+ */
+async function isAudioProjector(url) {
+	const key = AUDIO_PROJECTOR_STORAGE_PREFIX + url;
+	try {
+		const cached = localStorage.getItem(key);
+		if (cached !== null) return cached === "true";
+	} catch {}
+	try {
+		const hasEncoder = await probeGgufHasAudioEncoder(url);
+		try {
+			localStorage.setItem(key, String(hasEncoder));
+		} catch {}
+		return hasEncoder;
+	} catch (error) {
+		console.warn("[wllama-runner] projector probe failed:", error?.message);
+		return false;
+	}
+}
+
 /**
  * Delete a cached model using v3 CacheManager API.
  *
@@ -464,9 +542,15 @@ async function loadWllamaModel(modelId, notifyProgress) {
 		// every GGUF here also runs on CPU, and reading that flag as permission is
 		// what kept the whole catalogue off the GPU.
 		//
-		// Multimodal models stay on CPU: WebGPU loads the projector but can stall
-		// mid-generation, which a load-time fallback would not catch.
-		const useGPU = !mmprojFile && (await detectWebGPU());
+		// Image-only multimodal models stay on CPU: WebGPU loads the projector but
+		// can stall mid-generation, which a load-time fallback would not catch.
+		// Audio projectors run on the GPU, since speech has to keep up with playback.
+		const projectorAllowsGPU =
+			!mmprojFile ||
+			(await isAudioProjector(
+				`https://huggingface.co/${repo}/resolve/main/${mmprojFile}`,
+			));
+		const useGPU = projectorAllowsGPU && (await detectWebGPU());
 
 		if (useGPU) {
 			// Offloaded weights and their KV cache sit in VRAM, so size the window
@@ -562,6 +646,42 @@ const wllamaManager = new ModelLifecycleManager({
 	unloadFn: unloadWllamaModel,
 });
 
+/**
+ * Run a speech request against its model: load it if needed, hold the GPU, and
+ * make a cancelled request end as a cancellation rather than a failure.
+ * @param {string} messageId
+ * @param {any} payload
+ * @param {(wllama: any, signal: AbortSignal) => Promise<void>} operation
+ */
+async function runSpeechOperation(messageId, payload, operation) {
+	const { model, _memoryHint, _mmprojFile } = payload || {};
+	if (!model) throw new Error("Model name is required");
+	parseModelName(model);
+
+	const abortController = new AbortController();
+	activeOperations.set(messageId, { abortController });
+	if (_memoryHint) pendingLoadMemoryHints.set(model, _memoryHint);
+	if (typeof _mmprojFile === "string") {
+		pendingMmprojFiles.set(model, _mmprojFile);
+	}
+	try {
+		await wllamaManager.withModel(model, (wllama) =>
+			withOptionalGPULock(wllama._usesGPU, () =>
+				operation(wllama, abortController.signal),
+			),
+		);
+	} catch (error) {
+		if (abortController.signal.aborted) {
+			throw new Error("Operation aborted");
+		}
+		throw error;
+	} finally {
+		activeOperations.delete(messageId);
+		pendingMmprojFiles.delete(model);
+		pendingLoadMemoryHints.delete(model);
+	}
+}
+
 // `postMessage` is a shared, bidirectional channel that anything on the page can
 // write to — other extensions' content scripts included. Ignore anything that is
 // not one of our requests, and ignore our own responses so they can never be
@@ -650,17 +770,25 @@ window.addEventListener("message", async (event) => {
 							const isLoaded =
 								currentModelId &&
 								fullModelId.toLowerCase() === currentModelId.toLowerCase();
-							const supportsDecisions = isLoaded
-								? detectModelCapabilities(wllamaManager.model).supportsDecisions
-								: !!readArchitectureCache(originURL).value?.decisionType ||
-									loadedModelsCache
-										.get(fullModelId)
-										?.categories?.includes("decision");
+							const abilities = isLoaded
+								? describeModelAbilities(wllamaManager.model)
+								: readModelAbilities(fullModelId);
+							const supportsDecisions =
+								abilities?.categories.includes("decision") ||
+								!!readArchitectureCache(originURL).value?.decisionType ||
+								loadedModelsCache
+									.get(fullModelId)
+									?.categories?.includes("decision");
 							return {
 								id: fullModelId,
 								name: fullModelId,
 								filename,
-								categories: supportsDecisions ? ["decision"] : ["chat"],
+								categories: supportsDecisions
+									? ["decision"]
+									: (abilities?.categories ?? ["chat"]),
+								...(abilities?.voices?.length
+									? { voices: abilities.voices }
+									: {}),
 								loaded: !!isLoaded,
 								downloaded: true,
 								object: "model",
@@ -705,6 +833,8 @@ window.addEventListener("message", async (event) => {
 					await wllamaManager.load(model, notifyProgress);
 
 					const capabilities = detectModelCapabilities(wllamaManager.model);
+					const abilities = describeModelAbilities(wllamaManager.model);
+					writeModelAbilities(model, abilities);
 
 					const modelInfo = {
 						id: model,
@@ -715,9 +845,10 @@ window.addEventListener("message", async (event) => {
 						root: model,
 						parent: null,
 						loaded: true,
-						categories: capabilities.supportsDecisions
-							? ["decision"]
-							: ["chat"],
+						categories: abilities.categories,
+						...(abilities.voices.length > 0
+							? { voices: abilities.voices }
+							: {}),
 						downloaded: true,
 						// ModelInfo carries these at the top level and that is what the
 						// warm-serve path reads back; nesting them only under
@@ -782,6 +913,64 @@ window.addEventListener("message", async (event) => {
 					pendingMmprojFiles.delete(model);
 					pendingLoadMemoryHints.delete(model);
 				}
+				break;
+			}
+
+			case "audio/speech": {
+				await runSpeechOperation(messageId, payload, async (wllama, signal) => {
+					const result = await synthesizeSpeech(
+						wllama,
+						payload,
+						signal,
+						(pcm, sampleRate) => {
+							reply(
+								src,
+								origin,
+								messageId,
+								"stream_chunk",
+								{ pcm, sampleRate },
+								[pcm.buffer],
+							);
+						},
+					);
+					reply(src, origin, messageId, "complete", result);
+				});
+				break;
+			}
+
+			case "audio/transcriptions": {
+				await runSpeechOperation(messageId, payload, async (wllama, signal) => {
+					const result = await transcribeAudio(
+						wllama,
+						payload,
+						signal,
+						(delta) => {
+							reply(src, origin, messageId, "stream_chunk", { delta });
+						},
+					);
+					reply(src, origin, messageId, "complete", result);
+				});
+				break;
+			}
+
+			case "realtime/response": {
+				await runSpeechOperation(messageId, payload, async (wllama, signal) => {
+					const result = await respondRealtime(
+						wllama,
+						payload,
+						signal,
+						(event) => {
+							reply(src, origin, messageId, "stream_chunk", event);
+						},
+					);
+					reply(src, origin, messageId, "complete", result);
+				});
+				break;
+			}
+
+			case "realtime/close": {
+				await closeRealtimeSession(wllamaManager.model, payload?.session);
+				reply(src, origin, messageId, "complete", { closed: true });
 				break;
 			}
 
@@ -1008,6 +1197,10 @@ const endpoints = [
 	"serve",
 	"models",
 	"chat/completions",
+	"audio/speech",
+	"audio/transcriptions",
+	"realtime/response",
+	"realtime/close",
 	"unload",
 	"delete",
 ];

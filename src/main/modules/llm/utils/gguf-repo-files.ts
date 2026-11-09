@@ -8,6 +8,32 @@ interface RepoSibling {
 	size?: number;
 }
 
+/** The projector a repo's model loads with, in the runner's preference order. */
+export function pickProjectorFile(
+	siblings: RepoSibling[],
+): GgufRepoFile | undefined {
+	const projectors = siblings.filter((sibling) => {
+		const name = sibling.rfilename.toLowerCase();
+		return name.endsWith(".gguf") && name.includes("mmproj");
+	});
+	const projector =
+		projectors.find((sibling) => sibling.rfilename.includes("Q8_0")) ??
+		projectors.find((sibling) => sibling.rfilename.includes("Q4_K_M")) ??
+		projectors[0];
+	return projector
+		? { name: projector.rfilename, size: projector.size || 0 }
+		: undefined;
+}
+
+/**
+ * Files that only load alongside a model: a multimodal projector, or an `mtp-`
+ * draft model for speculative decoding.
+ */
+const isCompanionGguf = (name: string): boolean => {
+	const lower = name.toLowerCase();
+	return lower.includes("mmproj") || /(^|\/)mtp-/.test(lower);
+};
+
 /** `name-00001-of-00003.gguf` — llama.cpp's split-model naming. */
 const SPLIT_GGUF_FILE = /^(.+)-(\d{5})-of-(\d{5})\.gguf$/i;
 
@@ -28,7 +54,7 @@ export function listLoadableGgufFiles(siblings: RepoSibling[]): GgufRepoFile[] {
 	);
 
 	return ggufFiles
-		.filter((sibling) => !sibling.rfilename.toLowerCase().includes("mmproj"))
+		.filter((sibling) => !isCompanionGguf(sibling.rfilename))
 		.map((sibling): GgufRepoFile | null => {
 			const split = sibling.rfilename.match(SPLIT_GGUF_FILE);
 			if (!split) {

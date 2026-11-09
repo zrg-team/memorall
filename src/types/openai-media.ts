@@ -138,6 +138,49 @@ export type TranscriptionStreamEvent =
 	| { type: "transcript.text.done"; result: Transcription };
 
 // ---------------------------------------------------------------------------
+// Realtime audio: one spoken turn in, one spoken response out.
+// Event names mirror the OpenAI realtime API.
+// ---------------------------------------------------------------------------
+
+export interface RealtimeResponseCreateParams {
+	model: string;
+	/** Conversation id. Turns that share it share the model's context. */
+	session: string;
+	/** The spoken turn, as any audio file the browser can decode. */
+	audio: MediaPayload;
+	/** How the model should behave. Read when the session starts. */
+	instructions?: string;
+	max_output_tokens?: number;
+	signal?: AbortSignal;
+}
+
+export interface RealtimeResponse {
+	object: "realtime.response";
+	model: string;
+	session: string;
+	text: string;
+	audio?: MediaPayload;
+	sample_rate?: number;
+	duration_ms?: number;
+}
+
+export type RealtimeResponseStreamEvent =
+	| { type: "response.output_text.delta"; delta: string }
+	| {
+			type: "response.output_audio.delta";
+			/** Base64 little-endian signed 16-bit mono PCM. */
+			audio: string;
+			sample_rate: number;
+			seq: number;
+	  }
+	| { type: "response.done"; result: RealtimeResponse };
+
+export interface RealtimeSessionCloseParams {
+	model: string;
+	session: string;
+}
+
+// ---------------------------------------------------------------------------
 // POST /v1/images/generations
 // ---------------------------------------------------------------------------
 

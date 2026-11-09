@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/main/components/ui/button";
 import { Input } from "@/main/components/ui/input";
 import { ChevronDown, ChevronRight, Search, Zap } from "lucide-react";
+import { HubGgufModelList } from "@/main/modules/studio/components/shared/HubGgufModelList";
+import { supportsGgufSpeechSearch } from "@/services/llm/registry/gguf-hub-search";
 import { getSupportedModels } from "@/services/llm/registry/model-registry";
 import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
 import {
@@ -75,6 +77,18 @@ export const WllamaTab: React.FC<WllamaTabProps> = ({
 			}
 		}
 	}, [category, repo, useCustomRepo, setRepo, setFilePath, setAvailableFiles]);
+
+	const hasCatalogModels = getSupportedModels("wllama", category).length > 0;
+
+	// With nothing catalogued only a named repo can be loaded by hand. Released
+	// on the way out, so the chat tab comes back to its recommended models.
+	React.useEffect(() => {
+		if (hasCatalogModels) return;
+		setUseCustomRepo(true);
+		setAvailableFiles([]);
+		return () => setUseCustomRepo(false);
+	}, [hasCatalogModels, setUseCustomRepo, setAvailableFiles]);
+
 	return (
 		<div className="space-y-4">
 			<section className="rounded-lg border bg-muted/20">
@@ -102,42 +116,50 @@ export const WllamaTab: React.FC<WllamaTabProps> = ({
 				)}
 			</section>
 
-			<section className="space-y-3">
-				<div className="text-sm font-semibold">
-					{t("yourModels.quickDownload")}
-				</div>
-				{quickDownloads}
-			</section>
+			{hasCatalogModels ? (
+				<section className="space-y-3">
+					<div className="text-sm font-semibold">
+						{t("yourModels.quickDownload")}
+					</div>
+					{quickDownloads}
+				</section>
+			) : null}
+
+			{supportsGgufSpeechSearch(category) ? (
+				<HubGgufModelList category={category} openStudioOnUse />
+			) : null}
 
 			{/* Repository Selection Mode */}
-			<div className="flex items-center gap-4 p-3 border rounded-lg bg-muted/20">
-				<label className="flex items-center gap-2 text-sm">
-					<input
-						type="radio"
-						name="repoMode"
-						checked={!useCustomRepo}
-						onChange={() => {
-							setUseCustomRepo(false);
-							onFetchRepoFiles(repo);
-						}}
-						disabled={loading}
-					/>
-					{t("wllama.recommendedModels")}
-				</label>
-				<label className="flex items-center gap-2 text-sm">
-					<input
-						type="radio"
-						name="repoMode"
-						checked={useCustomRepo}
-						onChange={() => {
-							setUseCustomRepo(true);
-							setAvailableFiles([]);
-						}}
-						disabled={loading}
-					/>
-					{t("wllama.customRepository")}
-				</label>
-			</div>
+			{hasCatalogModels ? (
+				<div className="flex items-center gap-4 p-3 border rounded-lg bg-muted/20">
+					<label className="flex items-center gap-2 text-sm">
+						<input
+							type="radio"
+							name="repoMode"
+							checked={!useCustomRepo}
+							onChange={() => {
+								setUseCustomRepo(false);
+								onFetchRepoFiles(repo);
+							}}
+							disabled={loading}
+						/>
+						{t("wllama.recommendedModels")}
+					</label>
+					<label className="flex items-center gap-2 text-sm">
+						<input
+							type="radio"
+							name="repoMode"
+							checked={useCustomRepo}
+							onChange={() => {
+								setUseCustomRepo(true);
+								setAvailableFiles([]);
+							}}
+							disabled={loading}
+						/>
+						{t("wllama.customRepository")}
+					</label>
+				</div>
+			) : null}
 
 			{!useCustomRepo ? (
 				/* Recommended Models */

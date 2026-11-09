@@ -41,7 +41,16 @@ async function renderAt(buffer, sampleRate, OfflineContext) {
  * @param {ArrayBuffer} bytes Encoded file (wav, mp3, ogg, webm, m4a, ...)
  * @returns {Promise<{ pcm: Float32Array, sampleRate: number, duration: number }>}
  */
-export async function decodeAudioToMono16k(bytes) {
+export function decodeAudioToMono16k(bytes) {
+	return decodeAudioToMono(bytes, TARGET_SAMPLE_RATE);
+}
+
+/**
+ * @param {ArrayBuffer} bytes Encoded file (wav, mp3, ogg, webm, m4a, ...)
+ * @param {number} sampleRate The rate to resample to.
+ * @returns {Promise<{ pcm: Float32Array, sampleRate: number, duration: number }>}
+ */
+export async function decodeAudioToMono(bytes, sampleRate) {
 	const OfflineContext = offlineContextClass();
 	if (!OfflineContext) {
 		throw new Error("Audio decoding is not available in this browser");
@@ -51,7 +60,7 @@ export async function decodeAudioToMono16k(bytes) {
 	}
 	// decodeAudioData resamples to the context's rate; the 1-frame context is
 	// only a decoder.
-	const decoder = new OfflineContext(1, 1, TARGET_SAMPLE_RATE);
+	const decoder = new OfflineContext(1, 1, sampleRate);
 	let decoded;
 	try {
 		decoded = await decoder.decodeAudioData(bytes);
@@ -62,9 +71,9 @@ export async function decodeAudioToMono16k(bytes) {
 	}
 
 	const resampled =
-		decoded.sampleRate === TARGET_SAMPLE_RATE
+		decoded.sampleRate === sampleRate
 			? decoded
-			: await renderAt(decoded, TARGET_SAMPLE_RATE, OfflineContext);
+			: await renderAt(decoded, sampleRate, OfflineContext);
 	const channels = [];
 	for (let index = 0; index < resampled.numberOfChannels; index++) {
 		channels.push(resampled.getChannelData(index));
@@ -74,7 +83,7 @@ export async function decodeAudioToMono16k(bytes) {
 	const pcm = Float32Array.from(downmixToMono(channels));
 	return {
 		pcm,
-		sampleRate: TARGET_SAMPLE_RATE,
-		duration: pcm.length / TARGET_SAMPLE_RATE,
+		sampleRate,
+		duration: pcm.length / sampleRate,
 	};
 }

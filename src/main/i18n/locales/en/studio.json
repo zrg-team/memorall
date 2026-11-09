@@ -28,6 +28,11 @@
 			"short": "Transcribe",
 			"description": "Record or upload audio and get an accurate transcript."
 		},
+		"speech-to-speech": {
+			"label": "Voice chat",
+			"short": "Talk",
+			"description": "Talk to a model and hear it answer."
+		},
 		"image-generation": {
 			"label": "Image",
 			"short": "Image",
@@ -48,6 +53,31 @@
 			"short": "Audio",
 			"description": "Generate audio clips, such as music or sound, from a prompt."
 		}
+	},
+	"speechToSpeech": {
+		"idle": "Press the microphone and start talking.",
+		"starting": "Getting ready…",
+		"listening": "Listening…",
+		"hearing": "Hearing you…",
+		"responding": "Answering…",
+		"speaking": "Speaking…",
+		"denied": "Microphone access is blocked. Allow it in your browser settings.",
+		"start": "Start the conversation",
+		"end": "End the conversation",
+		"stopReply": "Stop the reply",
+		"delete": "Delete",
+		"emptyTitle": "Talk with your model",
+		"empty": "Start a conversation and speak naturally. The model answers out loud when you pause."
+	},
+	"ggufModels": {
+		"title": "Suggested GGUF models",
+		"hint": "Popular on Hugging Face and checked for this task. Runs on this device with Wllama.",
+		"search": "Search GGUF speech models",
+		"searching": "Searching…",
+		"empty": "No matching GGUF models can do this task.",
+		"use": "Use",
+		"noGgufFile": "This repository has no GGUF model file to load.",
+		"notSupported": "This model loaded, but it cannot do this task. Try another one."
 	},
 	"ocr": {
 		"model": "Model",

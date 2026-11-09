@@ -5,6 +5,7 @@ import { RECOMMENDATION_WEBLLM_LLMS } from "@/constants/webllm";
 import { serviceManager } from "@/services";
 import { DEFAULT_SERVICES } from "@/services/llm/constants";
 import type { ServiceProvider } from "@/services/llm/interfaces/llm-service.interface";
+import type { WorkspaceMode } from "@/services/llm/interfaces/model-category";
 import { getConfiguredWllamaFile } from "@/services/llm/registry/model-registry";
 import { listLoadableGgufFiles } from "../utils/gguf-repo-files";
 import type {
@@ -42,6 +43,8 @@ interface UseLLMActionsProps {
 	openaiApiKey: string;
 	openaiBaseUrl: string;
 	isOpenaiConfigured: boolean;
+	/** The task the page is showing; a load is recorded for it. */
+	modelCategory?: WorkspaceMode;
 }
 
 export const useLLMActions = ({
@@ -64,6 +67,7 @@ export const useLLMActions = ({
 	model,
 	openaiBaseUrl,
 	isOpenaiConfigured,
+	modelCategory,
 }: UseLLMActionsProps) => {
 	// Handle model loaded callback from YourModels component
 	const handleModelLoaded = useCallback(
@@ -227,6 +231,9 @@ export const useLLMActions = ({
 							]);
 						}
 					},
+					modelCategory && modelCategory !== "chat"
+						? { category: modelCategory }
+						: undefined,
 				);
 
 				setReady(true);

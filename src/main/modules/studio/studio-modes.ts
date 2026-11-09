@@ -1,5 +1,6 @@
 import {
 	AudioLines,
+	AudioWaveform,
 	ImageIcon,
 	ListChecks,
 	type LucideIcon,
@@ -50,6 +51,13 @@ export const STUDIO_MODE_DESCRIPTORS: readonly StudioModeDescriptor[] = [
 		label: "Transcribe",
 		shortLabel: "Transcribe",
 		description: "Record or upload audio and get text back.",
+	},
+	{
+		mode: "speech-to-speech",
+		icon: AudioWaveform,
+		label: "Voice chat",
+		shortLabel: "Talk",
+		description: "Talk to a model and hear it answer.",
 	},
 	{
 		mode: "image-generation",

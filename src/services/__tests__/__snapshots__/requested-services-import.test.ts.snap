@@ -172,6 +172,7 @@ exports[`requested service module coverage > imports requested service trees 1`]
   "../llm/provider-registry.ts",
   "../llm/reasoning-effort-settings.ts",
   "../llm/registry/decision-model-layout.ts",
+  "../llm/registry/gguf-hub-search.ts",
   "../llm/registry/media-model-registry.ts",
   "../llm/registry/media-model-store.ts",
   "../llm/registry/model-registry.ts",

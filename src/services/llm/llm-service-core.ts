@@ -12,6 +12,9 @@ import type {
 	SystemOneResponse,
 	TextToolParams,
 	TextToolResponse,
+	RealtimeResponseCreateParams,
+	RealtimeResponseStreamEvent,
+	RealtimeSessionCloseParams,
 	SpeechCreateParams,
 	SpeechResponse,
 	SpeechStreamEvent,
@@ -56,6 +59,8 @@ type MediaMethod =
 	| "audioSpeechStream"
 	| "audioTranscriptions"
 	| "audioTranscriptionsStream"
+	| "realtimeResponse"
+	| "closeRealtimeSession"
 	| "imagesGenerations"
 	| "imagesTools"
 	| "textTools"
@@ -66,6 +71,8 @@ const MEDIA_METHOD_LABELS: Record<MediaMethod, string> = {
 	audioSpeechStream: "streaming text-to-speech",
 	audioTranscriptions: "speech-to-text",
 	audioTranscriptionsStream: "streaming speech-to-text",
+	realtimeResponse: "speech-to-speech",
+	closeRealtimeSession: "speech-to-speech",
 	imagesGenerations: "image generation",
 	imagesTools: "image tools",
 	textTools: "text tools",
@@ -902,6 +909,24 @@ export abstract class LLMServiceCore {
 		yield* this.streamWithLease(name, request.model, () =>
 			llm.audioTranscriptionsStream(request),
 		);
+	}
+
+	async *realtimeResponseFor(
+		name: string,
+		request: RealtimeResponseCreateParams,
+	): AsyncIterableIterator<RealtimeResponseStreamEvent> {
+		const llm = await this.requireMediaMethod(name, "realtimeResponse");
+		yield* this.streamWithLease(name, request.model, () =>
+			llm.realtimeResponse(request),
+		);
+	}
+
+	async closeRealtimeSessionFor(
+		name: string,
+		request: RealtimeSessionCloseParams,
+	): Promise<void> {
+		const llm = await this.requireMediaMethod(name, "closeRealtimeSession");
+		await llm.closeRealtimeSession(request);
 	}
 
 	async *imagesGenerationsFor(

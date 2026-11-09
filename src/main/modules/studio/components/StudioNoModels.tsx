@@ -5,8 +5,13 @@ import { useNavigate } from "react-router-dom";
 import { WorkspaceEmptyVisual } from "@/main/components/molecules/WorkspaceEmptyState";
 import { Button } from "@/main/components/ui/button";
 import type { MediaCategory } from "@/services/llm/interfaces/model-category";
-import { providersForCategory } from "@/services/llm/provider-registry";
+import {
+	PROVIDER_REGISTRY,
+	providersForCategory,
+} from "@/services/llm/provider-registry";
+import { supportsGgufSpeechSearch } from "@/services/llm/registry/gguf-hub-search";
 import { studioModeDescriptor } from "../studio-modes";
+import { HubGgufModelList } from "./shared/HubGgufModelList";
 import { HubMediaModelList } from "./shared/HubMediaModelList";
 
 interface StudioNoModelsProps {
@@ -30,7 +35,7 @@ export const StudioNoModels: React.FC<StudioNoModelsProps> = ({
 	const providers = providersForCategory(mode);
 	const hasLocal = providers.includes("transformer-media");
 	const hasHosted = providers.some(
-		(provider) => provider !== "transformer-media",
+		(provider) => !PROVIDER_REGISTRY[provider].isLocal,
 	);
 
 	return (
@@ -57,6 +62,9 @@ export const StudioNoModels: React.FC<StudioNoModelsProps> = ({
 				</div>
 
 				{hasLocal ? <HubMediaModelList category={mode} /> : null}
+				{supportsGgufSpeechSearch(mode) ? (
+					<HubGgufModelList category={mode} />
+				) : null}
 				{mode === "ocr" ? (
 					<div className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
 						<p>{t("ocr.setup")}</p>

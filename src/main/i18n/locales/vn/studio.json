@@ -28,6 +28,11 @@
 			"short": "Chép lời",
 			"description": "Ghi âm hoặc tải âm thanh lên để nhận bản chép lời chính xác."
 		},
+		"speech-to-speech": {
+			"label": "Trò chuyện bằng giọng nói",
+			"short": "Nói",
+			"description": "Nói chuyện với mô hình và nghe mô hình trả lời."
+		},
 		"image-generation": {
 			"label": "Tạo ảnh",
 			"short": "Ảnh",
@@ -48,6 +53,31 @@
 			"short": "Âm thanh",
 			"description": "Tạo đoạn âm thanh, như nhạc hoặc hiệu ứng, từ mô tả."
 		}
+	},
+	"speechToSpeech": {
+		"idle": "Nhấn micrô và bắt đầu nói.",
+		"starting": "Đang chuẩn bị…",
+		"listening": "Đang nghe…",
+		"hearing": "Đang nghe bạn nói…",
+		"responding": "Đang trả lời…",
+		"speaking": "Đang nói…",
+		"denied": "Micrô đang bị chặn. Hãy cho phép trong cài đặt trình duyệt.",
+		"start": "Bắt đầu trò chuyện",
+		"end": "Kết thúc trò chuyện",
+		"stopReply": "Dừng câu trả lời",
+		"delete": "Xóa",
+		"emptyTitle": "Trò chuyện với mô hình của bạn",
+		"empty": "Bắt đầu trò chuyện và nói tự nhiên. Mô hình sẽ trả lời thành tiếng khi bạn dừng lại."
+	},
+	"ggufModels": {
+		"title": "Mô hình GGUF đề xuất",
+		"hint": "Phổ biến trên Hugging Face và đã được kiểm tra cho tác vụ này. Chạy trên thiết bị này bằng Wllama.",
+		"search": "Tìm mô hình giọng nói GGUF",
+		"searching": "Đang tìm…",
+		"empty": "Không có mô hình GGUF phù hợp làm được tác vụ này.",
+		"use": "Dùng",
+		"noGgufFile": "Kho này không có tệp mô hình GGUF để tải.",
+		"notSupported": "Mô hình đã tải nhưng không làm được tác vụ này. Hãy thử mô hình khác."
 	},
 	"ocr": {
 		"model": "Mô hình",
