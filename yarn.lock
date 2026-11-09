@@ -7069,17 +7069,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@wllama/wllama-compat@npm:3.8.1":
-  version: 3.8.1
-  resolution: "@wllama/wllama-compat@npm:3.8.1"
-  checksum: 10c0/973c03b39875305a0e44724e2b1fa6565d77202ad95ac3eb6a4905f79b61ad2b190cdd85420ac8a05b313c49fe1a72d59b3c35af8ba26edad99b09d161f50528
+"@wllama/wllama-compat@npm:3.13.0":
+  version: 3.13.0
+  resolution: "@wllama/wllama-compat@npm:3.13.0"
+  checksum: 10c0/15b16002d21c6b75fa74d7a395f44aa4690202af7aac9f17f24e986b77f11e4a5342fc202c00cdad3d629e15c86dbea99d0dc56f293b16308000dc8e0a6ed923
   languageName: node
   linkType: hard
 
-"@wllama/wllama@npm:3.8.1":
-  version: 3.8.1
-  resolution: "@wllama/wllama@npm:3.8.1"
-  checksum: 10c0/588ed67d9b845035e3f6a3f6402ac6c0d9e32a335e5ac0b3522a185a713ebfec5a2471e8e7d4f734e3e594de32fcd86fedb8b30a5883b2a19a56b9c4f64f1223
+"@wllama/wllama@npm:3.13.0":
+  version: 3.13.0
+  resolution: "@wllama/wllama@npm:3.13.0"
+  checksum: 10c0/4f2b4ad5b29fa9d3e5612188fa7df286391d63697d0d6d5fb6b439bc95a86eee6b681573b422a61034d486477f4249c2bd5a21f4e5a703d3f210f6ee263d5f2a
   languageName: node
   linkType: hard
 
@@ -13198,8 +13198,8 @@ __metadata:
     "@univerjs/sheets-ui": "npm:0.25.1"
     "@univerjs/ui": "npm:0.25.1"
     "@vitest/coverage-v8": "npm:4.1.10"
-    "@wllama/wllama": "npm:3.8.1"
-    "@wllama/wllama-compat": "npm:3.8.1"
+    "@wllama/wllama": "npm:3.13.0"
+    "@wllama/wllama-compat": "npm:3.13.0"
     "@xterm/addon-fit": "npm:0.11.0"
     "@xterm/addon-web-links": "npm:0.12.0"
     "@xterm/xterm": "npm:6.0.0"
